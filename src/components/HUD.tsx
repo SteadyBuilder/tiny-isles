@@ -62,19 +62,20 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
 
         {/* Center: Online Status & Room Code */}
-        <div className="hidden sm:flex items-center gap-3 pointer-events-auto bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-xl">
-          <div className="flex items-center gap-1.5 text-emerald-400 text-sm font-semibold">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <Users className="w-4 h-4 ml-1" />
-            <span>실시간 접속: {onlineCount}명</span>
+        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto bg-black/60 backdrop-blur-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl border border-white/10 shadow-xl">
+          <div className="flex items-center gap-1.5 text-emerald-400 text-xs sm:text-sm font-semibold">
+            <span className="w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <Users className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+            <span className="hidden sm:inline">실시간 접속: </span>
+            <span>{onlineCount}명</span>
           </div>
           <button
             onClick={handleCopyLink}
-            className="flex items-center gap-1 text-xs bg-white/10 hover:bg-white/20 text-white/90 px-2.5 py-1 rounded-lg transition"
+            className="flex items-center gap-1 text-xs bg-white/10 hover:bg-white/20 text-white/90 px-2 sm:px-2.5 py-1 rounded-lg transition"
             title="친구 초대 링크 복사"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Share2 className="w-3.5 h-3.5" />}
-            <span>{copied ? '복사됨!' : '친구 초대'}</span>
+            <span className="hidden sm:inline">{copied ? '복사됨!' : '친구 초대'}</span>
           </button>
         </div>
 

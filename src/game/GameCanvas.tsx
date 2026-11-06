@@ -74,6 +74,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Local BroadcastChannel for instant same-browser sync
   const localBusRef = useRef<BroadcastChannel | null>(null);
 
+  // Supabase Realtime Channel Reference
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   // Preload Assets
   const assetsRef = useRef<GameAssets | null>(null);
 
@@ -84,11 +87,41 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     });
   }, []);
 
-  // Update local player info when props change
+  // Update local player info when props change & sync via presence
   useEffect(() => {
     localPlayerRef.current.name = playerName;
     localPlayerRef.current.color = playerColor;
+
+    if (channelRef.current) {
+      channelRef.current.track({
+        id: localPlayerRef.current.id,
+        name: playerName,
+        color: playerColor,
+      });
+    }
   }, [playerName, playerColor]);
+
+  // Handle remote player position & action update
+  const handleRemotePlayerMove = useCallback((p: Player) => {
+    if (!p || p.id === localPlayerRef.current.id) return;
+
+    const existing = remotePlayersRef.current.get(p.id);
+    if (existing) {
+      existing.name = p.name;
+      existing.color = p.color;
+      existing.direction = p.direction;
+      existing.action = p.action;
+      existing.x = p.x;
+      existing.y = p.y;
+      existing.lastUpdated = Date.now();
+    } else {
+      remotePlayersRef.current.set(p.id, {
+        ...p,
+        lastUpdated: Date.now(),
+      });
+      setOnlineCount(remotePlayersRef.current.size + 1);
+    }
+  }, [setOnlineCount]);
 
   // Realtime & Local Multi-Tab Setup
   useEffect(() => {
@@ -103,10 +136,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const data = event.data;
         if (!data || data.senderId === myId) return;
 
-        if (data.type === 'presence') {
-          const remoteP: Player = data.player;
-          remotePlayersRef.current.set(remoteP.id, remoteP);
-          setOnlineCount(remotePlayersRef.current.size + 1);
+        if (data.type === 'player_move') {
+          handleRemotePlayerMove(data.payload);
         } else if (data.type === 'hit') {
           const { entityId, damage, hitBy } = data.payload;
           handleRemoteHit(entityId, damage, hitBy);
@@ -117,30 +148,102 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       };
     }
 
-    // 2. Supabase Realtime Channel (Global multiplayer)
+    // 2. Supabase Realtime Channel (Cross-device global multiplayer)
     const channel = supabase.channel('tiny_isles_world', {
       config: {
         presence: { key: myId },
+        broadcast: { ack: false, self: false },
       },
     });
+    channelRef.current = channel;
+
+    // Send immediate movement broadcast
+    const sendMoveBroadcast = () => {
+      const p = localPlayerRef.current;
+      const payload: Player = {
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+        direction: p.direction,
+        action: p.action,
+        lastUpdated: Date.now(),
+      };
+
+      if (localBus) {
+        localBus.postMessage({
+          type: 'player_move',
+          senderId: myId,
+          payload,
+        });
+      }
+
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'player_move',
+          payload,
+        });
+      }
+    };
+
+    // Presence update helper: maintains accurate online player count and handles join/leave
+    const updatePresenceState = () => {
+      const state = channel.presenceState();
+      const keys = Object.keys(state);
+      setOnlineCount(Math.max(1, keys.length));
+
+      // Register or update basic presence metadata for any existing player
+      keys.forEach((key) => {
+        if (key !== myId) {
+          const presences = state[key] as unknown as { id?: string; name?: string; color?: PlayerColor }[];
+          if (presences && presences.length > 0) {
+            const p = presences[presences.length - 1];
+            const pId = p.id || key;
+            const existing = remotePlayersRef.current.get(pId);
+            if (!existing) {
+              remotePlayersRef.current.set(pId, {
+                id: pId,
+                name: p.name || '모험가',
+                color: p.color || 'blue',
+                x: 256,
+                y: 256,
+                direction: 'right',
+                action: 'idle',
+                lastUpdated: Date.now(),
+              });
+            } else {
+              if (p.name) existing.name = p.name;
+              if (p.color) existing.color = p.color;
+            }
+          }
+        }
+      });
+    };
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const remotes = new Map<string, Player>(remotePlayersRef.current);
-
-        Object.keys(state).forEach((key) => {
-          if (key !== myId) {
-            const presences = state[key] as unknown as Player[];
-            if (presences && presences.length > 0) {
-              const p = presences[presences.length - 1];
-              remotes.set(p.id, p);
+        updatePresenceState();
+      })
+      .on('presence', { event: 'join' }, () => {
+        updatePresenceState();
+        // Greet newly joined player by announcing our position immediately
+        sendMoveBroadcast();
+      })
+      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+        if (Array.isArray(leftPresences)) {
+          leftPresences.forEach((lp: any) => {
+            const key = lp.id || lp.presence_ref;
+            if (key) {
+              remotePlayersRef.current.delete(key);
             }
-          }
-        });
-
-        remotePlayersRef.current = remotes;
-        setOnlineCount(remotes.size + 1);
+          });
+        }
+        updatePresenceState();
+      })
+      .on('broadcast', { event: 'player_move' }, ({ payload }) => {
+        handleRemotePlayerMove(payload);
       })
       .on('broadcast', { event: 'entity_hit' }, ({ payload }) => {
         const { entityId, damage, hitBy } = payload;
@@ -152,51 +255,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track(localPlayerRef.current);
+          await channel.track({
+            id: myId,
+            name: localPlayerRef.current.name,
+            color: localPlayerRef.current.color,
+          });
+          sendMoveBroadcast();
         }
       });
 
-    // Send local presence updates at 20Hz (both localBus & Supabase)
-    const presenceInterval = setInterval(() => {
-      const current = {
-        ...localPlayerRef.current,
-        lastUpdated: Date.now(),
-      };
+    // 15Hz (approx 66ms) movement transmission & stale player cleaner
+    let lastSentX = 0;
+    let lastSentY = 0;
+    let lastSentAction = '';
+    let lastSentDirection = '';
+    let heartbeatTick = 0;
 
-      // Broadcast to local tabs
-      if (localBus) {
-        localBus.postMessage({
-          type: 'presence',
-          senderId: myId,
-          player: current,
-        });
+    const moveInterval = setInterval(() => {
+      const p = localPlayerRef.current;
+      heartbeatTick++;
+
+      const hasMoved = Math.abs(p.x - lastSentX) > 1 || Math.abs(p.y - lastSentY) > 1;
+      const hasActionChanged = p.action !== lastSentAction || p.direction !== lastSentDirection;
+      const isHeartbeat = heartbeatTick % 15 === 0; // Heartbeat ~1s to ensure position sync
+
+      if (hasMoved || hasActionChanged || isHeartbeat) {
+        lastSentX = p.x;
+        lastSentY = p.y;
+        lastSentAction = p.action;
+        lastSentDirection = p.direction;
+        sendMoveBroadcast();
       }
 
-      // Broadcast to Supabase
-      if (channel) {
-        channel.track(current);
-      }
-
-      // Cleanup inactive remote players (no update for > 4s)
+      // Cleanup inactive remote players (no update received for > 8s)
       const now = Date.now();
       let changed = false;
       remotePlayersRef.current.forEach((remote, key) => {
-        if (now - remote.lastUpdated > 4000) {
+        if (now - remote.lastUpdated > 8000) {
           remotePlayersRef.current.delete(key);
           changed = true;
         }
       });
       if (changed) {
-        setOnlineCount(remotePlayersRef.current.size + 1);
+        updatePresenceState();
       }
-    }, 50);
+    }, 66);
 
     return () => {
-      clearInterval(presenceInterval);
+      clearInterval(moveInterval);
       if (localBus) localBus.close();
-      channel.unsubscribe();
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
-  }, [setOnlineCount]);
+  }, [setOnlineCount, handleRemotePlayerMove]);
 
   // Remote hit handler
   const handleRemoteHit = (entityId: string, damage: number, hitByName: string) => {
@@ -293,11 +407,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           payload: { islandId, unlockedBy },
         });
       }
-      supabase.channel('tiny_isles_world').send({
-        type: 'broadcast',
-        event: 'island_unlocked',
-        payload: { islandId, unlockedBy },
-      });
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'island_unlocked',
+          payload: { islandId, unlockedBy },
+        });
+      }
     }
   };
 
@@ -414,15 +530,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           },
         });
       }
-      supabase.channel('tiny_isles_world').send({
-        type: 'broadcast',
-        event: 'entity_hit',
-        payload: {
-          entityId: nearestEntity.id,
-          damage,
-          hitBy: player.name,
-        },
-      });
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'entity_hit',
+          payload: {
+            entityId: nearestEntity.id,
+            damage,
+            hitBy: player.name,
+          },
+        });
+      }
 
       // Check destruction
       if (nearestEntity.hp <= 0) {
