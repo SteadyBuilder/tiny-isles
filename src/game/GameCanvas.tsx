@@ -63,13 +63,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Input State
   const keysRef = useRef<{ [key: string]: boolean }>({});
-  const mouseTargetRef = useRef<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
+  const mouseTargetRef = useRef<{ worldX: number; worldY: number; active: boolean }>({ worldX: 0, worldY: 0, active: false });
 
   // Camera
   const cameraRef = useRef({ x: 256, y: 256 });
 
   // Action cooldown
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Local BroadcastChannel for instant same-browser sync
+  const localBusRef = useRef<BroadcastChannel | null>(null);
 
   // Preload Assets
   const assetsRef = useRef<GameAssets | null>(null);
@@ -87,9 +90,34 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     localPlayerRef.current.color = playerColor;
   }, [playerName, playerColor]);
 
-  // Realtime Supabase Setup
+  // Realtime & Local Multi-Tab Setup
   useEffect(() => {
     const myId = localPlayerRef.current.id;
+
+    // 1. Local Browser BroadcastChannel (Instant local multi-tab sync)
+    const localBus = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('tiny_isles_sync') : null;
+    localBusRef.current = localBus;
+
+    if (localBus) {
+      localBus.onmessage = (event) => {
+        const data = event.data;
+        if (!data || data.senderId === myId) return;
+
+        if (data.type === 'presence') {
+          const remoteP: Player = data.player;
+          remotePlayersRef.current.set(remoteP.id, remoteP);
+          setOnlineCount(remotePlayersRef.current.size + 1);
+        } else if (data.type === 'hit') {
+          const { entityId, damage, hitBy } = data.payload;
+          handleRemoteHit(entityId, damage, hitBy);
+        } else if (data.type === 'island_unlocked') {
+          const { islandId, unlockedBy } = data.payload;
+          unlockIslandLocally(islandId, unlockedBy, false);
+        }
+      };
+    }
+
+    // 2. Supabase Realtime Channel (Global multiplayer)
     const channel = supabase.channel('tiny_isles_world', {
       config: {
         presence: { key: myId },
@@ -99,7 +127,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        const remotes = new Map<string, Player>();
+        const remotes = new Map<string, Player>(remotePlayersRef.current);
 
         Object.keys(state).forEach((key) => {
           if (key !== myId) {
@@ -128,18 +156,44 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       });
 
-    // Send local presence updates at 20Hz
+    // Send local presence updates at 20Hz (both localBus & Supabase)
     const presenceInterval = setInterval(() => {
-      if (channel) {
-        channel.track({
-          ...localPlayerRef.current,
-          lastUpdated: Date.now(),
+      const current = {
+        ...localPlayerRef.current,
+        lastUpdated: Date.now(),
+      };
+
+      // Broadcast to local tabs
+      if (localBus) {
+        localBus.postMessage({
+          type: 'presence',
+          senderId: myId,
+          player: current,
         });
+      }
+
+      // Broadcast to Supabase
+      if (channel) {
+        channel.track(current);
+      }
+
+      // Cleanup inactive remote players (no update for > 4s)
+      const now = Date.now();
+      let changed = false;
+      remotePlayersRef.current.forEach((remote, key) => {
+        if (now - remote.lastUpdated > 4000) {
+          remotePlayersRef.current.delete(key);
+          changed = true;
+        }
+      });
+      if (changed) {
+        setOnlineCount(remotePlayersRef.current.size + 1);
       }
     }, 50);
 
     return () => {
       clearInterval(presenceInterval);
+      if (localBus) localBus.close();
       channel.unsubscribe();
     };
   }, [setOnlineCount]);
@@ -232,6 +286,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     });
 
     if (isLocalTrigger) {
+      if (localBusRef.current) {
+        localBusRef.current.postMessage({
+          type: 'island_unlocked',
+          senderId: localPlayerRef.current.id,
+          payload: { islandId, unlockedBy },
+        });
+      }
       supabase.channel('tiny_isles_world').send({
         type: 'broadcast',
         event: 'island_unlocked',
@@ -342,6 +403,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       });
 
       // Broadcast hit to other online players
+      if (localBusRef.current) {
+        localBusRef.current.postMessage({
+          type: 'hit',
+          senderId: player.id,
+          payload: {
+            entityId: nearestEntity.id,
+            damage,
+            hitBy: player.name,
+          },
+        });
+      }
       supabase.channel('tiny_isles_world').send({
         type: 'broadcast',
         event: 'entity_hit',
@@ -420,14 +492,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (keys['a'] || keys['arrowleft']) dx -= 1;
       if (keys['d'] || keys['arrowright']) dx += 1;
 
+      // Cancel mouse target if keyboard is pressed
+      if (dx !== 0 || dy !== 0) {
+        mouseTargetRef.current.active = false;
+      }
+
       // Mouse click movement if active
       if (mouseTargetRef.current.active) {
-        const targetWorldX = mouseTargetRef.current.x + cameraRef.current.x - canvas.width / 2;
-        const targetWorldY = mouseTargetRef.current.y + cameraRef.current.y - canvas.height / 2;
-        const dist = Math.hypot(targetWorldX - player.x, targetWorldY - player.y);
-        if (dist > 15) {
-          dx = (targetWorldX - player.x) / dist;
-          dy = (targetWorldY - player.y) / dist;
+        const dist = Math.hypot(mouseTargetRef.current.worldX - player.x, mouseTargetRef.current.worldY - player.y);
+        if (dist > 8) {
+          dx = (mouseTargetRef.current.worldX - player.x) / dist;
+          dy = (mouseTargetRef.current.worldY - player.y) / dist;
         } else {
           mouseTargetRef.current.active = false;
         }
@@ -762,11 +837,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Pointer interactions (mouse click or touch)
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    mouseTargetRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      active: true,
-    };
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    // Fixed world coordinate at time of click
+    const worldClickX = screenX + cameraRef.current.x - canvas.width / 2;
+    const worldClickY = screenY + cameraRef.current.y - canvas.height / 2;
+
+    const player = localPlayerRef.current;
+    const distToPlayer = Math.hypot(worldClickX - player.x, worldClickY - player.y);
+
+    // If click is near the player (within 65px): just interact/swing, do NOT move
+    if (distToPlayer < 65) {
+      mouseTargetRef.current.active = false;
+    } else {
+      mouseTargetRef.current = {
+        worldX: worldClickX,
+        worldY: worldClickY,
+        active: true,
+      };
+    }
+
     tryInteract();
   };
 
