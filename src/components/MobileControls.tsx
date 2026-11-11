@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Island } from '../types/game';
 import { Sparkles } from 'lucide-react';
 
@@ -13,30 +13,40 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   joystickRef,
   nearIsland,
 }) => {
+  // Joystick State
   const baseRef = useRef<HTMLDivElement | null>(null);
   const knobRef = useRef<HTMLDivElement | null>(null);
-  const activePointerId = useRef<number | null>(null);
+  const activeJoystickPointerId = useRef<number | null>(null);
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activePointerId.current !== null) return;
-    activePointerId.current = e.pointerId;
-    e.currentTarget.setPointerCapture(e.pointerId);
+  // Action Button State (Continuous hold)
+  const [isActionActive, setIsActionActive] = useState(false);
+  const actionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const actionPointerIdRef = useRef<number | null>(null);
+
+  const handleJoystickPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activeJoystickPointerId.current !== null) return;
+    activeJoystickPointerId.current = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
     updateJoystick(e.clientX, e.clientY);
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activePointerId.current !== e.pointerId) return;
+  const handleJoystickPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activeJoystickPointerId.current !== e.pointerId) return;
     updateJoystick(e.clientX, e.clientY);
   };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activePointerId.current !== e.pointerId) return;
+  const handleJoystickPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activeJoystickPointerId.current !== e.pointerId) return;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
       // ignore
     }
-    activePointerId.current = null;
+    activeJoystickPointerId.current = null;
     resetJoystick();
   };
 
@@ -79,22 +89,70 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     joystickRef.current = { x: 0, y: 0 };
   };
 
-  const handleActionClick = () => {
+  // Continuous Attack / Gathering Action handlers
+  const executeActionOnce = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(20);
+      navigator.vibrate(15);
     }
     onAction();
+  }, [onAction]);
+
+  const handleActionPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (actionPointerIdRef.current !== null) return;
+    actionPointerIdRef.current = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setIsActionActive(true);
+
+    // Immediate initial action
+    executeActionOnce();
+
+    // Clear previous interval if any
+    if (actionIntervalRef.current) {
+      clearInterval(actionIntervalRef.current);
+    }
+
+    // Continuous execution while held down (every 220ms)
+    actionIntervalRef.current = setInterval(() => {
+      executeActionOnce();
+    }, 220);
+  };
+
+  const stopActionHold = (e?: React.PointerEvent<HTMLDivElement>) => {
+    if (e && actionPointerIdRef.current !== null && e.pointerId !== actionPointerIdRef.current) {
+      return;
+    }
+    if (e) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+    actionPointerIdRef.current = null;
+    setIsActionActive(false);
+
+    if (actionIntervalRef.current) {
+      clearInterval(actionIntervalRef.current);
+      actionIntervalRef.current = null;
+    }
   };
 
   useEffect(() => {
     return () => {
       joystickRef.current = { x: 0, y: 0 };
+      if (actionIntervalRef.current) {
+        clearInterval(actionIntervalRef.current);
+      }
     };
   }, [joystickRef]);
 
   return (
     <div className="md:hidden pointer-events-none select-none fixed inset-0 z-40">
-      {/* 1. Left: Virtual Joystick */}
+      {/* 1. Left: Virtual Joystick (Movement) */}
       <div
         className="absolute bottom-6 left-6 pointer-events-auto touch-none"
         style={{
@@ -104,13 +162,15 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       >
         <div
           ref={baseRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
+          onPointerDown={handleJoystickPointerDown}
+          onPointerMove={handleJoystickPointerMove}
+          onPointerUp={handleJoystickPointerUp}
+          onPointerCancel={handleJoystickPointerUp}
           className="relative w-28 h-28 rounded-full bg-slate-900/60 backdrop-blur-md border-2 border-white/20 shadow-2xl flex items-center justify-center cursor-pointer active:border-amber-400/60 transition-colors"
+          role="button"
+          aria-label="이동 조이스틱"
         >
-          {/* Subtle Directional Guides */}
+          {/* Directional Guides */}
           <div className="absolute inset-2 rounded-full border border-dashed border-white/10 pointer-events-none" />
           <span className="absolute top-1 text-[10px] text-white/30 font-bold pointer-events-none">▲</span>
           <span className="absolute bottom-1 text-[10px] text-white/30 font-bold pointer-events-none">▼</span>
@@ -127,7 +187,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       </div>
 
-      {/* 2. Right: Action Controls Cluster */}
+      {/* 2. Right: Action Controls (Attack / Harvest - matching movement button) */}
       <div
         className="absolute bottom-6 right-6 pointer-events-auto flex flex-col items-end gap-3 touch-none"
         style={{
@@ -138,22 +198,47 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         {/* Contextual Island Unlock Prompt Button */}
         {nearIsland && (
           <button
-            onClick={handleActionClick}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 active:scale-95 text-white font-extrabold text-sm shadow-2xl border-2 border-emerald-300 animate-bounce"
+            onClick={executeActionOnce}
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 active:scale-95 text-white font-extrabold text-xs shadow-2xl border-2 border-emerald-300 animate-bounce"
           >
-            <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
-            <span>🏝️ #{nearIsland.id} 개척하기</span>
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+            <span>🏝️ #{nearIsland.id} 개척</span>
           </button>
         )}
 
-        {/* Primary Action Button (Chop / Mine / Attack) */}
-        <button
-          onClick={handleActionClick}
-          className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 active:scale-90 text-white font-black text-3xl shadow-2xl border-2 border-white/60 flex items-center justify-center transition-transform"
-          aria-label="행동 및 채집"
+        {/* Primary Action Button - matches joystick base and knob design, with continuous action on hold */}
+        <div
+          onPointerDown={handleActionPointerDown}
+          onPointerUp={stopActionHold}
+          onPointerCancel={stopActionHold}
+          onLostPointerCapture={stopActionHold}
+          className={`relative w-28 h-28 rounded-full bg-slate-900/60 backdrop-blur-md border-2 shadow-2xl flex items-center justify-center cursor-pointer transition-all select-none ${
+            isActionActive ? 'border-amber-400 bg-slate-900/80 scale-95' : 'border-white/20 active:border-amber-400/60'
+          }`}
+          role="button"
+          aria-label="공격 및 채집 (누르고 있으면 연속 공격)"
         >
-          ⚔️
-        </button>
+          {/* Matching Dashed Circle Guide */}
+          <div
+            className={`absolute inset-2 rounded-full border border-dashed transition-colors pointer-events-none ${
+              isActionActive ? 'border-amber-400/40' : 'border-white/10'
+            }`}
+          />
+
+          {/* Action Center Knob (matches joystick knob style & size) */}
+          <div
+            className={`w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 border-2 border-white/80 shadow-lg flex items-center justify-center text-2xl will-change-transform pointer-events-none transition-transform ${
+              isActionActive ? 'scale-90 shadow-inner brightness-110' : 'scale-100'
+            }`}
+          >
+            <span className="select-none leading-none">⚔️</span>
+          </div>
+
+          {/* Hold guidance label */}
+          <span className="absolute bottom-1 text-[9px] text-white/50 font-bold tracking-tight pointer-events-none">
+            {isActionActive ? '연속 공격 중' : '누르고 있기'}
+          </span>
+        </div>
       </div>
     </div>
   );

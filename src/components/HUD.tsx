@@ -46,8 +46,7 @@ export const HUD: React.FC<HUDProps> = ({
   const [isMuted, setIsMuted] = useState(sound.isMuted());
   const [showSoundModal, setShowSoundModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [isEditingName, setIsEditingName] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tempName, setTempName] = useState(playerName);
   const [copied, setCopied] = useState(false);
 
@@ -132,75 +131,18 @@ export const HUD: React.FC<HUDProps> = ({
           </button>
         </div>
 
-        {/* Right: Controls & Player Profile */}
+        {/* Right: Consolidated Settings Gear Button */}
         <div className="flex items-center gap-2 pointer-events-auto">
-          {/* Player Name / Color */}
-          <div className="flex items-center gap-2 bg-black/65 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/10 shadow-xl text-sm">
-            <button
-              onClick={toggleColor}
-              className={`w-6 h-6 rounded-full border-2 border-white/70 shadow-sm transition transform hover:scale-110 active:scale-90 ${
-                playerColor === 'blue' ? 'bg-blue-500' : 'bg-red-500'
-              }`}
-              title="캐릭터 색상 변경 (Blue / Red)"
-            />
-            {isEditingName ? (
-              <input
-                type="text"
-                value={tempName}
-                maxLength={10}
-                onChange={(e) => setTempName(e.target.value)}
-                onBlur={() => {
-                  setPlayerName(tempName.trim() || '모험가');
-                  setIsEditingName(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setPlayerName(tempName.trim() || '모험가');
-                    setIsEditingName(false);
-                  }
-                }}
-                autoFocus
-                className="bg-white/20 text-white px-2 py-0.5 rounded text-xs w-20 outline-none"
-              />
-            ) : (
-              <span
-                onClick={() => setIsEditingName(true)}
-                className="cursor-pointer hover:underline text-white font-medium text-xs max-w-[80px] truncate"
-                title="클릭하여 이름 변경"
-              >
-                {playerName}
-              </span>
-            )}
-          </div>
-
-          {/* Sound Toggle (Mute/Unmute) */}
-          <button
-            onClick={toggleSound}
-            className="p-2.5 bg-black/65 backdrop-blur-md hover:bg-black/80 active:scale-95 text-white rounded-2xl border border-white/10 shadow-xl transition"
-            title={isMuted ? '음소거 해제' : '음소거'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-green-400" />}
-          </button>
-
-          {/* Music & Sound Settings Modal Button */}
           <button
             onClick={() => {
               sound.playClick();
-              setShowSoundModal(true);
+              setShowSettingsModal(true);
             }}
-            className="p-2.5 bg-black/65 backdrop-blur-md hover:bg-black/80 active:scale-95 text-white rounded-2xl border border-white/10 shadow-xl transition flex items-center gap-1.5"
-            title="배경음악 & 사운드 설정"
+            className="flex items-center gap-2 px-3 py-2 bg-black/65 backdrop-blur-md hover:bg-black/80 active:scale-95 text-white rounded-2xl border border-white/10 shadow-xl transition group"
+            title="게임 설정 & 메뉴 (프로필, 오디오, 가이드)"
           >
-            <Music className={`w-4 h-4 ${soundSettings.bgmEnabled && !soundSettings.muted ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
-          </button>
-
-          {/* Help Toggle */}
-          <button
-            onClick={() => setShowHelp(!showHelp)}
-            className="p-2.5 bg-black/65 backdrop-blur-md hover:bg-black/80 active:scale-95 text-white rounded-2xl border border-white/10 shadow-xl transition"
-            title="조작법 안내"
-          >
-            <HelpCircle className="w-4 h-4 text-amber-300" />
+            <Settings className="w-5 h-5 text-amber-300 group-hover:rotate-45 transition-transform" />
+            <span className="text-xs font-bold text-white/90">설정</span>
           </button>
         </div>
       </div>
@@ -230,73 +172,42 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
 
-        {/* Mobile Right: Utility Buttons Cluster */}
+        {/* Mobile Right: Single Settings Gear Button */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
-          {/* Island Explorer Badge / Minimap Button */}
-          <button
-            onClick={onOpenMinimap}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/85 backdrop-blur-md active:scale-90 text-emerald-300 rounded-xl border border-emerald-500/40 shadow-xl font-bold text-xs"
-            title="군도 개척 전체 지도"
-          >
-            <Compass className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="font-extrabold text-white text-xs">군도 {unlockedCount}/{totalIslands}</span>
-          </button>
-
-          {/* Sound Toggle (Mute/Unmute) */}
-          <button
-            onClick={toggleSound}
-            className="p-2 bg-black/75 backdrop-blur-md active:scale-90 text-white rounded-xl border border-white/15 shadow-xl"
-            title={isMuted ? '음소거 해제' : '음소거'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-green-400" />}
-          </button>
-
-          {/* Music & Sound Settings Modal Button */}
           <button
             onClick={() => {
               sound.playClick();
-              setShowSoundModal(true);
+              setShowSettingsModal(true);
             }}
-            className="p-2 bg-black/75 backdrop-blur-md active:scale-90 text-white rounded-xl border border-white/15 shadow-xl flex items-center justify-center"
-            title="배경음악 & 사운드 설정"
+            className="p-2 bg-black/75 backdrop-blur-md active:scale-90 text-white rounded-xl border border-white/15 shadow-xl flex items-center justify-center group"
+            title="게임 설정 & 메뉴"
           >
-            <Music className={`w-4 h-4 ${soundSettings.bgmEnabled && !soundSettings.muted ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
-          </button>
-
-          {/* Mobile Menu & Profile Toggle */}
-          <button
-            onClick={() => setShowMobileMenu(true)}
-            className="relative p-2 bg-black/75 backdrop-blur-md active:scale-90 text-white rounded-xl border border-white/15 shadow-xl flex items-center justify-center"
-            title="모바일 메뉴 & 프로필"
-          >
-            <Settings className="w-4 h-4 text-amber-300" />
-            {/* Online status indicator dot */}
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-black animate-pulse" />
+            <Settings className="w-5 h-5 text-amber-300 group-hover:rotate-45 transition-transform" />
           </button>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* 3. MOBILE MENU / PROFILE DRAWER MODAL                    */}
+      {/* 3. SETTINGS & MENU MODAL (Universal: Desktop & Mobile)    */}
       {/* ======================================================== */}
-      {showMobileMenu && (
+      {showSettingsModal && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-3 animate-fadeIn"
-          onClick={() => setShowMobileMenu(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
+          onClick={() => setShowSettingsModal(false)}
         >
           <div
-            className="w-full max-w-sm bg-[#14213d] border border-amber-500/40 rounded-3xl p-5 shadow-2xl text-white flex flex-col gap-4 max-h-[88vh] overflow-y-auto"
+            className="w-full max-w-sm sm:max-w-md bg-[#14213d] border border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl text-white flex flex-col gap-4 max-h-[88vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Drawer Header */}
+            {/* Modal Header */}
             <div className="flex items-center justify-between pb-2 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <Settings className="w-5 h-5 text-amber-400" />
-                <h3 className="font-black text-lg text-amber-300">메뉴 & 설정</h3>
+                <h3 className="font-black text-lg text-amber-300">게임 설정 & 메뉴</h3>
               </div>
               <button
-                onClick={() => setShowMobileMenu(false)}
-                className="p-1.5 hover:bg-white/10 rounded-full text-slate-300"
+                onClick={() => setShowSettingsModal(false)}
+                className="p-1.5 hover:bg-white/10 rounded-full text-slate-300 transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -330,9 +241,56 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>
               </div>
               <p className="text-[10px] text-slate-400">
-                색상 원을 터치하면 캐릭터 옷 색상(Blue / Red)이 변경됩니다.
+                색상 원을 클릭/터치하면 캐릭터 의상 색상(Blue / Red)이 변경됩니다.
               </p>
             </div>
+
+            {/* Audio & Music Quick Controls */}
+            <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2">
+              <div className="text-xs font-semibold text-slate-300">사운드 & 배경음악</div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleSound}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95 ${
+                    isMuted
+                      ? 'bg-red-500/20 border-red-500/40 text-red-300'
+                      : 'bg-green-500/20 border-green-500/40 text-green-300'
+                  }`}
+                  title={isMuted ? '음소거 해제' : '음소거'}
+                >
+                  {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-green-400" />}
+                  <span>{isMuted ? '음소거 됨' : '사운드 켜짐'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowSettingsModal(false);
+                    setShowSoundModal(true);
+                  }}
+                  className="flex-1 flex items-center justify-between py-2 px-3 bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 rounded-xl text-amber-200 text-xs font-bold transition"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Music className="w-4 h-4 text-amber-400" />
+                    <span>BGM & 음향 설정</span>
+                  </div>
+                  <span className="text-[10px] text-slate-300 font-mono">
+                    {soundSettings.bgmEnabled && !soundSettings.muted ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Archipelago Map Quick Access */}
+            <button
+              onClick={() => {
+                setShowSettingsModal(false);
+                onOpenMinimap?.();
+              }}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600/30 hover:bg-emerald-600/40 active:scale-95 border border-emerald-500/50 rounded-2xl text-emerald-200 font-bold text-sm transition"
+            >
+              <Compass className="w-4 h-4 text-emerald-400" />
+              <span>🗺️ 전체 군도 지도 보기 ({unlockedCount}/{totalIslands})</span>
+            </button>
 
             {/* Multiplayer & Invite Section */}
             <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2">
@@ -352,40 +310,11 @@ export const HUD: React.FC<HUDProps> = ({
               </button>
             </div>
 
-            {/* Archipelago Map Quick Access */}
-            <button
-              onClick={() => {
-                setShowMobileMenu(false);
-                onOpenMinimap?.();
-              }}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600/30 hover:bg-emerald-600/40 active:scale-95 border border-emerald-500/50 rounded-2xl text-emerald-200 font-bold text-sm transition"
-            >
-              <Compass className="w-4 h-4 text-emerald-400" />
-              <span>🗺️ 전체 군도 지도 보기 ({unlockedCount}/{totalIslands})</span>
-            </button>
-
-            {/* Audio & Music Settings Quick Button */}
-            <button
-              onClick={() => {
-                setShowMobileMenu(false);
-                setShowSoundModal(true);
-              }}
-              className="w-full flex items-center justify-between py-2.5 px-3.5 bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 rounded-2xl text-amber-200 text-xs font-bold transition"
-            >
-              <div className="flex items-center gap-2">
-                <Music className="w-4 h-4 text-amber-400" />
-                <span>🎵 배경음악 & 사운드 설정</span>
-              </div>
-              <span className="text-[11px] text-slate-300 font-mono">
-                {soundSettings.bgmEnabled && !soundSettings.muted ? 'ON' : 'OFF'}
-              </span>
-            </button>
-
             {/* Action Buttons: Help & Reset */}
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => {
-                  setShowMobileMenu(false);
+                  setShowSettingsModal(false);
                   setShowHelp(true);
                 }}
                 className="flex-1 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border border-amber-500/40 text-amber-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
@@ -433,10 +362,10 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="font-extrabold text-amber-300 block mb-1 text-sm">📱 스마트폰 조작법</span>
                 <ul className="space-y-1.5 text-xs text-slate-300">
                   <li>• <strong className="text-white">이동:</strong> 왼쪽 하단의 <strong>가상 조이스틱</strong>을 드래그하여 자유롭게 이동</li>
-                  <li>• <strong className="text-white">채집/행동:</strong> 오른쪽 하단 <strong>⚔️ 버튼</strong>을 탭하거나 화면의 나무/바위를 직접 터치</li>
+                  <li>• <strong className="text-white">채집/공격:</strong> 오른쪽 하단 <strong>⚔️ 버튼</strong>을 탭하거나 <strong>누르고 있으면 연속 채집/공격</strong></li>
                   <li>• <strong className="text-white">섬 개척:</strong> 새 섬 표지판에 다가가면 나타나는 <strong>🏝️ [개척] 버튼</strong> 터치</li>
-                  <li>• <strong className="text-white">시야/줌:</strong> 우측 <strong>+/- 버튼</strong> 또는 화면을 <strong>두 손가락으로 핀치</strong>하여 줌인/줌아웃</li>
-                  <li>• <strong className="text-white">전체 지도:</strong> 상단 <strong>🗺️ 버튼</strong>을 터치해 21개 섬 위치와 해금 현황 확인</li>
+                  <li>• <strong className="text-white">시야/줌:</strong> 화면을 <strong>두 손가락으로 조작(넓히기: 확대, 줄이기: 축소)</strong></li>
+                  <li>• <strong className="text-white">미니맵:</strong> 우측 상단 <strong>🗺️ 미니맵</strong>을 터치해 21개 섬 전체 지도 및 해금 확인</li>
                 </ul>
               </div>
 
@@ -445,9 +374,9 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="font-extrabold text-slate-300 block mb-1 text-sm">💻 PC 키보드 & 마우스 조작법</span>
                 <ul className="space-y-1 text-xs text-slate-400">
                   <li>• 이동: <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">W</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">A</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">S</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">D</kbd> 또는 마우스 클릭</li>
-                  <li>• 채집: <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">Space</kbd> 또는 마우스 클릭</li>
+                  <li>• 채집/공격: <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">Space</kbd> 키를 누르고 있으면 연속 실행 또는 마우스 클릭</li>
                   <li>• 섬 개척: 표지판 근처에서 <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">E</kbd> 키 누르기</li>
-                  <li>• 시야/줌: <strong className="text-white">마우스 휠 스크롤</strong>, 우측 <strong>+/- 버튼</strong>, 또는 <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">+</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">-</kbd> (초기화: <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">0</kbd>)</li>
+                  <li>• 시야/줌: <strong className="text-white">마우스 휠 스크롤</strong> (확대/축소) 또는 키보드 <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">+</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">-</kbd> (초기화: <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">0</kbd>)</li>
                 </ul>
               </div>
 

@@ -110,8 +110,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Camera
   const cameraRef = useRef({ x: 256, y: 256 });
 
-  // Action cooldown
+  // Action cooldown & continuous hold timer
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastInteractTimeRef = useRef<number>(0);
 
   // Local BroadcastChannel for instant same-browser sync
   const localBusRef = useRef<BroadcastChannel | null>(null);
@@ -538,6 +539,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Perform Local Hit on Nearest Entity / Island Purchase
   const tryInteract = useCallback(() => {
+    lastInteractTimeRef.current = Date.now();
     const player = localPlayerRef.current;
     const px = player.x;
     const py = player.y;
@@ -724,8 +726,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     handleResize();
     window.addEventListener('resize', handleResize);
 
-    // Wheel Zoom handler (smooth mouse wheel zoom)
+    // Wheel Zoom handler (smooth mouse wheel zoom on PC)
     const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('.overflow-y-auto, input, textarea, select')) {
+        return;
+      }
       e.preventDefault();
       const step = 0.12;
       const next = e.deltaY < 0 ? targetZoomRef.current + step : targetZoomRef.current - step;
@@ -733,9 +739,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       targetZoomRef.current = clamped;
       onZoomChange?.(clamped);
     };
-    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('wheel', handleWheel, { passive: false });
 
-    // Touch Pinch-to-Zoom handlers
+    // Touch Pinch-to-Zoom handlers on mobile (two-finger spread/pinch)
     let touchStartDist: number | null = null;
     let touchStartZoom = 1.0;
 
@@ -775,10 +781,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     };
 
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: true });
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd, { passive: true });
-    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     const render = () => {
       const assets = assetsRef.current;
@@ -840,6 +846,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (player.action === 'run') {
           player.action = 'idle';
         }
+      }
+
+      // Continuous keyboard action if Space or E is held down
+      const currentNow = Date.now();
+      if ((keysRef.current[' '] || keysRef.current['e']) && currentNow - lastInteractTimeRef.current >= 240) {
+        lastInteractTimeRef.current = currentNow;
+        tryInteract();
       }
 
       // Track nearest locked island for mobile action button & contextual prompt
@@ -1102,15 +1115,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       ctx.restore();
 
-      // 10. Draw Minimap (Screen-Space: on mobile positioned above action button; on desktop in bottom-right corner)
+      // 10. Draw Minimap (Screen-Space: in upper right corner, compact size)
       const isMobile = canvas.width < 768;
-      const minimapSize = isMobile ? 140 : 160;
-      const margin = 16;
+      const minimapSize = isMobile ? 84 : 108;
+      const margin = isMobile ? 12 : 16;
       const mmX = canvas.width - minimapSize - margin;
-      // On mobile, position it cleanly above the action button (116px from bottom)
-      const mmY = isMobile
-        ? canvas.height - minimapSize - 116
-        : canvas.height - minimapSize - margin;
+      const mmY = isMobile ? 54 : 66;
 
       // Minimap background box
       ctx.save();
@@ -1118,26 +1128,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(mmX, mmY, minimapSize, minimapSize, 12);
+      ctx.roundRect(mmX, mmY, minimapSize, minimapSize, isMobile ? 10 : 12);
       ctx.fill();
       ctx.stroke();
 
       // Minimap Header / Title
       const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
       ctx.fillStyle = '#cbd5e1';
-      ctx.font = isMobile ? 'bold 10px Pretendard, sans-serif' : 'bold 11px Pretendard, sans-serif';
+      ctx.font = isMobile ? 'bold 9px Pretendard, sans-serif' : 'bold 10px Pretendard, sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(`🗺️ 미니맵 (${unlockedTotal}/${islandsRef.current.length})`, mmX + 8, mmY + (isMobile ? 15 : 18));
+      ctx.fillText(
+        isMobile ? `🗺️ ${unlockedTotal}/${islandsRef.current.length}` : `🗺️ 지도 (${unlockedTotal}/${islandsRef.current.length})`,
+        mmX + (isMobile ? 6 : 8),
+        mmY + (isMobile ? 12 : 14)
+      );
 
       // Grid center inside minimap (5x5 grid: -2 to 2)
       const mmCenterX = mmX + minimapSize / 2;
-      const mmCenterY = mmY + minimapSize / 2 + (isMobile ? 6 : 8);
-      const mmStep = isMobile ? 22 : 25; // 22px per grid unit on mobile, 25px on desktop
-      const islandBoxSize = isMobile ? 15 : 18;
+      const mmCenterY = mmY + minimapSize / 2 + (isMobile ? 5 : 6);
+      const mmStep = isMobile ? 14 : 18;
+      const islandBoxSize = isMobile ? 9 : 12;
 
       // Draw connecting bridges between adjacent unlocked islands
       ctx.strokeStyle = '#8d6e63';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = isMobile ? 2 : 2.5;
       for (const isl of islandsRef.current) {
         if (!isl.unlocked) continue;
         const ix = mmCenterX + isl.gridX * mmStep;
@@ -1172,7 +1186,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (isl.unlocked) {
           ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
           ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
+          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, isMobile ? 2.5 : 3);
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 1;
@@ -1183,12 +1197,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             inventory.stone >= isl.costStone &&
             inventory.gold >= isl.costGold;
 
-          ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.35)' : 'rgba(51, 65, 85, 0.7)';
+          ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.4)' : 'rgba(51, 65, 85, 0.7)';
           ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
+          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, isMobile ? 2.5 : 3);
           ctx.fill();
           ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.6)';
-          ctx.lineWidth = canAfford ? 1.5 : 1;
+          ctx.lineWidth = canAfford ? 1.2 : 0.8;
           ctx.stroke();
         }
       }
@@ -1199,21 +1213,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const rNormY = mmCenterY + ((rp.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
         ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
         ctx.beginPath();
-        ctx.arc(rNormX, rNormY, 3, 0, Math.PI * 2);
+        ctx.arc(rNormX, rNormY, isMobile ? 2 : 2.5, 0, Math.PI * 2);
         ctx.fill();
       });
 
       // Draw local player marker on minimap (pulsing ring)
       const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
       const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-      const pulseSize = (isMobile ? 3.5 : 4) + Math.sin(now / 180) * 1.5;
+      const pulseSize = (isMobile ? 2.5 : 3.5) + Math.sin(now / 180) * 1;
 
       ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';
       ctx.beginPath();
       ctx.arc(pNormX, pNormY, pulseSize, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.2;
       ctx.stroke();
 
       ctx.restore();
@@ -1226,11 +1240,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', handleResize);
-      canvas.removeEventListener('wheel', handleWheel);
-      canvas.removeEventListener('touchstart', handleTouchStart);
-      canvas.removeEventListener('touchmove', handleTouchMove);
-      canvas.removeEventListener('touchend', handleTouchEnd);
-      canvas.removeEventListener('touchcancel', handleTouchEnd);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, [assetsLoaded, onZoomChange]);
 
@@ -1318,16 +1332,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Check if clicked inside minimap
+    // Check if clicked inside minimap (in top-right corner)
     const isMobile = canvas.width < 768;
-    const minimapSize = isMobile ? 140 : 160;
-    const margin = 16;
+    const minimapSize = isMobile ? 84 : 108;
+    const margin = isMobile ? 12 : 16;
     const mmX = canvas.width - minimapSize - margin;
-    const mmY = isMobile
-      ? canvas.height - minimapSize - 116
-      : canvas.height - minimapSize - margin;
+    const mmY = isMobile ? 54 : 66;
 
     if (screenX >= mmX && screenX <= mmX + minimapSize && screenY >= mmY && screenY <= mmY + minimapSize) {
+      sound.playClick();
       onOpenMinimap?.();
       return;
     }
@@ -1335,7 +1348,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (isMobile) {
       // Ignore clicks in mobile joystick zone (bottom-left) and action button zone (bottom-right)
       if (screenX <= 140 && screenY >= canvas.height - 140) return;
-      if (screenX >= canvas.width - 110 && screenY >= canvas.height - 110) return;
+      if (screenX >= canvas.width - 140 && screenY >= canvas.height - 140) return;
     }
 
     if (isPinchingRef.current || Date.now() - lastPinchEndTimeRef.current < 250) {
