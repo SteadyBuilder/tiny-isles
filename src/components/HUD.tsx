@@ -209,14 +209,14 @@ export const HUD: React.FC<HUDProps> = ({
 
         {/* Mobile Right: Utility Buttons Cluster */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
-          {/* Minimap Button */}
+          {/* Island Explorer Badge / Minimap Button */}
           <button
             onClick={onOpenMinimap}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-950/80 backdrop-blur-md active:scale-90 text-emerald-300 rounded-xl border border-emerald-500/40 shadow-xl font-bold text-xs"
-            title="전체 지도"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/85 backdrop-blur-md active:scale-90 text-emerald-300 rounded-xl border border-emerald-500/40 shadow-xl font-bold text-xs"
+            title="군도 개척 전체 지도"
           >
             <Compass className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{unlockedCount}/{totalIslands}</span>
+            <span className="font-extrabold text-white text-xs">군도 {unlockedCount}/{totalIslands}</span>
           </button>
 
           {/* Sound Toggle */}

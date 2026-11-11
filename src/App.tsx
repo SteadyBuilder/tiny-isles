@@ -100,6 +100,7 @@ export function App() {
         joystickRef={joystickRef}
         onNearIslandChange={setNearIsland}
         onPlayerPositionChange={setPlayerGridPos}
+        onOpenMinimap={() => setShowMinimapModal(true)}
       />
 
       <MobileControls

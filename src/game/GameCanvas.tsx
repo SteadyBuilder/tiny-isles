@@ -27,6 +27,7 @@ interface GameCanvasProps {
   joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
   onNearIslandChange?: (island: Island | null) => void;
   onPlayerPositionChange?: (pos: { gridX: number; gridY: number }) => void;
+  onOpenMinimap?: () => void;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -40,6 +41,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   joystickRef,
   onNearIslandChange,
   onPlayerPositionChange,
+  onOpenMinimap,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastNearIslandRef = useRef<Island | null>(null);
@@ -1018,119 +1020,121 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       ctx.restore();
 
-      // 10. Draw Minimap (Screen-Space in bottom-right corner - desktop only to avoid overlapping mobile controls)
-      if (canvas.width >= 768) {
-        const minimapSize = 160;
-        const margin = 16;
-        const mmX = canvas.width - minimapSize - margin;
-        const mmY = canvas.height - minimapSize - margin;
+      // 10. Draw Minimap (Screen-Space: on mobile positioned above action button; on desktop in bottom-right corner)
+      const isMobile = canvas.width < 768;
+      const minimapSize = isMobile ? 140 : 160;
+      const margin = 16;
+      const mmX = canvas.width - minimapSize - margin;
+      // On mobile, position it cleanly above the action button (116px from bottom)
+      const mmY = isMobile
+        ? canvas.height - minimapSize - 116
+        : canvas.height - minimapSize - margin;
 
-        // Minimap background box
-        ctx.save();
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.roundRect(mmX, mmY, minimapSize, minimapSize, 12);
-        ctx.fill();
-        ctx.stroke();
+      // Minimap background box
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(mmX, mmY, minimapSize, minimapSize, 12);
+      ctx.fill();
+      ctx.stroke();
 
-        // Minimap Header / Title
-        const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
-        ctx.fillStyle = '#cbd5e1';
-        ctx.font = 'bold 11px Pretendard, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(`🗺️ 미니맵 (${unlockedTotal}/${islandsRef.current.length})`, mmX + 10, mmY + 18);
+      // Minimap Header / Title
+      const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = isMobile ? 'bold 10px Pretendard, sans-serif' : 'bold 11px Pretendard, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`🗺️ 미니맵 (${unlockedTotal}/${islandsRef.current.length})`, mmX + 8, mmY + (isMobile ? 15 : 18));
 
-        // Grid center inside minimap (5x5 grid: -2 to 2)
-        const mmCenterX = mmX + minimapSize / 2;
-        const mmCenterY = mmY + minimapSize / 2 + 8;
-        const mmStep = 25; // 25px per grid unit
-        const islandBoxSize = 18;
+      // Grid center inside minimap (5x5 grid: -2 to 2)
+      const mmCenterX = mmX + minimapSize / 2;
+      const mmCenterY = mmY + minimapSize / 2 + (isMobile ? 6 : 8);
+      const mmStep = isMobile ? 22 : 25; // 22px per grid unit on mobile, 25px on desktop
+      const islandBoxSize = isMobile ? 15 : 18;
 
-        // Draw connecting bridges between adjacent unlocked islands
-        ctx.strokeStyle = '#8d6e63';
-        ctx.lineWidth = 3;
-        for (const isl of islandsRef.current) {
-          if (!isl.unlocked) continue;
-          const ix = mmCenterX + isl.gridX * mmStep;
-          const iy = mmCenterY + isl.gridY * mmStep;
+      // Draw connecting bridges between adjacent unlocked islands
+      ctx.strokeStyle = '#8d6e63';
+      ctx.lineWidth = 3;
+      for (const isl of islandsRef.current) {
+        if (!isl.unlocked) continue;
+        const ix = mmCenterX + isl.gridX * mmStep;
+        const iy = mmCenterY + isl.gridY * mmStep;
 
-          const right = islandsRef.current.find(
-            (o) => o.unlocked && o.gridX === isl.gridX + 1 && o.gridY === isl.gridY
-          );
-          if (right) {
-            ctx.beginPath();
-            ctx.moveTo(ix, iy);
-            ctx.lineTo(ix + mmStep, iy);
-            ctx.stroke();
-          }
-
-          const bottom = islandsRef.current.find(
-            (o) => o.unlocked && o.gridX === isl.gridX && o.gridY === isl.gridY + 1
-          );
-          if (bottom) {
-            ctx.beginPath();
-            ctx.moveTo(ix, iy);
-            ctx.lineTo(ix, iy + mmStep);
-            ctx.stroke();
-          }
-        }
-
-        // Draw island nodes
-        for (const isl of islandsRef.current) {
-          const ix = mmCenterX + isl.gridX * mmStep;
-          const iy = mmCenterY + isl.gridY * mmStep;
-
-          if (isl.unlocked) {
-            ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
-            ctx.beginPath();
-            ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
-            ctx.fill();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          } else {
-            const canAfford =
-              inventory.wood >= isl.costWood &&
-              inventory.stone >= isl.costStone &&
-              inventory.gold >= isl.costGold;
-
-            ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.35)' : 'rgba(51, 65, 85, 0.7)';
-            ctx.beginPath();
-            ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
-            ctx.fill();
-            ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.6)';
-            ctx.lineWidth = canAfford ? 1.5 : 1;
-            ctx.stroke();
-          }
-        }
-
-        // Draw remote players on minimap
-        remotePlayersRef.current.forEach((rp) => {
-          const rNormX = mmCenterX + ((rp.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-          const rNormY = mmCenterY + ((rp.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-          ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
+        const right = islandsRef.current.find(
+          (o) => o.unlocked && o.gridX === isl.gridX + 1 && o.gridY === isl.gridY
+        );
+        if (right) {
           ctx.beginPath();
-          ctx.arc(rNormX, rNormY, 3, 0, Math.PI * 2);
-          ctx.fill();
-        });
+          ctx.moveTo(ix, iy);
+          ctx.lineTo(ix + mmStep, iy);
+          ctx.stroke();
+        }
 
-        // Draw local player marker on minimap (pulsing ring)
-        const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-        const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-        const pulseSize = 4 + Math.sin(now / 180) * 1.5;
-
-        ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';
-        ctx.beginPath();
-        ctx.arc(pNormX, pNormY, pulseSize, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        ctx.restore();
+        const bottom = islandsRef.current.find(
+          (o) => o.unlocked && o.gridX === isl.gridX && o.gridY === isl.gridY + 1
+        );
+        if (bottom) {
+          ctx.beginPath();
+          ctx.moveTo(ix, iy);
+          ctx.lineTo(ix, iy + mmStep);
+          ctx.stroke();
+        }
       }
+
+      // Draw island nodes
+      for (const isl of islandsRef.current) {
+        const ix = mmCenterX + isl.gridX * mmStep;
+        const iy = mmCenterY + isl.gridY * mmStep;
+
+        if (isl.unlocked) {
+          ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
+          ctx.beginPath();
+          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else {
+          const canAfford =
+            inventory.wood >= isl.costWood &&
+            inventory.stone >= isl.costStone &&
+            inventory.gold >= isl.costGold;
+
+          ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.35)' : 'rgba(51, 65, 85, 0.7)';
+          ctx.beginPath();
+          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
+          ctx.fill();
+          ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.6)';
+          ctx.lineWidth = canAfford ? 1.5 : 1;
+          ctx.stroke();
+        }
+      }
+
+      // Draw remote players on minimap
+      remotePlayersRef.current.forEach((rp) => {
+        const rNormX = mmCenterX + ((rp.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+        const rNormY = mmCenterY + ((rp.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+        ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
+        ctx.beginPath();
+        ctx.arc(rNormX, rNormY, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Draw local player marker on minimap (pulsing ring)
+      const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+      const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+      const pulseSize = (isMobile ? 3.5 : 4) + Math.sin(now / 180) * 1.5;
+
+      ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';
+      ctx.beginPath();
+      ctx.arc(pNormX, pNormY, pulseSize, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.restore();
 
       animationId = requestAnimationFrame(render);
     };
@@ -1227,20 +1231,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Ignore clicks in UI control areas
-    if (canvas.width >= 768) {
-      // Ignore clicks inside desktop minimap area (bottom-right)
-      const minimapSize = 160;
-      const margin = 16;
-      const mmX = canvas.width - minimapSize - margin;
-      const mmY = canvas.height - minimapSize - margin;
-      if (screenX >= mmX && screenX <= mmX + minimapSize && screenY >= mmY && screenY <= mmY + minimapSize) {
-        return;
-      }
-    } else {
+    // Check if clicked inside minimap
+    const isMobile = canvas.width < 768;
+    const minimapSize = isMobile ? 140 : 160;
+    const margin = 16;
+    const mmX = canvas.width - minimapSize - margin;
+    const mmY = isMobile
+      ? canvas.height - minimapSize - 116
+      : canvas.height - minimapSize - margin;
+
+    if (screenX >= mmX && screenX <= mmX + minimapSize && screenY >= mmY && screenY <= mmY + minimapSize) {
+      onOpenMinimap?.();
+      return;
+    }
+
+    if (isMobile) {
       // Ignore clicks in mobile joystick zone (bottom-left) and action button zone (bottom-right)
-      if (screenX <= 160 && screenY >= canvas.height - 160) return;
-      if (screenX >= canvas.width - 160 && screenY >= canvas.height - 160) return;
+      if (screenX <= 140 && screenY >= canvas.height - 140) return;
+      if (screenX >= canvas.width - 110 && screenY >= canvas.height - 110) return;
     }
 
     // Fixed world coordinate at time of click
