@@ -435,6 +435,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // Check destruction
     if (entity.hp <= 0) {
+      sound.playBreak();
       removeAndRespawnEntity(entity);
     }
   };
@@ -662,6 +663,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Check destruction
       if (nearestEntity.hp <= 0) {
+        sound.playBreak();
         removeAndRespawnEntity(nearestEntity);
       }
     } else {

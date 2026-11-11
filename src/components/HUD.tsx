@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Inventory, PlayerColor } from '../types/game';
-import { sound } from '../lib/sound';
+import { sound, SoundSettings } from '../lib/sound';
+import { SoundModal } from './SoundModal';
 import {
   Volume2,
   VolumeX,
+  Music,
   Users,
   HelpCircle,
   Share2,
@@ -40,16 +42,25 @@ export const HUD: React.FC<HUDProps> = ({
   onResetGame,
   onOpenMinimap,
 }) => {
+  const [soundSettings, setSoundSettings] = useState<SoundSettings>(() => sound.getSettings());
   const [isMuted, setIsMuted] = useState(sound.isMuted());
+  const [showSoundModal, setShowSoundModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(playerName);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    return sound.subscribe((updated) => {
+      setSoundSettings(updated);
+      setIsMuted(updated.muted);
+    });
+  }, []);
+
   const toggleSound = () => {
     sound.toggleMute();
-    setIsMuted(sound.isMuted());
+    sound.playClick();
   };
 
   const toggleColor = () => {
@@ -162,13 +173,25 @@ export const HUD: React.FC<HUDProps> = ({
             )}
           </div>
 
-          {/* Sound Toggle */}
+          {/* Sound Toggle (Mute/Unmute) */}
           <button
             onClick={toggleSound}
             className="p-2.5 bg-black/65 backdrop-blur-md hover:bg-black/80 active:scale-95 text-white rounded-2xl border border-white/10 shadow-xl transition"
             title={isMuted ? '음소거 해제' : '음소거'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-green-400" />}
+          </button>
+
+          {/* Music & Sound Settings Modal Button */}
+          <button
+            onClick={() => {
+              sound.playClick();
+              setShowSoundModal(true);
+            }}
+            className="p-2.5 bg-black/65 backdrop-blur-md hover:bg-black/80 active:scale-95 text-white rounded-2xl border border-white/10 shadow-xl transition flex items-center gap-1.5"
+            title="배경음악 & 사운드 설정"
+          >
+            <Music className={`w-4 h-4 ${soundSettings.bgmEnabled && !soundSettings.muted ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
           </button>
 
           {/* Help Toggle */}
@@ -219,13 +242,25 @@ export const HUD: React.FC<HUDProps> = ({
             <span className="font-extrabold text-white text-xs">군도 {unlockedCount}/{totalIslands}</span>
           </button>
 
-          {/* Sound Toggle */}
+          {/* Sound Toggle (Mute/Unmute) */}
           <button
             onClick={toggleSound}
             className="p-2 bg-black/75 backdrop-blur-md active:scale-90 text-white rounded-xl border border-white/15 shadow-xl"
             title={isMuted ? '음소거 해제' : '음소거'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-green-400" />}
+          </button>
+
+          {/* Music & Sound Settings Modal Button */}
+          <button
+            onClick={() => {
+              sound.playClick();
+              setShowSoundModal(true);
+            }}
+            className="p-2 bg-black/75 backdrop-blur-md active:scale-90 text-white rounded-xl border border-white/15 shadow-xl flex items-center justify-center"
+            title="배경음악 & 사운드 설정"
+          >
+            <Music className={`w-4 h-4 ${soundSettings.bgmEnabled && !soundSettings.muted ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
           </button>
 
           {/* Mobile Menu & Profile Toggle */}
@@ -327,6 +362,23 @@ export const HUD: React.FC<HUDProps> = ({
             >
               <Compass className="w-4 h-4 text-emerald-400" />
               <span>🗺️ 전체 군도 지도 보기 ({unlockedCount}/{totalIslands})</span>
+            </button>
+
+            {/* Audio & Music Settings Quick Button */}
+            <button
+              onClick={() => {
+                setShowMobileMenu(false);
+                setShowSoundModal(true);
+              }}
+              className="w-full flex items-center justify-between py-2.5 px-3.5 bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-500/30 rounded-2xl text-amber-200 text-xs font-bold transition"
+            >
+              <div className="flex items-center gap-2">
+                <Music className="w-4 h-4 text-amber-400" />
+                <span>🎵 배경음악 & 사운드 설정</span>
+              </div>
+              <span className="text-[11px] text-slate-300 font-mono">
+                {soundSettings.bgmEnabled && !soundSettings.muted ? 'ON' : 'OFF'}
+              </span>
             </button>
 
             {/* Action Buttons: Help & Reset */}
@@ -436,6 +488,13 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
       )}
+      {/* ======================================================== */}
+      {/* 5. SOUND / AUDIO MODAL (Universal: Mobile & Desktop)     */}
+      {/* ======================================================== */}
+      <SoundModal
+        isOpen={showSoundModal}
+        onClose={() => setShowSoundModal(false)}
+      />
     </>
   );
 };
