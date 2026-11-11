@@ -9,8 +9,26 @@ import {
   TILE_SIZE,
   generateIslandEntities,
   getIslandOrigin,
+  BUILDING_DEFS,
+  INITIAL_CAPITAL_BUILDINGS,
+  VILLAGE_TIER_CONFIG,
 } from './constants';
-import { Entity, FloatingText, Inventory, Island, Particle, Player, PlayerAction, PlayerColor } from '../types/game';
+import {
+  Entity,
+  FloatingText,
+  Inventory,
+  Island,
+  Particle,
+  Player,
+  PlayerAction,
+  PlayerColor,
+  Building,
+  BuildingType,
+  Monster,
+  Projectile,
+  DefenseSession,
+  VillageTier,
+} from '../types/game';
 import { sound } from '../lib/sound';
 import { supabase } from '../lib/supabase';
 import { storage } from '../lib/storage';
@@ -31,6 +49,16 @@ interface GameCanvasProps {
   onOpenMinimap?: () => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  selectedBuilding?: BuildingType | null;
+  onBuildSuccess?: () => void;
+  session: DefenseSession;
+  onUpdateSession: (updater: (prev: DefenseSession) => DefenseSession) => void;
+  onCapitalCoreHpChange?: (hp: number, maxHp: number) => void;
+  onPlayerHpChange?: (hp: number, maxHp: number) => void;
+  onMonsterCountChange?: (count: number) => void;
+  onWarningDirectionChange?: (dir: 'N' | 'S' | 'E' | 'W' | 'NE' | 'NW' | 'SE' | 'SW' | null) => void;
+  onNearCoreChange?: (isNear: boolean) => void;
+  onNearVillageCenterChange?: (isNear: boolean) => void;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -47,6 +75,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onOpenMinimap,
   zoom = 1.0,
   onZoomChange,
+  selectedBuilding = null,
+  onBuildSuccess,
+  session,
+  onUpdateSession,
+  onCapitalCoreHpChange,
+  onPlayerHpChange,
+  onMonsterCountChange,
+  onWarningDirectionChange,
+  onNearCoreChange,
+  onNearVillageCenterChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastNearIslandRef = useRef<Island | null>(null);
@@ -58,11 +96,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const isPinchingRef = useRef<boolean>(false);
   const lastPinchEndTimeRef = useRef<number>(0);
 
+  // Defense & Session Refs
+  const sessionRef = useRef<DefenseSession>(session);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  const selectedBuildingRef = useRef<BuildingType | null>(selectedBuilding);
+  useEffect(() => {
+    selectedBuildingRef.current = selectedBuilding;
+  }, [selectedBuilding]);
+
+  const buildingsRef = useRef<Building[]>([...INITIAL_CAPITAL_BUILDINGS]);
+  const monstersRef = useRef<Monster[]>([]);
+  const projectilesRef = useRef<Projectile[]>([]);
+  const dashCooldownRef = useRef<number>(0);
+  const lastWaveCheckRef = useRef<number>(Date.now());
+
   // Loading state
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
 
-  // Local Player State
+  // Local Player State (hp: 100)
   const localPlayerRef = useRef<Player>({
     id: storage.getPlayerId(),
     name: playerName,
@@ -72,6 +127,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     action: 'idle',
     color: playerColor,
     lastUpdated: Date.now(),
+    hp: 100,
+    maxHp: 100,
   });
 
   // Remote Players State
@@ -275,6 +332,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         direction: p.direction,
         action: p.action,
         lastUpdated: Date.now(),
+        hp: p.hp,
+        maxHp: p.maxHp,
       };
 
       if (localBus) {
@@ -318,6 +377,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 direction: 'right',
                 action: 'idle',
                 lastUpdated: Date.now(),
+                hp: 100,
+                maxHp: 100,
               });
             } else {
               if (p.name) existing.name = p.name;
@@ -582,14 +643,422 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   };
 
-  // Perform Local Hit on Nearest Entity / Island Purchase
+  // 1. Dash / Dodge Function (Space Bar & Mobile Dash)
+  const tryDash = useCallback(() => {
+    const now = Date.now();
+    if (now < dashCooldownRef.current) return;
+    dashCooldownRef.current = now + 1200;
+
+    const player = localPlayerRef.current;
+    const dashDist = 130;
+    let dx = 0;
+    let dy = 0;
+
+    if (joystickRef?.current && (joystickRef.current.x !== 0 || joystickRef.current.y !== 0)) {
+      dx = joystickRef.current.x;
+      dy = joystickRef.current.y;
+    } else if (keysRef.current['w'] || keysRef.current['arrowup']) dy -= 1;
+    else if (keysRef.current['s'] || keysRef.current['arrowdown']) dy += 1;
+    else if (keysRef.current['a'] || keysRef.current['arrowleft']) dx -= 1;
+    else if (keysRef.current['d'] || keysRef.current['arrowright']) dx += 1;
+    else {
+      dx = player.direction === 'left' ? -1 : 1;
+    }
+
+    const len = Math.hypot(dx, dy) || 1;
+    player.x += (dx / len) * dashDist;
+    player.y += (dy / len) * dashDist;
+
+    // Dash trail particles
+    for (let i = 0; i < 8; i++) {
+      particlesRef.current.push({
+        x: player.x + (Math.random() - 0.5) * 24,
+        y: player.y + (Math.random() - 0.5) * 24,
+        vx: -(dx / len) * (Math.random() * 3),
+        vy: -(dy / len) * (Math.random() * 3),
+        color: '#818cf8',
+        size: 4,
+        life: 0,
+        maxLife: 18,
+      });
+    }
+    sound.playBreak();
+  }, [joystickRef]);
+
+  // 2. Wave Spawner (Timer or Early Call)
+  const spawnWave = useCallback(
+    (isBoss = false) => {
+      const capitalCore = { x: 256, y: 256 };
+      const directions = ['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'] as const;
+      const pickedDir = directions[Math.floor(Math.random() * directions.length)];
+      onWarningDirectionChange?.(pickedDir);
+
+      const angleMap: Record<typeof directions[number], number> = {
+        E: 0,
+        SE: Math.PI / 4,
+        S: Math.PI / 2,
+        SW: (3 * Math.PI) / 4,
+        W: Math.PI,
+        NW: -(3 * Math.PI) / 4,
+        N: -Math.PI / 2,
+        NE: -Math.PI / 4,
+      };
+      const baseAngle = angleMap[pickedDir];
+      const spawnDist = 650;
+
+      const count = isBoss ? 16 : 10;
+      for (let i = 0; i < count; i++) {
+        const angle = baseAngle + (Math.random() - 0.5) * 0.75;
+        const dist = spawnDist + Math.random() * 120;
+        const sx = capitalCore.x + Math.cos(angle) * dist;
+        const sy = capitalCore.y + Math.sin(angle) * dist;
+
+        const isSkeleton = Math.random() < 0.35;
+        const mType = isSkeleton ? 'skeleton' : 'zombie';
+
+        monstersRef.current.push({
+          id: `m_${Date.now()}_${i}_${Math.random()}`,
+          type: mType,
+          x: sx,
+          y: sy,
+          hp: isSkeleton ? 35 : 50,
+          maxHp: isSkeleton ? 35 : 50,
+          speed: isSkeleton ? 1.0 : 1.15,
+          attackPower: isSkeleton ? 6 : 8,
+          attackRange: isSkeleton ? 160 : 38,
+          attackCooldown: isSkeleton ? 1800 : 1000,
+          lastAttackTime: 0,
+          targetType: 'core',
+          targetX: capitalCore.x,
+          targetY: capitalCore.y,
+        });
+      }
+
+      if (isBoss) {
+        const sx = capitalCore.x + Math.cos(baseAngle) * (spawnDist + 50);
+        const sy = capitalCore.y + Math.sin(baseAngle) * (spawnDist + 50);
+        monstersRef.current.push({
+          id: `boss_${Date.now()}`,
+          type: 'boss',
+          x: sx,
+          y: sy,
+          hp: 550,
+          maxHp: 550,
+          speed: 0.85,
+          attackPower: 30,
+          attackRange: 55,
+          attackCooldown: 1600,
+          lastAttackTime: 0,
+          targetType: 'core',
+          targetX: capitalCore.x,
+          targetY: capitalCore.y,
+        });
+
+        floatingTextsRef.current.push({
+          id: 'boss_alert_' + Math.random(),
+          text: '👑 거대 보스 몬스터 침공!',
+          x: localPlayerRef.current.x,
+          y: localPlayerRef.current.y - 60,
+          color: '#f43f5e',
+          alpha: 1,
+          vy: -1.0,
+        });
+      }
+
+      sound.playBreak();
+    },
+    [onWarningDirectionChange]
+  );
+
+  // 3. Building Placement
+  const tryPlaceBuilding = useCallback(
+    (typeToBuild?: BuildingType | null) => {
+      const bType = typeToBuild || selectedBuildingRef.current;
+      if (!bType) return;
+      const def = BUILDING_DEFS[bType];
+      if (!def) return;
+
+      if (
+        inventory.wood < def.costWood ||
+        inventory.stone < def.costStone ||
+        inventory.gold < def.costGold
+      ) {
+        floatingTextsRef.current.push({
+          id: 'b_cost_' + Math.random(),
+          text: '자원이 부족합니다!',
+          x: localPlayerRef.current.x,
+          y: localPlayerRef.current.y - 30,
+          color: '#ef4444',
+          alpha: 1,
+          vy: -1.0,
+        });
+        return;
+      }
+
+      const player = localPlayerRef.current;
+      const forwardX = player.direction === 'left' ? -56 : 56;
+      const targetX = Math.round((player.x + forwardX) / 32) * 32;
+      const targetY = Math.round(player.y / 32) * 32;
+
+      const isOverlap = buildingsRef.current.some(
+        (b) => Math.hypot(b.x - targetX, b.y - targetY) < 28
+      );
+      if (isOverlap) {
+        floatingTextsRef.current.push({
+          id: 'b_over_' + Math.random(),
+          text: '이미 건물이 있습니다',
+          x: targetX,
+          y: targetY - 20,
+          color: '#f59e0b',
+          alpha: 1,
+          vy: -0.8,
+        });
+        return;
+      }
+
+      onUpdateInventory((prev) => ({
+        wood: prev.wood - def.costWood,
+        stone: prev.stone - def.costStone,
+        gold: prev.gold - def.costGold,
+      }));
+
+      const newBuilding: Building = {
+        id: `b_${Date.now()}_${Math.random()}`,
+        type: bType,
+        x: targetX,
+        y: targetY,
+        hp: def.hp,
+        maxHp: def.hp,
+        territoryId: 0,
+        range: def.range,
+        damage: def.damage,
+        attackCooldown: def.attackCooldown,
+        lastAttackTime: 0,
+      };
+      buildingsRef.current.push(newBuilding);
+
+      for (let i = 0; i < 6; i++) {
+        particlesRef.current.push({
+          x: targetX,
+          y: targetY,
+          vx: (Math.random() - 0.5) * 3,
+          vy: (Math.random() - 0.5) * 3,
+          color: '#d97706',
+          size: 4,
+          life: 0,
+          maxLife: 15,
+        });
+      }
+
+      floatingTextsRef.current.push({
+        id: 'b_done_' + Math.random(),
+        text: `🔨 ${def.name} 건설!`,
+        x: targetX,
+        y: targetY - 25,
+        color: '#fbbf24',
+        alpha: 1,
+        vy: -1.2,
+      });
+
+      sound.playBreak();
+      onBuildSuccess?.();
+    },
+    [inventory, onUpdateInventory, onBuildSuccess]
+  );
+
+  // 4. Action: Attack Monster or Harvest Resource
+  const tryAttackOrHarvest = useCallback(() => {
+    lastInteractTimeRef.current = Date.now();
+    const player = localPlayerRef.current;
+    const px = player.x;
+    const py = player.y;
+
+    // 1) Monster Attack Priority
+    let nearestMonster: Monster | null = null;
+    let minMonsterDist = 95;
+
+    for (const monster of monstersRef.current) {
+      const dist = Math.hypot(px - monster.x, py - monster.y);
+      if (dist < minMonsterDist) {
+        minMonsterDist = dist;
+        nearestMonster = monster;
+      }
+    }
+
+    if (nearestMonster) {
+      player.action = 'axe';
+      if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
+      actionTimeoutRef.current = setTimeout(() => {
+        player.action = 'idle';
+      }, 250);
+
+      const damage = 25;
+      nearestMonster.hp -= damage;
+
+      // Knockback
+      const kx = nearestMonster.x - px;
+      const ky = nearestMonster.y - py;
+      const klen = Math.hypot(kx, ky) || 1;
+      nearestMonster.x += (kx / klen) * 22;
+      nearestMonster.y += (ky / klen) * 22;
+
+      for (let i = 0; i < 6; i++) {
+        particlesRef.current.push({
+          x: nearestMonster.x,
+          y: nearestMonster.y,
+          vx: (Math.random() - 0.5) * 4,
+          vy: (Math.random() - 0.5) * 4,
+          color: '#f43f5e',
+          size: 3,
+          life: 0,
+          maxLife: 15,
+        });
+      }
+
+      floatingTextsRef.current.push({
+        id: 'dmg_' + Math.random(),
+        text: `⚔️ -${damage}`,
+        x: nearestMonster.x,
+        y: nearestMonster.y - 15,
+        color: '#fb7185',
+        alpha: 1,
+        vy: -1.4,
+      });
+
+      if (nearestMonster.hp <= 0) {
+        const goldDrop = nearestMonster.type === 'boss' ? 15 : nearestMonster.type === 'skeleton' ? 2 : 1;
+        onUpdateInventory((prev) => ({
+          ...prev,
+          gold: prev.gold + goldDrop,
+          stone: prev.stone + 1,
+        }));
+
+        floatingTextsRef.current.push({
+          id: 'gold_' + Math.random(),
+          text: `🪙 +${goldDrop}`,
+          x: nearestMonster.x,
+          y: nearestMonster.y - 30,
+          color: '#facc15',
+          alpha: 1,
+          vy: -1.6,
+        });
+
+        monstersRef.current = monstersRef.current.filter((m) => m.id !== nearestMonster!.id);
+        sound.playBreak();
+      } else {
+        sound.playMine();
+      }
+      return;
+    }
+
+    // 2) Entity Harvest (Wood, Stone, Gold)
+    let nearestEntity: Entity | null = null;
+    let minDist = 90;
+
+    for (const ent of entitiesRef.current) {
+      if (ent.type === 'core_gem') continue; // core gem handled in tryInteract
+      const dist = Math.hypot(px - (ent.x + 16), py - (ent.y + 16));
+      if (dist < minDist) {
+        minDist = dist;
+        nearestEntity = ent;
+      }
+    }
+
+    const toolAction: PlayerAction = nearestEntity?.type === 'tree' ? 'axe' : 'pickaxe';
+    player.action = toolAction;
+
+    if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
+    actionTimeoutRef.current = setTimeout(() => {
+      player.action = 'idle';
+    }, 280);
+
+    if (nearestEntity) {
+      const damage = 1;
+      nearestEntity.hp -= damage;
+      nearestEntity.shakeTime = Date.now() + 200;
+
+      createHitParticles(nearestEntity.x, nearestEntity.y, nearestEntity.type);
+      if (nearestEntity.type === 'tree') {
+        sound.playChop();
+      } else {
+        sound.playMine();
+      }
+
+      const resType =
+        nearestEntity.type === 'tree'
+          ? 'wood'
+          : nearestEntity.type === 'gold_rock'
+          ? 'gold'
+          : 'stone';
+
+      onUpdateInventory((prev) => ({
+        ...prev,
+        [resType]: prev[resType] + 1,
+      }));
+
+      const icon = resType === 'wood' ? '🪵 +1' : resType === 'gold' ? '🪙 +1' : '🪨 +1';
+      const color = resType === 'wood' ? '#8bc34a' : resType === 'gold' ? '#ffd700' : '#cfd8dc';
+      floatingTextsRef.current.push({
+        id: 'txt_' + Math.random(),
+        text: icon,
+        x: nearestEntity.x + 16,
+        y: nearestEntity.y,
+        color,
+        alpha: 1,
+        vy: -1.2,
+      });
+
+      if (nearestEntity.hp <= 0) {
+        sound.playBreak();
+        removeAndRespawnEntity(nearestEntity);
+      }
+    }
+  }, [onUpdateInventory]);
+
+  // 5. Interacting with Core Gems, Village Hall, or Territory Expansion
   const tryInteract = useCallback(() => {
     lastInteractTimeRef.current = Date.now();
     const player = localPlayerRef.current;
     const px = player.x;
     const py = player.y;
 
-    // 1. Check if near any locked island signpost
+    // Check Core Gem repair
+    const capitalIsland = islandsRef.current[0];
+    const capitalCoreX = 256;
+    const capitalCoreY = 256;
+    if (Math.hypot(px - capitalCoreX, py - capitalCoreY) < 100) {
+      if (capitalIsland.coreHp < capitalIsland.maxCoreHp) {
+        if (inventory.stone >= 8) {
+          onUpdateInventory((prev) => ({ ...prev, stone: prev.stone - 8 }));
+          capitalIsland.coreHp = Math.min(capitalIsland.maxCoreHp, capitalIsland.coreHp + 100);
+          onCapitalCoreHpChange?.(capitalIsland.coreHp, capitalIsland.maxCoreHp);
+          floatingTextsRef.current.push({
+            id: 'core_rep_' + Math.random(),
+            text: '💎 수도 코어 수리 (+100)',
+            x: capitalCoreX,
+            y: capitalCoreY - 30,
+            color: '#38bdf8',
+            alpha: 1,
+            vy: -1.2,
+          });
+          sound.playBreak();
+          return;
+        } else {
+          floatingTextsRef.current.push({
+            id: 'core_no_stone_' + Math.random(),
+            text: '수리 필요: 🪨석재 8',
+            x: capitalCoreX,
+            y: capitalCoreY - 30,
+            color: '#f87171',
+            alpha: 1,
+            vy: -1.0,
+          });
+          return;
+        }
+      }
+    }
+
+    // Check Territory Unlock
     for (const island of islandsRef.current) {
       if (!island.unlocked) {
         const origin = getIslandOrigin(island.gridX, island.gridY);
@@ -598,7 +1067,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const dist = Math.hypot(px - signX, py - signY);
 
         if (dist < 180) {
-          // Check costs
           if (
             inventory.wood >= island.costWood &&
             inventory.stone >= island.costStone &&
@@ -612,7 +1080,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             unlockIslandLocally(island.id, player.name, true);
             return;
           } else {
-            // Not enough resources notice
             floatingTextsRef.current.push({
               id: 'cost_' + Math.random(),
               text: `자원이 부족합니다! (🪵${island.costWood} 🪨${island.costStone})`,
@@ -627,105 +1094,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
     }
-
-    // 2. Find nearest interactable entity within range
-    let nearestEntity: Entity | null = null;
-    let minDist = 90;
-
-    for (const ent of entitiesRef.current) {
-      const dist = Math.hypot(px - (ent.x + 16), py - (ent.y + 16));
-      if (dist < minDist) {
-        minDist = dist;
-        nearestEntity = ent;
-      }
-    }
-
-    // Set Tool action
-    const toolAction: PlayerAction = nearestEntity?.type === 'tree' ? 'axe' : 'pickaxe';
-    player.action = toolAction;
-
-    if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
-    actionTimeoutRef.current = setTimeout(() => {
-      player.action = 'idle';
-    }, 280);
-
-    if (nearestEntity) {
-      const damage = 1;
-      nearestEntity.hp -= damage;
-      nearestEntity.shakeTime = Date.now() + 200;
-
-      // Local particles & sound
-      createHitParticles(nearestEntity.x, nearestEntity.y, nearestEntity.type);
-      if (nearestEntity.type === 'tree') {
-        sound.playChop();
-      } else {
-        sound.playMine();
-      }
-
-      // Add resource to inventory
-      const resType = nearestEntity.type === 'tree' ? 'wood' : nearestEntity.type === 'gold_rock' ? 'gold' : 'stone';
-      onUpdateInventory((prev) => ({
-        ...prev,
-        [resType]: prev[resType] + 1,
-      }));
-
-      // Floating text
-      const icon = resType === 'wood' ? '🪵 +1' : resType === 'gold' ? '🪙 +1' : '🪨 +1';
-      const color = resType === 'wood' ? '#8bc34a' : resType === 'gold' ? '#ffd700' : '#cfd8dc';
-      floatingTextsRef.current.push({
-        id: 'txt_' + Math.random(),
-        text: icon,
-        x: nearestEntity.x + 16,
-        y: nearestEntity.y,
-        color,
-        alpha: 1,
-        vy: -1.2,
-      });
-
-      // Broadcast hit to other online players
-      if (localBusRef.current) {
-        localBusRef.current.postMessage({
-          type: 'hit',
-          senderId: player.id,
-          payload: {
-            entityId: nearestEntity.id,
-            damage,
-            hitBy: player.name,
-          },
-        });
-      }
-      if (channelRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'entity_hit',
-          payload: {
-            entityId: nearestEntity.id,
-            damage,
-            hitBy: player.name,
-          },
-        });
-      }
-
-      // Check destruction
-      if (nearestEntity.hp <= 0) {
-        sound.playBreak();
-        removeAndRespawnEntity(nearestEntity);
-      }
-    } else {
-      // Swung tool in empty air
-    }
-  }, [inventory, onUpdateInventory]);
+  }, [inventory, onUpdateInventory, onCapitalCoreHpChange]);
 
   // Keyboard & Action Event Listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       keysRef.current[e.key.toLowerCase()] = true;
-      if (e.key === ' ' || e.key.toLowerCase() === 'e') {
+
+      if (e.key === ' ') {
         e.preventDefault();
-        if (!e.repeat) {
-          tryInteract();
-        }
+        tryDash();
+      } else if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        tryInteract();
+      } else if (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'q') {
+        e.preventDefault();
+        tryAttackOrHarvest();
+      } else if (e.key === '1') {
+        tryPlaceBuilding('fence');
+      } else if (e.key === '2') {
+        tryPlaceBuilding('wall');
+      } else if (e.key === '3') {
+        tryPlaceBuilding('arrow_tower');
+      } else if (e.key === '4') {
+        tryPlaceBuilding('cannon_tower');
       } else if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
         e.preventDefault();
         const next = Math.min(2.0, Number((targetZoomRef.current + 0.15).toFixed(2)));
@@ -752,6 +1145,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     const handlePlayerAction = () => {
+      tryAttackOrHarvest();
+    };
+
+    const handlePlayerDash = () => {
+      tryDash();
+    };
+
+    const handlePlayerBuild = () => {
+      tryPlaceBuilding();
+    };
+
+    const handleCallWave = () => {
+      spawnWave(sessionRef.current.isBossWave);
+      onUpdateSession((prev) => ({
+        ...prev,
+        waveIncoming: true,
+        timeToNextWave: prev.modeMinutes === 30 ? 600 : 900,
+      }));
+    };
+
+    const handleInteractCore = () => {
       tryInteract();
     };
 
@@ -759,13 +1173,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('player-action', handlePlayerAction);
+    window.addEventListener('player-dash', handlePlayerDash);
+    window.addEventListener('player-build', handlePlayerBuild);
+    window.addEventListener('call-wave', handleCallWave);
+    window.addEventListener('player-interact-core', handleInteractCore);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('player-action', handlePlayerAction);
+      window.removeEventListener('player-dash', handlePlayerDash);
+      window.removeEventListener('player-build', handlePlayerBuild);
+      window.removeEventListener('call-wave', handleCallWave);
+      window.removeEventListener('player-interact-core', handleInteractCore);
     };
-  }, [tryInteract]);
+  }, [tryAttackOrHarvest, tryDash, tryInteract, tryPlaceBuilding, spawnWave, onUpdateSession]);
 
   // Main Canvas Render Loop
   useEffect(() => {
@@ -960,6 +1383,292 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onPlayerPositionChange?.({ gridX: currentGridX, gridY: currentGridY });
       }
 
+      // ──────────────────────────────────────────────────────────
+      // [Defense Simulation Engine] Waves, Monsters, Towers, Core
+      // ──────────────────────────────────────────────────────────
+      const simNow = Date.now();
+      const capitalIsland = islandsRef.current[0];
+      const capitalCoreX = 256;
+      const capitalCoreY = 256;
+
+      // A. Periodic 1-Second Timer Tick (Wave Countdown & Healing)
+      if (simNow - lastWaveCheckRef.current >= 1000) {
+        lastWaveCheckRef.current = simNow;
+
+        // Capital Core Healing Zone: If player is near Capital core, heal +4 HP
+        const distToCore = Math.hypot(player.x - capitalCoreX, player.y - capitalCoreY);
+        if (distToCore < 180 && player.hp < player.maxHp) {
+          player.hp = Math.min(player.maxHp, player.hp + 4);
+          onPlayerHpChange?.(player.hp, player.maxHp);
+          particlesRef.current.push({
+            x: player.x + (Math.random() - 0.5) * 20,
+            y: player.y + (Math.random() - 0.5) * 20,
+            vx: 0,
+            vy: -1.5,
+            color: '#4ade80',
+            size: 3,
+            life: 0,
+            maxLife: 20,
+          });
+        }
+
+        // Check if near core for contextual HUD prompt
+        onNearCoreChange?.(distToCore < 100);
+        onNearVillageCenterChange?.(distToCore < 120);
+
+        // Wave Timer Countdown
+        onUpdateSession((prev) => {
+          if (prev.isGameOver || prev.isVictory) return prev;
+
+          const nextElapsed = prev.elapsedSeconds + 1;
+          let nextTimeToWave = prev.timeToNextWave;
+          let nextWaveIncoming = prev.waveIncoming;
+          let nextWaveIndex = prev.waveIndex;
+          let nextIsBoss = prev.isBossWave;
+          let isVictory: boolean = prev.isVictory;
+
+          // Victory Condition Check
+          const targetDuration = prev.modeMinutes * 60;
+          if (nextElapsed >= targetDuration && !nextWaveIncoming && monstersRef.current.length === 0) {
+            isVictory = true;
+          }
+
+          if (!prev.waveIncoming) {
+            nextTimeToWave = Math.max(0, prev.timeToNextWave - 1);
+            if (nextTimeToWave <= 0) {
+              nextWaveIncoming = true;
+              spawnWave(prev.isBossWave);
+            }
+          } else {
+            // During wave: if all monsters defeated, wave complete!
+            if (monstersRef.current.length === 0) {
+              nextWaveIncoming = false;
+              nextWaveIndex = prev.waveIndex + 1;
+              const waveInterval = prev.modeMinutes === 30 ? 600 : 900;
+              nextTimeToWave = waveInterval;
+
+              // Check if next wave is boss wave
+              if (prev.modeMinutes === 30 && nextWaveIndex >= 2) {
+                nextIsBoss = true;
+              } else if (prev.modeMinutes === 60 && nextWaveIndex >= 3) {
+                nextIsBoss = true;
+              }
+
+              floatingTextsRef.current.push({
+                id: 'wave_clear_' + Math.random(),
+                text: '🎉 웨이브 방어 성공! 잠시 휴식 시간',
+                x: player.x,
+                y: player.y - 45,
+                color: '#34d399',
+                alpha: 1,
+                vy: -1.2,
+              });
+            }
+          }
+
+          return {
+            ...prev,
+            elapsedSeconds: nextElapsed,
+            timeToNextWave: nextTimeToWave,
+            waveIncoming: nextWaveIncoming,
+            waveIndex: nextWaveIndex,
+            isBossWave: nextIsBoss,
+            isVictory,
+          };
+        });
+
+        // Update monster count in HUD
+        onMonsterCountChange?.(monstersRef.current.length);
+        onCapitalCoreHpChange?.(capitalIsland.coreHp, capitalIsland.maxCoreHp);
+        onPlayerHpChange?.(player.hp, player.maxHp);
+      }
+
+      // B. Tower Auto-Attack Logic
+      for (const b of buildingsRef.current) {
+        if (b.type === 'arrow_tower' || b.type === 'cannon_tower') {
+          if (simNow - b.lastAttackTime >= b.attackCooldown) {
+            let targetMonster: Monster | null = null;
+            let minDist = b.range;
+
+            for (const m of monstersRef.current) {
+              const d = Math.hypot(b.x - m.x, b.y - m.y);
+              if (d < minDist) {
+                minDist = d;
+                targetMonster = m;
+              }
+            }
+
+            if (targetMonster) {
+              b.lastAttackTime = simNow;
+              projectilesRef.current.push({
+                id: `p_${simNow}_${Math.random()}`,
+                x: b.x,
+                y: b.y - 12,
+                targetX: targetMonster.x,
+                targetY: targetMonster.y,
+                targetId: targetMonster.id,
+                speed: b.type === 'arrow_tower' ? 7.5 : 5.0,
+                damage: b.damage,
+                type: b.type === 'arrow_tower' ? 'arrow' : 'cannonball',
+                source: 'tower',
+              });
+            }
+          }
+        }
+      }
+
+      // C. Projectiles Simulation & Collision
+      projectilesRef.current.forEach((p) => {
+        const dx = p.targetX - p.x;
+        const dy = p.targetY - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist <= p.speed + 4) {
+          // Hit Target
+          p.x = p.targetX;
+          p.y = p.targetY;
+
+          // Apply damage to monsters
+          for (const m of monstersRef.current) {
+            const hitDist = Math.hypot(p.x - m.x, p.y - m.y);
+            const splashRadius = p.type === 'cannonball' ? 65 : 24;
+
+            if (hitDist <= splashRadius) {
+              m.hp -= p.damage;
+              floatingTextsRef.current.push({
+                id: 'p_dmg_' + Math.random(),
+                text: `-${p.damage}`,
+                x: m.x,
+                y: m.y - 15,
+                color: p.type === 'cannonball' ? '#f97316' : '#fbbf24',
+                alpha: 1,
+                vy: -1.2,
+              });
+
+              for (let i = 0; i < (p.type === 'cannonball' ? 8 : 4); i++) {
+                particlesRef.current.push({
+                  x: m.x,
+                  y: m.y,
+                  vx: (Math.random() - 0.5) * 4,
+                  vy: (Math.random() - 0.5) * 4,
+                  color: p.type === 'cannonball' ? '#ea580c' : '#fbbf24',
+                  size: p.type === 'cannonball' ? 4 : 2.5,
+                  life: 0,
+                  maxLife: 15,
+                });
+              }
+            }
+          }
+        } else {
+          p.x += (dx / dist) * p.speed;
+          p.y += (dy / dist) * p.speed;
+        }
+      });
+
+      // Filter dead monsters and dead projectiles
+      projectilesRef.current = projectilesRef.current.filter((p) => {
+        return Math.hypot(p.targetX - p.x, p.targetY - p.y) > p.speed;
+      });
+
+      monstersRef.current = monstersRef.current.filter((m) => {
+        if (m.hp <= 0) {
+          onUpdateInventory((prev) => ({
+            ...prev,
+            gold: prev.gold + (m.type === 'boss' ? 20 : 1),
+            stone: prev.stone + 1,
+          }));
+          return false;
+        }
+        return true;
+      });
+
+      // D. Monster AI & Attack Simulation
+      for (const m of monstersRef.current) {
+        // Target 1: Check nearby barricades or walls blocking path
+        let blockingBuilding: Building | null = null;
+        for (const b of buildingsRef.current) {
+          if (Math.hypot(m.x - b.x, m.y - b.y) < 28) {
+            blockingBuilding = b;
+            break;
+          }
+        }
+
+        if (blockingBuilding) {
+          // Attack Building
+          if (simNow - m.lastAttackTime >= m.attackCooldown) {
+            m.lastAttackTime = simNow;
+            blockingBuilding.hp -= m.attackPower;
+            floatingTextsRef.current.push({
+              id: 'b_hit_' + Math.random(),
+              text: `-${m.attackPower}`,
+              x: blockingBuilding.x,
+              y: blockingBuilding.y - 12,
+              color: '#ef4444',
+              alpha: 1,
+              vy: -0.8,
+            });
+            if (blockingBuilding.hp <= 0) {
+              sound.playBreak();
+              buildingsRef.current = buildingsRef.current.filter((b) => b.id !== blockingBuilding!.id);
+            }
+          }
+          continue; // Blocked by wall, cannot walk
+        }
+
+        // Target 2: Attack player if close
+        const distToPlayer = Math.hypot(m.x - player.x, m.y - player.y);
+        if (distToPlayer < 36) {
+          if (simNow - m.lastAttackTime >= m.attackCooldown) {
+            m.lastAttackTime = simNow;
+            player.hp = Math.max(0, player.hp - m.attackPower);
+            onPlayerHpChange?.(player.hp, player.maxHp);
+            floatingTextsRef.current.push({
+              id: 'p_hit_' + Math.random(),
+              text: `-${m.attackPower} HP`,
+              x: player.x,
+              y: player.y - 20,
+              color: '#dc2626',
+              alpha: 1,
+              vy: -1.2,
+            });
+          }
+          continue;
+        }
+
+        // Target 3: Attack Capital Core if close
+        const distToCapitalCore = Math.hypot(m.x - capitalCoreX, m.y - capitalCoreY);
+        if (distToCapitalCore < 48) {
+          if (simNow - m.lastAttackTime >= m.attackCooldown) {
+            m.lastAttackTime = simNow;
+            capitalIsland.coreHp = Math.max(0, capitalIsland.coreHp - m.attackPower);
+            onCapitalCoreHpChange?.(capitalIsland.coreHp, capitalIsland.maxCoreHp);
+            floatingTextsRef.current.push({
+              id: 'core_dmg_' + Math.random(),
+              text: `💎 -${m.attackPower}`,
+              x: capitalCoreX,
+              y: capitalCoreY - 25,
+              color: '#dc2626',
+              alpha: 1,
+              vy: -1.2,
+            });
+
+            // GAME OVER CHECK
+            if (capitalIsland.coreHp <= 0) {
+              onUpdateSession((prev) => ({ ...prev, isGameOver: true }));
+              sound.playBreak();
+            }
+          }
+          continue;
+        }
+
+        // Otherwise: Move towards Capital Core (256, 256)
+        const mx = capitalCoreX - m.x;
+        const my = capitalCoreY - m.y;
+        const mdist = Math.hypot(mx, my) || 1;
+        m.x += (mx / mdist) * m.speed;
+        m.y += (my / mdist) * m.speed;
+      }
+
       // 2. Camera follow (smooth lerp)
       cameraRef.current.x += (player.x - cameraRef.current.x) * 0.1;
       cameraRef.current.y += (player.y - cameraRef.current.y) * 0.1;
@@ -1110,6 +1819,55 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const drawX = ent.x + shakeOffset;
         const drawY = ent.y;
 
+        // Core Gem Rendering (수호 코어 보석)
+        if (ent.type === 'core_gem') {
+          const isCapital = ent.islandId === 0;
+          ctx.save();
+          const glowGrad = ctx.createRadialGradient(
+            drawX + 16,
+            drawY + 16,
+            4,
+            drawX + 16,
+            drawY + 16,
+            isCapital ? 60 : 36
+          );
+          glowGrad.addColorStop(0, isCapital ? 'rgba(56, 189, 248, 0.75)' : 'rgba(168, 85, 247, 0.55)');
+          glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = glowGrad;
+          ctx.beginPath();
+          ctx.arc(drawX + 16, drawY + 16, isCapital ? 60 : 36, 0, Math.PI * 2);
+          ctx.fill();
+
+          const size = isCapital ? 26 : 18;
+          ctx.fillStyle = isCapital ? '#38bdf8' : '#c084fc';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(drawX + 16, drawY + 16 - size);
+          ctx.lineTo(drawX + 16 + size * 0.7, drawY + 16);
+          ctx.lineTo(drawX + 16, drawY + 16 + size);
+          ctx.lineTo(drawX + 16 - size * 0.7, drawY + 16);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(drawX + 16 - 4, drawY + 16 - 6, isCapital ? 4 : 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          const barW = isCapital ? 60 : 40;
+          const barH = isCapital ? 6 : 4;
+          const barX = drawX + 16 - barW / 2;
+          const barY = drawY - (isCapital ? 24 : 14);
+          ctx.fillStyle = 'rgba(0,0,0,0.7)';
+          ctx.fillRect(barX, barY, barW, barH);
+          ctx.fillStyle = isCapital ? '#38bdf8' : '#a855f7';
+          ctx.fillRect(barX, barY, (ent.hp / ent.maxHp) * barW, barH);
+          continue;
+        }
+
         if (ent.type === 'tree') {
           // Tree1.png: 1536x256 (8 frames of 192x256)
           const treeFrame = Math.floor((now / 220) % 8);
@@ -1145,6 +1903,177 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.fillStyle = '#4caf50';
           ctx.fillRect(barX, barY, (ent.hp / ent.maxHp) * barW, barH);
         }
+      }
+
+      // 5-1. Draw Buildings (방어 타워, 성벽, 방책)
+      for (const b of buildingsRef.current) {
+        ctx.save();
+        if (b.type === 'fence') {
+          ctx.fillStyle = '#78350f';
+          ctx.fillRect(b.x - 14, b.y - 14, 28, 28);
+          ctx.fillStyle = '#b45309';
+          ctx.fillRect(b.x - 12, b.y - 12, 24, 24);
+          ctx.strokeStyle = '#451a03';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(b.x - 14, b.y - 14, 28, 28);
+          ctx.beginPath();
+          ctx.moveTo(b.x - 10, b.y - 10);
+          ctx.lineTo(b.x + 10, b.y + 10);
+          ctx.moveTo(b.x + 10, b.y - 10);
+          ctx.lineTo(b.x - 10, b.y + 10);
+          ctx.stroke();
+        } else if (b.type === 'wall') {
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(b.x - 16, b.y - 16, 32, 32);
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(b.x - 14, b.y - 14, 28, 28);
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(b.x - 16, b.y - 16, 32, 32);
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillRect(b.x - 12, b.y - 14, 8, 5);
+          ctx.fillRect(b.x + 4, b.y - 14, 8, 5);
+        } else if (b.type === 'arrow_tower') {
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(b.x - 18, b.y - 18, 36, 36);
+          ctx.fillStyle = '#b45309';
+          ctx.beginPath();
+          ctx.moveTo(b.x, b.y - 28);
+          ctx.lineTo(b.x + 18, b.y - 12);
+          ctx.lineTo(b.x - 18, b.y - 12);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#10b981';
+          ctx.fillRect(b.x, b.y - 36, 12, 8);
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(b.x, b.y - 36);
+          ctx.lineTo(b.x, b.y - 28);
+          ctx.stroke();
+        } else if (b.type === 'cannon_tower') {
+          ctx.fillStyle = '#1e293b';
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, 20, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#475569';
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, 14, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(b.x - 4, b.y - 24, 8, 16);
+        }
+        ctx.restore();
+
+        if (b.hp < b.maxHp) {
+          const bw = 32;
+          ctx.fillStyle = 'rgba(0,0,0,0.6)';
+          ctx.fillRect(b.x - bw / 2, b.y - 24, bw, 4);
+          ctx.fillStyle = '#34d399';
+          ctx.fillRect(b.x - bw / 2, b.y - 24, (b.hp / b.maxHp) * bw, 4);
+        }
+      }
+
+      // 5-2. Draw Monsters (좀비, 스켈레톤, 보스)
+      for (const m of monstersRef.current) {
+        ctx.save();
+        if (m.type === 'zombie') {
+          ctx.fillStyle = '#4d7c0f';
+          ctx.beginPath();
+          ctx.arc(m.x, m.y - 8, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#7e22ce';
+          ctx.fillRect(m.x - 8, m.y, 16, 16);
+          ctx.fillStyle = '#ef4444';
+          ctx.fillRect(m.x - 4, m.y - 10, 3, 3);
+          ctx.fillRect(m.x + 2, m.y - 10, 3, 3);
+        } else if (m.type === 'skeleton') {
+          ctx.fillStyle = '#f1f5f9';
+          ctx.beginPath();
+          ctx.arc(m.x, m.y - 8, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillRect(m.x - 6, m.y, 12, 16);
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(m.x - 4, m.y - 10, 3, 3);
+          ctx.fillRect(m.x + 2, m.y - 10, 3, 3);
+        } else if (m.type === 'boss') {
+          const glow = ctx.createRadialGradient(m.x, m.y, 10, m.x, m.y, 45);
+          glow.addColorStop(0, 'rgba(239, 68, 68, 0.45)');
+          glow.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(m.x, m.y, 45, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#881337';
+          ctx.beginPath();
+          ctx.arc(m.x, m.y - 12, 22, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#4c0519';
+          ctx.fillRect(m.x - 18, m.y + 6, 36, 30);
+          ctx.fillStyle = '#fbbf24';
+          ctx.beginPath();
+          ctx.moveTo(m.x - 16, m.y - 20);
+          ctx.lineTo(m.x - 28, m.y - 38);
+          ctx.lineTo(m.x - 8, m.y - 26);
+          ctx.moveTo(m.x + 16, m.y - 20);
+          ctx.lineTo(m.x + 28, m.y - 38);
+          ctx.lineTo(m.x + 8, m.y - 26);
+          ctx.fill();
+          ctx.fillStyle = '#fde047';
+          ctx.fillRect(m.x - 10, m.y - 16, 6, 6);
+          ctx.fillRect(m.x + 4, m.y - 16, 6, 6);
+        }
+        ctx.restore();
+
+        const mw = m.type === 'boss' ? 60 : 30;
+        const mh = m.type === 'boss' ? 6 : 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(m.x - mw / 2, m.y - (m.type === 'boss' ? 42 : 24), mw, mh);
+        ctx.fillStyle = m.type === 'boss' ? '#e11d48' : '#f43f5e';
+        ctx.fillRect(m.x - mw / 2, m.y - (m.type === 'boss' ? 42 : 24), (m.hp / m.maxHp) * mw, mh);
+      }
+
+      // 5-3. Draw Projectiles (화살, 뼈다귀, 포탄)
+      for (const p of projectilesRef.current) {
+        ctx.save();
+        if (p.type === 'arrow') {
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.type === 'bone') {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(p.x - 4, p.y - 2, 8, 4);
+        } else if (p.type === 'cannonball') {
+          ctx.fillStyle = '#0f172a';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // 5-4. Draw Ghost Build Preview if selected
+      if (selectedBuildingRef.current) {
+        const bDef = BUILDING_DEFS[selectedBuildingRef.current];
+        const forwardX = localPlayerRef.current.direction === 'left' ? -56 : 56;
+        const ghostX = Math.round((localPlayerRef.current.x + forwardX) / 32) * 32;
+        const ghostY = Math.round(localPlayerRef.current.y / 32) * 32;
+
+        ctx.save();
+        ctx.globalAlpha = 0.65;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.strokeRect(ghostX - 16, ghostY - 16, 32, 32);
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 11px Pretendard, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`[ ${bDef.name} ]`, ghostX, ghostY - 22);
+        ctx.restore();
       }
 
       // 6. Draw Remote Players

@@ -39,3 +39,17 @@ html, body {
 .animate-spin-slow {
   animation: spinSlow 12s linear infinite;
 }
+
+/* Mobile Safe Area Inset Support (iPhone Notch / Home Bar / Punch Hole) */
+.safe-top {
+  padding-top: max(8px, env(safe-area-inset-top));
+}
+.safe-bottom {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+.safe-left {
+  padding-left: max(8px, env(safe-area-inset-left));
+}
+.safe-right {
+  padding-right: max(8px, env(safe-area-inset-right));
+}

@@ -6,7 +6,7 @@ export interface Inventory {
   gold: number;
 }
 
-export type PlayerAction = 'idle' | 'run' | 'axe' | 'pickaxe';
+export type PlayerAction = 'idle' | 'run' | 'axe' | 'pickaxe' | 'attack' | 'build';
 export type PlayerColor = 'blue' | 'red';
 
 export interface Player {
@@ -18,9 +18,13 @@ export interface Player {
   action: PlayerAction;
   color: PlayerColor;
   lastUpdated: number;
+  hp: number;
+  maxHp: number;
+  isDashing?: boolean;
+  dashCooldown?: number;
 }
 
-export type EntityType = 'tree' | 'rock' | 'gold_rock';
+export type EntityType = 'tree' | 'rock' | 'gold_rock' | 'core_gem';
 
 export interface Entity {
   id: string;
@@ -33,15 +37,82 @@ export interface Entity {
   shakeTime?: number;
 }
 
-export interface Island {
+// 마을 단계: 야영지 -> 중소마을 -> 큰마을 -> 소도시 -> 중소도시 -> 대도시
+export type VillageTier =
+  | 'outpost' // 전초 야영지
+  | 'small_village' // 중소마을 (기본 수도 상태)
+  | 'large_village' // 큰마을
+  | 'small_city' // 소도시
+  | 'mid_city' // 중소도시
+  | 'metropolis'; // 대도시
+
+export interface Territory {
   id: number;
-  gridX: number; // e.g. 0, 1, -1
-  gridY: number; // e.g. 0, 1, -1
+  gridX: number;
+  gridY: number;
+  name: string;
+  unlocked: boolean;
+  isCoreActive: boolean;
+  coreHp: number;
+  maxCoreHp: number;
+  tier: VillageTier;
+  isCapital: boolean;
   costWood: number;
   costStone: number;
   costGold: number;
-  unlocked: boolean;
-  name: string;
+}
+
+// 기존 Island 타입과의 하위 호환
+export type Island = Territory;
+
+export type BuildingType = 'fence' | 'wall' | 'arrow_tower' | 'cannon_tower';
+
+export interface Building {
+  id: string;
+  type: BuildingType;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  territoryId: number;
+  range: number;
+  damage: number;
+  attackCooldown: number; // ms
+  lastAttackTime: number;
+  targetId?: string;
+}
+
+export type MonsterType = 'zombie' | 'skeleton' | 'boss';
+
+export interface Monster {
+  id: string;
+  type: MonsterType;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  speed: number;
+  attackPower: number;
+  attackRange: number;
+  attackCooldown: number;
+  lastAttackTime: number;
+  targetType: 'player' | 'core' | 'building';
+  targetId?: string;
+  targetX: number;
+  targetY: number;
+}
+
+export interface Projectile {
+  id: string;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  targetId?: string;
+  speed: number;
+  damage: number;
+  type: 'arrow' | 'bone' | 'cannonball';
+  source: 'player' | 'tower' | 'monster';
 }
 
 export interface FloatingText {
@@ -63,6 +134,18 @@ export interface Particle {
   size: number;
   life: number;
   maxLife: number;
+}
+
+export interface DefenseSession {
+  modeMinutes: 30 | 60;
+  elapsedSeconds: number;
+  waveIndex: number;
+  waveIncoming: boolean;
+  timeToNextWave: number;
+  isBossWave: boolean;
+  totalWaves: number;
+  isGameOver: boolean;
+  isVictory: boolean;
 }
 
 export interface ServerIslandRecord {

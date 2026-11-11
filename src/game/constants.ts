@@ -1,12 +1,130 @@
-import { Island, Entity } from '../types/game';
+import { Island, Entity, BuildingType, VillageTier, Building } from '../types/game';
 
 export const TILE_SIZE = 64;
 export const ISLAND_TILES = 8; // 8x8 tiles per island (512x512 px)
 export const ISLAND_PX = TILE_SIZE * ISLAND_TILES;
 export const ISLAND_GAP = 96; // Water gap between islands
 
+// 건물 정의 (방책, 성벽, 화살타워, 대포타워)
+export interface BuildingDef {
+  type: BuildingType;
+  name: string;
+  costWood: number;
+  costStone: number;
+  costGold: number;
+  hp: number;
+  range: number;
+  damage: number;
+  attackCooldown: number;
+  description: string;
+}
+
+export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
+  fence: {
+    type: 'fence',
+    name: '나무 방책',
+    costWood: 5,
+    costStone: 0,
+    costGold: 0,
+    hp: 80,
+    range: 0,
+    damage: 0,
+    attackCooldown: 0,
+    description: '적의 이동을 막는 기초 목재 방책',
+  },
+  wall: {
+    type: 'wall',
+    name: '석재 성벽',
+    costWood: 0,
+    costStone: 12,
+    costGold: 0,
+    hp: 250,
+    range: 0,
+    damage: 0,
+    attackCooldown: 0,
+    description: '단단하여 마물의 공격을 오래 버티는 성벽',
+  },
+  arrow_tower: {
+    type: 'arrow_tower',
+    name: '화살 타워',
+    costWood: 15,
+    costStone: 10,
+    costGold: 0,
+    hp: 120,
+    range: 200,
+    damage: 18,
+    attackCooldown: 900,
+    description: '접근하는 마물에게 자동으로 화살을 난사',
+  },
+  cannon_tower: {
+    type: 'cannon_tower',
+    name: '대포 타워',
+    costWood: 5,
+    costStone: 30,
+    costGold: 8,
+    hp: 200,
+    range: 260,
+    damage: 55,
+    attackCooldown: 2200,
+    description: '강력한 포탄으로 광역 피해를 주는 방어 포탑',
+  },
+};
+
+// 마을 등급 설정 (이름, 승급비용, 설명)
+export const VILLAGE_TIER_CONFIG: Record<
+  VillageTier,
+  {
+    name: string;
+    nextTier?: VillageTier;
+    upgradeCost?: { wood: number; stone: number; gold: number };
+    maxCoreHp: number;
+    buffDescription: string;
+  }
+> = {
+  outpost: {
+    name: '전초 야영지',
+    nextTier: 'small_village',
+    upgradeCost: { wood: 20, stone: 15, gold: 0 },
+    maxCoreHp: 300,
+    buffDescription: '기초적인 방어 타워 배치 가능',
+  },
+  small_village: {
+    name: '중소마을 (기본 수도)',
+    nextTier: 'large_village',
+    upgradeCost: { wood: 45, stone: 35, gold: 5 },
+    maxCoreHp: 500,
+    buffDescription: '체력 재생 및 기본 목재 방책 지원',
+  },
+  large_village: {
+    name: '큰마을',
+    nextTier: 'small_city',
+    upgradeCost: { wood: 80, stone: 70, gold: 15 },
+    maxCoreHp: 750,
+    buffDescription: '주변 타워 공격력 +15% 증가',
+  },
+  small_city: {
+    name: '소도시',
+    nextTier: 'mid_city',
+    upgradeCost: { wood: 130, stone: 120, gold: 30 },
+    maxCoreHp: 1100,
+    buffDescription: '주변 타워 사거리 +20% 증가',
+  },
+  mid_city: {
+    name: '중소도시',
+    nextTier: 'metropolis',
+    upgradeCost: { wood: 200, stone: 180, gold: 50 },
+    maxCoreHp: 1600,
+    buffDescription: '마을 방어막(Shield) 활성화',
+  },
+  metropolis: {
+    name: '대도시 (최종)',
+    maxCoreHp: 2500,
+    buffDescription: '전 구역 공격력 +30% 및 공성 대포 해금',
+  },
+};
+
 export const INITIAL_ISLANDS: Island[] = [
-  // 1. 시작 및 중앙 허브
+  // 1. 시작 및 중앙 허브 (중심 수도 마을: 중소마을 등급, 코어 보석 활성화, 방책 보유)
   {
     id: 0,
     gridX: 0,
@@ -15,7 +133,12 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 0,
     costGold: 0,
     unlocked: true,
-    name: '시작의 섬 (Home Isle)',
+    isCoreActive: true,
+    coreHp: 500,
+    maxCoreHp: 500,
+    tier: 'small_village',
+    isCapital: true,
+    name: '중심 수도 마을 (Capital Village)',
   },
 
   // 2. 1차 확장 (기본 십자 방향)
@@ -27,6 +150,11 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 6,
     costGold: 0,
     unlocked: false,
+    isCoreActive: false,
+    coreHp: 300,
+    maxCoreHp: 300,
+    tier: 'outpost',
+    isCapital: false,
     name: '동쪽 삼림지대 (East Woods)',
   },
   {
@@ -225,6 +353,35 @@ export const INITIAL_ISLANDS: Island[] = [
     unlocked: false,
     name: '서북 그림자 봉우리 (Shadow Peak Isle)',
   },
+].map((item): Island => {
+  const isCapital = item.id === 0;
+  return {
+    ...item,
+    tier: isCapital ? 'small_village' : ((item.tier as VillageTier) || 'outpost'),
+    isCapital,
+    isCoreActive: isCapital ? true : (item.isCoreActive ?? false),
+    coreHp: isCapital ? 500 : (item.coreHp ?? 300),
+    maxCoreHp: isCapital ? 500 : (item.maxCoreHp ?? 300),
+  };
+});
+
+// 초기 중심 마을(Capital)에 생성되는 기본 나무 방책들 (기획안: 나무 방책이 있음)
+export const INITIAL_CAPITAL_BUILDINGS: Building[] = [
+  // 중심 마을 (gridX: 0, gridY: 0, 원점 0, 0)
+  // 코어는 (256, 256)에 위치. 북/남/동/서 둘레에 방책 배치
+  { id: 'cap_f1', type: 'fence', x: 192, y: 160, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  { id: 'cap_f2', type: 'fence', x: 256, y: 160, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  { id: 'cap_f3', type: 'fence', x: 320, y: 160, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+
+  { id: 'cap_f4', type: 'fence', x: 160, y: 224, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  { id: 'cap_f5', type: 'fence', x: 160, y: 288, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+
+  { id: 'cap_f6', type: 'fence', x: 352, y: 224, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  { id: 'cap_f7', type: 'fence', x: 352, y: 288, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+
+  { id: 'cap_f8', type: 'fence', x: 192, y: 352, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  { id: 'cap_f9', type: 'fence', x: 256, y: 352, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  { id: 'cap_f10', type: 'fence', x: 320, y: 352, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
 ];
 
 export function getIslandOrigin(gridX: number, gridY: number): { x: number; y: number } {
@@ -274,6 +431,17 @@ export function generateIslandEntities(islandId: number, gridX: number, gridY: n
       islandId,
     });
   };
+
+  // 각 영토의 중심에 수호 코어 보석 배치 (256, 256)
+  entities.push({
+    id: `c_${islandId}_core`,
+    type: 'core_gem',
+    x: origin.x + 256,
+    y: origin.y + 256,
+    hp: islandId === 0 ? 500 : 300,
+    maxHp: islandId === 0 ? 500 : 300,
+    islandId,
+  });
 
   switch (islandId) {
     case 0: // Starting Isle: Balanced

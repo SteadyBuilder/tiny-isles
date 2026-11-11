@@ -1,65 +1,72 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Island } from '../types/game';
-import { Sparkles } from 'lucide-react';
+import { Island, BuildingType } from '../types/game';
+import { Swords, Wind, Hammer, Sparkles, Check, Castle } from 'lucide-react';
 
 interface MobileControlsProps {
   onAction: () => void;
+  onDash?: () => void;
+  onBuildCurrent?: () => void;
+  onToggleBuildHotbar?: () => void;
+  selectedBuilding?: BuildingType | null;
   joystickRef: React.MutableRefObject<{ x: number; y: number }>;
   nearIsland?: Island | null;
+  isNearCore?: boolean;
+  onInteractCore?: () => void;
+  isNearVillageCenter?: boolean;
+  onUpgradeVillage?: () => void;
 }
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
   onAction,
+  onDash,
+  onBuildCurrent,
+  onToggleBuildHotbar,
+  selectedBuilding,
   joystickRef,
   nearIsland,
+  isNearCore,
+  onInteractCore,
+  isNearVillageCenter,
+  onUpgradeVillage,
 }) => {
-  // Joystick State
-  const baseRef = useRef<HTMLDivElement | null>(null);
-  const knobRef = useRef<HTMLDivElement | null>(null);
-  const activeJoystickPointerId = useRef<number | null>(null);
+  // 플로팅 조이스틱 상태
+  const [joystickActive, setJoystickActive] = useState(false);
+  const [joystickCenter, setJoystickCenter] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [knobPos, setKnobPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const activePointerId = useRef<number | null>(null);
 
-  // Action Button State (Continuous hold)
-  const [isActionActive, setIsActionActive] = useState(false);
-  const actionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const actionPointerIdRef = useRef<number | null>(null);
+  // 대시 쿨다운 상태
+  const [dashOnCooldown, setDashOnCooldown] = useState(false);
 
-  const handleJoystickPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activeJoystickPointerId.current !== null) return;
-    activeJoystickPointerId.current = e.pointerId;
+  // 액션 버튼 연속 홀드 상태
+  const [isActionHeld, setIsActionHeld] = useState(false);
+  const actionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 1. 플로팅 조이스틱 터치 핸들러
+  const handleTouchStartArea = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 이미 조이스틱이 활성화되어 있다면 무시
+    if (activePointerId.current !== null) return;
+
+    activePointerId.current = e.pointerId;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       // ignore
     }
-    updateJoystick(e.clientX, e.clientY);
+
+    setJoystickCenter({ x: e.clientX, y: e.clientY });
+    setKnobPos({ x: 0, y: 0 });
+    setJoystickActive(true);
+    joystickRef.current = { x: 0, y: 0 };
   };
 
-  const handleJoystickPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activeJoystickPointerId.current !== e.pointerId) return;
-    updateJoystick(e.clientX, e.clientY);
-  };
+  const handleTouchMoveArea = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerId.current !== e.pointerId) return;
 
-  const handleJoystickPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activeJoystickPointerId.current !== e.pointerId) return;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    activeJoystickPointerId.current = null;
-    resetJoystick();
-  };
-
-  const updateJoystick = (clientX: number, clientY: number) => {
-    if (!baseRef.current || !knobRef.current) return;
-    const rect = baseRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    const dx = clientX - centerX;
-    const dy = clientY - centerY;
+    const dx = e.clientX - joystickCenter.x;
+    const dy = e.clientY - joystickCenter.y;
     const dist = Math.hypot(dx, dy);
-    const maxRadius = 40;
+    const maxRadius = 50;
 
     let knobX = dx;
     let knobY = dy;
@@ -69,9 +76,8 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       knobY = (dy / dist) * maxRadius;
     }
 
-    knobRef.current.style.transform = `translate3d(${knobX}px, ${knobY}px, 0)`;
+    setKnobPos({ x: knobX, y: knobY });
 
-    // Deadzone check
     if (dist < 6) {
       joystickRef.current = { x: 0, y: 0 };
     } else {
@@ -82,177 +88,201 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     }
   };
 
-  const resetJoystick = () => {
-    if (knobRef.current) {
-      knobRef.current.style.transform = 'translate3d(0px, 0px, 0)';
+  const handleTouchEndArea = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerId.current !== e.pointerId) return;
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
     }
+
+    activePointerId.current = null;
+    setJoystickActive(false);
+    setKnobPos({ x: 0, y: 0 });
     joystickRef.current = { x: 0, y: 0 };
   };
 
-  // Continuous Attack / Gathering Action handlers
-  const executeActionOnce = useCallback(() => {
+  // 2. 공격/채집 연속 홀드 핸들러
+  const triggerSingleAction = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(15);
+      navigator.vibrate(12);
     }
     onAction();
   }, [onAction]);
 
-  const stopActionHold = useCallback(() => {
-    actionPointerIdRef.current = null;
-    setIsActionActive(false);
+  const handleActionDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    setIsActionHeld(true);
+    triggerSingleAction();
 
-    if (actionIntervalRef.current) {
-      clearInterval(actionIntervalRef.current);
-      actionIntervalRef.current = null;
-    }
-  }, []);
-
-  const handleActionPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (actionPointerIdRef.current !== null) return;
-    actionPointerIdRef.current = e.pointerId;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    setIsActionActive(true);
-
-    // Immediate initial action
-    executeActionOnce();
-
-    // Clear previous interval if any
-    if (actionIntervalRef.current) {
-      clearInterval(actionIntervalRef.current);
-    }
-
-    // Continuous execution while held down (every 220ms)
-    actionIntervalRef.current = setInterval(() => {
-      executeActionOnce();
-    }, 220);
+    if (actionTimerRef.current) clearInterval(actionTimerRef.current);
+    actionTimerRef.current = setInterval(() => {
+      triggerSingleAction();
+    }, 180);
   };
 
-  // Global safety release listeners when action is active
-  useEffect(() => {
-    if (!isActionActive) return;
-
-    const handleGlobalRelease = () => {
-      stopActionHold();
-    };
-
-    window.addEventListener('pointerup', handleGlobalRelease, { passive: true });
-    window.addEventListener('pointercancel', handleGlobalRelease, { passive: true });
-    window.addEventListener('touchend', handleGlobalRelease, { passive: true });
-    window.addEventListener('touchcancel', handleGlobalRelease, { passive: true });
-    window.addEventListener('blur', handleGlobalRelease);
-
-    return () => {
-      window.removeEventListener('pointerup', handleGlobalRelease);
-      window.removeEventListener('pointercancel', handleGlobalRelease);
-      window.removeEventListener('touchend', handleGlobalRelease);
-      window.removeEventListener('touchcancel', handleGlobalRelease);
-      window.removeEventListener('blur', handleGlobalRelease);
-    };
-  }, [isActionActive, stopActionHold]);
+  const handleActionUp = () => {
+    setIsActionHeld(false);
+    if (actionTimerRef.current) {
+      clearInterval(actionTimerRef.current);
+      actionTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     return () => {
-      joystickRef.current = { x: 0, y: 0 };
-      if (actionIntervalRef.current) {
-        clearInterval(actionIntervalRef.current);
-        actionIntervalRef.current = null;
-      }
+      if (actionTimerRef.current) clearInterval(actionTimerRef.current);
     };
-  }, [joystickRef]);
+  }, []);
+
+  // 3. 대시 핸들러
+  const handleDash = () => {
+    if (dashOnCooldown) return;
+    setDashOnCooldown(true);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(20);
+    }
+    onDash?.();
+    setTimeout(() => {
+      setDashOnCooldown(false);
+    }, 1200);
+  };
 
   return (
-    <div className="md:hidden pointer-events-none select-none fixed inset-0 z-40">
-      {/* 1. Left: Virtual Joystick (Movement) */}
+    <div className="fixed inset-0 pointer-events-none select-none z-30 overflow-hidden">
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* A. 좌측 하단 플로팅 조이스틱 터치 영역 (모바일 화면 왼쪽 절반) */}
+      {/* ────────────────────────────────────────────────────────── */}
       <div
-        className="absolute bottom-6 left-6 pointer-events-auto touch-none"
-        style={{
-          bottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))',
-          left: 'max(1.5rem, env(safe-area-inset-left, 1.5rem))',
-        }}
+        className="pointer-events-auto absolute left-0 bottom-0 w-1/2 h-[70vh] touch-none"
+        onPointerDown={handleTouchStartArea}
+        onPointerMove={handleTouchMoveArea}
+        onPointerUp={handleTouchEndArea}
+        onPointerCancel={handleTouchEndArea}
       >
-        <div
-          ref={baseRef}
-          onPointerDown={handleJoystickPointerDown}
-          onPointerMove={handleJoystickPointerMove}
-          onPointerUp={handleJoystickPointerUp}
-          onPointerCancel={handleJoystickPointerUp}
-          className="relative w-28 h-28 rounded-full bg-slate-900/60 backdrop-blur-md border-2 border-white/20 shadow-2xl flex items-center justify-center cursor-pointer active:border-amber-400/60 transition-colors"
-          role="button"
-          aria-label="이동 조이스틱"
-        >
-          {/* Directional Guides */}
-          <div className="absolute inset-2 rounded-full border border-dashed border-white/10 pointer-events-none" />
-          <span className="absolute top-1 text-[10px] text-white/30 font-bold pointer-events-none">▲</span>
-          <span className="absolute bottom-1 text-[10px] text-white/30 font-bold pointer-events-none">▼</span>
-          <span className="absolute left-1.5 text-[10px] text-white/30 font-bold pointer-events-none">◀</span>
-          <span className="absolute right-1.5 text-[10px] text-white/30 font-bold pointer-events-none">▶</span>
-
-          {/* Joystick Stick / Knob */}
+        {/* 플로팅 조이스틱 UI (터치 시 터치 좌표에 렌더링) */}
+        {joystickActive && (
           <div
-            ref={knobRef}
-            className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 border-2 border-white/80 shadow-lg flex items-center justify-center will-change-transform pointer-events-none"
+            className="absolute -translate-x-1/2 -translate-y-1/2 w-28 h-28 rounded-full border-2 border-amber-400/50 bg-slate-900/60 backdrop-blur-sm pointer-events-none flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.3)] animate-in fade-in zoom-in-75 duration-100"
+            style={{ left: joystickCenter.x, top: joystickCenter.y }}
           >
-            <div className="w-4 h-4 rounded-full bg-white/40 shadow-inner" />
+            {/* 가이드 링 */}
+            <div className="w-14 h-14 rounded-full border border-amber-300/30 border-dashed" />
+
+            {/* 조이스틱 노브 */}
+            <div
+              className="absolute w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 border-2 border-white shadow-lg pointer-events-none"
+              style={{
+                transform: `translate3d(${knobPos.x}px, ${knobPos.y}px, 0)`,
+              }}
+            />
           </div>
-        </div>
+        )}
+
+        {/* 조이스틱 기본 가이드 힌트 (터치 안 할 때 은은하게 표시) */}
+        {!joystickActive && (
+          <div className="absolute left-8 bottom-8 flex flex-col items-center opacity-30 pointer-events-none">
+            <div className="w-20 h-20 rounded-full border border-dashed border-slate-300 flex items-center justify-center">
+              <span className="text-[10px] text-slate-300 font-bold">이동 영역</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 2. Right: Action Controls (Attack / Harvest - matching movement button) */}
-      <div
-        className="absolute bottom-6 right-6 pointer-events-auto flex flex-col items-end gap-3 touch-none"
-        style={{
-          bottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))',
-          right: 'max(1.5rem, env(safe-area-inset-right, 1.5rem))',
-        }}
-      >
-        {/* Contextual Island Unlock Prompt Button */}
-        {nearIsland && (
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* B. 우측 하단 액션 버튼 클러스터 */}
+      {/* ────────────────────────────────────────────────────────── */}
+      <div className="pointer-events-auto absolute right-4 bottom-4 sm:right-8 sm:bottom-8 flex flex-col items-end gap-3 safe-right safe-bottom">
+        {/* 1. 상황별 상호작용 버튼 (코어 보석 정화, 마을 승급 등) */}
+        {isNearCore && (
           <button
-            onClick={executeActionOnce}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 active:scale-95 text-white font-extrabold text-xs shadow-2xl border-2 border-emerald-300 animate-bounce"
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
+              onInteractCore?.();
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs sm:text-sm shadow-[0_0_20px_rgba(6,182,212,0.7)] border-2 border-cyan-200 active:scale-95 animate-bounce mb-1"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-            <span>🏝️ #{nearIsland.id} 개척</span>
+            <Sparkles className="w-4 h-4 fill-white" />
+            <span>수호 코어 강화/수리</span>
           </button>
         )}
 
-        {/* Primary Action Button - matches joystick base and knob design, with continuous action on hold */}
-        <div
-          onPointerDown={handleActionPointerDown}
-          onPointerUp={stopActionHold}
-          onPointerCancel={stopActionHold}
-          onLostPointerCapture={stopActionHold}
-          className={`relative w-28 h-28 rounded-full bg-slate-900/60 backdrop-blur-md border-2 shadow-2xl flex items-center justify-center cursor-pointer transition-all select-none ${
-            isActionActive ? 'border-amber-400 bg-slate-900/80 scale-95' : 'border-white/20 active:border-amber-400/60'
-          }`}
-          role="button"
-          aria-label="공격 및 채집 (누르고 있으면 연속 공격)"
-        >
-          {/* Matching Dashed Circle Guide */}
-          <div
-            className={`absolute inset-2 rounded-full border border-dashed transition-colors pointer-events-none ${
-              isActionActive ? 'border-amber-400/40' : 'border-white/10'
-            }`}
-          />
-
-          {/* Action Center Knob (matches joystick knob style & size) */}
-          <div
-            className={`w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 border-2 border-white/80 shadow-lg flex items-center justify-center text-2xl will-change-transform pointer-events-none transition-transform ${
-              isActionActive ? 'scale-90 shadow-inner brightness-110' : 'scale-100'
-            }`}
+        {isNearVillageCenter && (
+          <button
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
+              onUpgradeVillage?.();
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black text-xs sm:text-sm shadow-[0_0_20px_rgba(245,158,11,0.7)] border-2 border-amber-200 active:scale-95 animate-pulse mb-1"
           >
-            <span className="select-none leading-none">⚔️</span>
-          </div>
+            <Castle className="w-4 h-4 fill-slate-950" />
+            <span>마을 승급하기</span>
+          </button>
+        )}
 
-          {/* Hold guidance label */}
-          <span className="absolute bottom-1 text-[9px] text-white/50 font-bold tracking-tight pointer-events-none">
-            {isActionActive ? '연속 공격 중' : '누르고 있기'}
-          </span>
+        {/* 보조 버튼 라인: 대시(회피) & 건설 모드 */}
+        <div className="flex items-center gap-3">
+          {/* 건설 핫바 토글 또는 선택된 건물 즉시 배치 버튼 */}
+          {selectedBuilding ? (
+            <button
+              onClick={() => {
+                if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+                onBuildCurrent?.();
+              }}
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-90 flex flex-col items-center justify-center text-slate-950 font-black shadow-lg border-2 border-amber-200 animate-pulse"
+              title="선택된 건물 설치"
+            >
+              <Check className="w-6 h-6 stroke-[3]" />
+              <span className="text-[10px] font-black leading-none mt-0.5">설치</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
+                onToggleBuildHotbar?.();
+              }}
+              className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-amber-500/50 hover:border-amber-400 active:scale-90 flex flex-col items-center justify-center text-amber-300 shadow-md"
+              title="건축 모드 열기"
+            >
+              <Hammer className="w-5 h-5" />
+              <span className="text-[9px] font-bold mt-0.5">건축</span>
+            </button>
+          )}
+
+          {/* 대시/회피 버튼 */}
+          <button
+            onClick={handleDash}
+            disabled={dashOnCooldown}
+            className={`w-13 h-13 sm:w-14 sm:h-14 rounded-2xl backdrop-blur-md border flex flex-col items-center justify-center shadow-md transition-all active:scale-90 ${
+              dashOnCooldown
+                ? 'bg-slate-900/50 border-slate-700 text-slate-500 opacity-50'
+                : 'bg-indigo-600/80 border-indigo-300 text-white hover:bg-indigo-500'
+            }`}
+            title="회피/대시 (Space)"
+          >
+            <Wind className="w-5 h-5" />
+            <span className="text-[9px] font-bold mt-0.5">대시</span>
+          </button>
         </div>
+
+        {/* 2. 메인 공격/채집 버튼 (대형 터치 타겟: 76px) */}
+        <button
+          onPointerDown={handleActionDown}
+          onPointerUp={handleActionUp}
+          onPointerCancel={handleActionUp}
+          className={`w-20 h-20 sm:w-22 sm:h-22 rounded-3xl border-3 flex flex-col items-center justify-center shadow-[0_10px_25px_rgba(0,0,0,0.5)] transition-all touch-none select-none ${
+            isActionHeld
+              ? 'bg-rose-500 border-white scale-95 shadow-[0_0_25px_rgba(244,63,94,0.8)]'
+              : 'bg-gradient-to-tr from-rose-600 to-amber-500 border-rose-200/90 active:scale-90'
+          }`}
+          title="공격 및 자원 채집 (길게 누르면 연속 타격)"
+        >
+          <Swords className={`w-8 h-8 text-white stroke-[2.5] ${isActionHeld ? 'rotate-12' : ''}`} />
+          <span className="text-[10px] sm:text-xs font-black text-white mt-1 uppercase tracking-tight">
+            {isActionHeld ? '타격 중!' : '공격/채집'}
+          </span>
+        </button>
       </div>
     </div>
   );
