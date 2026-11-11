@@ -715,7 +715,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (!ctx) return;
 
     let animationId: number;
-    let lastStepSoundTime = 0;
 
     const handleResize = () => {
       if (!canvas) return;
@@ -836,13 +835,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         if (player.action !== 'axe' && player.action !== 'pickaxe') {
           player.action = 'run';
-        }
-
-        // Footstep sound (relaxed '뚜벅뚜벅' walking pace)
-        const now = Date.now();
-        if (now - lastStepSoundTime > 430) {
-          sound.playStep();
-          lastStepSoundTime = now;
         }
       } else {
         if (player.action === 'run') {
