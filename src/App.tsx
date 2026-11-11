@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { GameCanvas } from './game/GameCanvas';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { Inventory, PlayerColor } from './types/game';
 import { storage } from './lib/storage';
+import { INITIAL_ISLANDS } from './game/constants';
 
 export function App() {
   const [profile, setProfile] = useState(() => storage.loadProfile());
   const [inventory, setInventory] = useState<Inventory>(() => storage.loadInventory());
   const [onlineCount, setOnlineCount] = useState<number>(1);
+  const [islandStats, setIslandStats] = useState({
+    unlocked: storage.loadUnlockedIslands().length,
+    total: INITIAL_ISLANDS.length,
+  });
 
   // 프로필(이름, 색상) 변경 시 영속화
   const handleUpdateName = (name: string) => {
@@ -36,6 +41,10 @@ export function App() {
     });
   };
 
+  const handleUnlockedCountChange = (unlocked: number, total: number) => {
+    setIslandStats({ unlocked, total });
+  };
+
   const handleResetGame = () => {
     if (window.confirm('정말 게임 진행상황(자원 및 해금된 섬)을 초기화하시겠습니까?')) {
       storage.resetAll();
@@ -56,6 +65,8 @@ export function App() {
         setPlayerName={handleUpdateName}
         playerColor={profile.color}
         setPlayerColor={handleUpdateColor}
+        unlockedCount={islandStats.unlocked}
+        totalIslands={islandStats.total}
         onResetGame={handleResetGame}
       />
 
@@ -66,6 +77,7 @@ export function App() {
         onUpdateInventory={handleUpdateInventory}
         onlineCount={onlineCount}
         setOnlineCount={setOnlineCount}
+        onUnlockedCountChange={handleUnlockedCountChange}
       />
 
       <MobileControls onAction={handleMobileAction} />

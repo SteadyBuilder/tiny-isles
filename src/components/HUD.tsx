@@ -10,6 +10,8 @@ interface HUDProps {
   setPlayerName: (name: string) => void;
   playerColor: PlayerColor;
   setPlayerColor: (color: PlayerColor) => void;
+  unlockedCount?: number;
+  totalIslands?: number;
   onResetGame?: () => void;
 }
 
@@ -20,6 +22,8 @@ export const HUD: React.FC<HUDProps> = ({
   setPlayerName,
   playerColor,
   setPlayerColor,
+  unlockedCount = 1,
+  totalIslands = 21,
   onResetGame,
 }) => {
   const [isMuted, setIsMuted] = useState(sound.isMuted());
@@ -47,19 +51,38 @@ export const HUD: React.FC<HUDProps> = ({
     <>
       {/* Top Main HUD Bar */}
       <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
-        {/* Left: Inventory Resources */}
-        <div className="flex items-center gap-2 pointer-events-auto bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-xl">
-          <div className="flex items-center gap-2 px-2 py-1 bg-amber-950/40 rounded-xl border border-amber-500/30">
-            <span className="text-xl">🪵</span>
-            <span className="font-extrabold text-amber-200 text-lg min-w-[28px]">{inventory.wood}</span>
+        {/* Left: Inventory Resources & Island Progress */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Resources */}
+          <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-xl">
+            <div className="flex items-center gap-2 px-2 py-1 bg-amber-950/40 rounded-xl border border-amber-500/30">
+              <span className="text-xl">🪵</span>
+              <span className="font-extrabold text-amber-200 text-lg min-w-[28px]">{inventory.wood}</span>
+            </div>
+            <div className="flex items-center gap-2 px-2 py-1 bg-slate-800/40 rounded-xl border border-slate-400/30">
+              <span className="text-xl">🪨</span>
+              <span className="font-extrabold text-slate-200 text-lg min-w-[28px]">{inventory.stone}</span>
+            </div>
+            <div className="flex items-center gap-2 px-2 py-1 bg-yellow-950/40 rounded-xl border border-yellow-500/30">
+              <span className="text-xl">🪙</span>
+              <span className="font-extrabold text-yellow-300 text-lg min-w-[28px]">{inventory.gold}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2 px-2 py-1 bg-slate-800/40 rounded-xl border border-slate-400/30">
-            <span className="text-xl">🪨</span>
-            <span className="font-extrabold text-slate-200 text-lg min-w-[28px]">{inventory.stone}</span>
-          </div>
-          <div className="flex items-center gap-2 px-2 py-1 bg-yellow-950/40 rounded-xl border border-yellow-500/30">
-            <span className="text-xl">🪙</span>
-            <span className="font-extrabold text-yellow-300 text-lg min-w-[28px]">{inventory.gold}</span>
+
+          {/* Island Explorer Badge */}
+          <div
+            className="hidden sm:flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-2 rounded-2xl border border-emerald-500/30 shadow-xl"
+            title="현재 해금된 섬 / 총 섬 개수"
+          >
+            <span className="text-lg">🏝️</span>
+            <div className="flex flex-col leading-none">
+              <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase">군도 개척</span>
+              <span className="font-extrabold text-white text-sm">
+                <span className="text-emerald-300">{unlockedCount}</span>
+                <span className="text-white/40 mx-0.5">/</span>
+                <span>{totalIslands}</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -168,11 +191,13 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
 
               <div className="flex items-start gap-3 bg-white/5 p-3 rounded-xl">
-                <span className="font-bold text-amber-300 w-16 shrink-0">영토 확장</span>
+                <span className="font-bold text-amber-300 w-16 shrink-0">군도 확장</span>
                 <span>
                   새로운 섬 표지판에 다가가 <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-xs">E</kbd> 키 또는 클릭
                   <br />
-                  <span className="text-xs text-slate-400">• 목재와 석재를 모아 바다 위의 새로운 섬을 해금하세요!</span>
+                  <span className="text-xs text-slate-400">• 총 21개로 대폭 늘어난 다채로운 테마 섬들을 해금하세요!</span>
+                  <br />
+                  <span className="text-xs text-slate-400">• 우측 하단 미니맵에서 내 위치와 해금 현황을 한눈에 볼 수 있습니다.</span>
                 </span>
               </div>
 
