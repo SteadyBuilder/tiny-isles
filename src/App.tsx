@@ -65,8 +65,14 @@ export function App() {
   const [isNearCore, setIsNearCore] = useState<boolean>(false);
   const [isNearVillageCenter, setIsNearVillageCenter] = useState<boolean>(false);
 
-  // Camera Zoom state (0.5x to 2.0x)
-  const [zoom, setZoom] = useState<number>(() => storage.loadZoom());
+  // Camera Zoom state (0.5x to 2.0x, mobile defaults to 0.85 for wide FOV)
+  const [zoom, setZoom] = useState<number>(() => {
+    const saved = storage.loadZoom();
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 0.85;
+    }
+    return saved;
+  });
 
   // Mobile state
   const [nearIsland, setNearIsland] = useState<Island | null>(null);

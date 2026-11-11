@@ -1289,7 +1289,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (!assets) return;
 
       const player = localPlayerRef.current;
-      const speed = 4.2;
+      const speed = 4.8;
 
       // 1. Process Movement
       let dx = 0;
@@ -1679,8 +1679,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const camX = Math.round(cameraRef.current.x);
       const camY = Math.round(cameraRef.current.y);
 
-      // Clear & Draw Deep Ocean Background
-      ctx.fillStyle = '#1e3d59';
+      // Clear & Draw Continual Green Plains Continent Background
+      ctx.fillStyle = '#1e381f';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.save();
@@ -1688,23 +1688,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.scale(zoomRef.current, zoomRef.current);
       ctx.translate(-camX, -camY);
 
-      // 3. Draw Water Grid Foam effect
       const now = Date.now();
-      const foamFrame = Math.floor((now / 150) % 16);
-      const foamW = 192;
 
-      // 4. Draw Islands & Bridges
+      // 4. Draw Continuous Continent Territories (바다가 아닌 광활한 육지 마을 단위)
       for (const island of islandsRef.current) {
         const origin = getIslandOrigin(island.gridX, island.gridY);
 
         if (island.unlocked) {
-          // Draw Island Ground Tiles
+          // A. Draw Lush Green Ground Grass Tiles
           for (let tx = 0; tx < ISLAND_TILES; tx++) {
             for (let ty = 0; ty < ISLAND_TILES; ty++) {
               const tileX = origin.x + tx * TILE_SIZE;
               const tileY = origin.y + ty * TILE_SIZE;
 
-              // Center grass from tilemap (64x64 at srcX: 64, srcY: 64)
+              // Grass from tilemap (64x64 at srcX: 64, srcY: 64)
               ctx.drawImage(
                 assets.tilemap,
                 64, 64, 64, 64,
@@ -1713,60 +1710,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
 
-          // Draw coastal water foam around unlocked island edges
-          if (assets.waterFoam && assets.waterFoam.complete) {
-            ctx.drawImage(
-              assets.waterFoam,
-              foamFrame * foamW, 0, foamW, 192,
-              origin.x - 40, origin.y - 40, 592, 120
-            );
-          }
-
-          // Draw Connecting Bridges to adjacent unlocked islands
-          const rightNeighbor = islandsRef.current.find(
-            (other) => other.unlocked && other.gridX === island.gridX + 1 && other.gridY === island.gridY
-          );
-          if (rightNeighbor) {
-            // Draw wooden bridge connecting right
-            ctx.fillStyle = '#8d6e63';
-            ctx.fillRect(origin.x + ISLAND_PX, origin.y + 192, ISLAND_GAP, 128);
-            // Bridge planks
-            ctx.strokeStyle = '#5d4037';
-            ctx.lineWidth = 3;
-            for (let bx = origin.x + ISLAND_PX + 16; bx < origin.x + ISLAND_PX + ISLAND_GAP; bx += 20) {
-              ctx.beginPath();
-              ctx.moveTo(bx, origin.y + 192);
-              ctx.lineTo(bx, origin.y + 320);
-              ctx.stroke();
-            }
-          }
-
-          const bottomNeighbor = islandsRef.current.find(
-            (other) => other.unlocked && other.gridX === island.gridX && other.gridY === island.gridY + 1
-          );
-          if (bottomNeighbor) {
-            // Draw wooden bridge connecting down
-            ctx.fillStyle = '#8d6e63';
-            ctx.fillRect(origin.x + 192, origin.y + ISLAND_PX, 128, ISLAND_GAP);
-            ctx.strokeStyle = '#5d4037';
-            ctx.lineWidth = 3;
-            for (let by = origin.y + ISLAND_PX + 16; by < origin.y + ISLAND_PX + ISLAND_GAP; by += 20) {
-              ctx.beginPath();
-              ctx.moveTo(origin.x + 192, by);
-              ctx.lineTo(origin.x + 320, by);
-              ctx.stroke();
-            }
-          }
+          // Territory Boundary Line (영토 경계 흙길/경계선 마커)
+          ctx.strokeStyle = 'rgba(74, 222, 128, 0.25)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([8, 8]);
+          ctx.strokeRect(origin.x + 2, origin.y + 2, ISLAND_PX - 4, ISLAND_PX - 4);
+          ctx.setLineDash([]);
         } else {
-          // Locked Island: Semi-transparent mysterious preview
+          // B. Locked Territory: Dark Mysterious Mist & Ancient Border Marker
           ctx.save();
-          ctx.globalAlpha = 0.35;
-          ctx.strokeStyle = '#64b5f6';
-          ctx.lineWidth = 4;
+          // Dark fog covering unexplored wild territory
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+          ctx.fillRect(origin.x, origin.y, ISLAND_PX, ISLAND_PX);
+
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 3;
           ctx.setLineDash([12, 10]);
           ctx.strokeRect(origin.x, origin.y, ISLAND_PX, ISLAND_PX);
-          ctx.fillStyle = '#172a3a';
-          ctx.fillRect(origin.x, origin.y, ISLAND_PX, ISLAND_PX);
           ctx.restore();
 
           // Signpost & Cost Badge
@@ -1777,37 +1737,37 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             inventory.stone >= island.costStone &&
             inventory.gold >= island.costGold;
 
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
           ctx.beginPath();
-          ctx.roundRect(signX - 115, signY - 48, 230, 96, 12);
+          ctx.roundRect(signX - 110, signY - 45, 220, 90, 12);
           ctx.fill();
-          ctx.strokeStyle = canAfford ? '#4ade80' : '#ffd700';
-          ctx.lineWidth = canAfford ? 3 : 2;
+          ctx.strokeStyle = canAfford ? '#4ade80' : '#f59e0b';
+          ctx.lineWidth = canAfford ? 2.5 : 1.5;
           ctx.stroke();
 
           ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 15px Pretendard, sans-serif';
+          ctx.font = 'bold 14px Pretendard, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(island.name, signX, signY - 20);
+          ctx.fillText(`🚩 ${island.name}`, signX, signY - 18);
 
-          ctx.font = 'bold 13px Pretendard, sans-serif';
-          ctx.fillStyle = canAfford ? '#86efac' : '#ffd54f';
+          ctx.font = 'bold 12px Pretendard, sans-serif';
+          ctx.fillStyle = canAfford ? '#86efac' : '#fcd34d';
           const costStr = `필요: 🪵${island.costWood}  🪨${island.costStone}${island.costGold > 0 ? `  🪙${island.costGold}` : ''}`;
           ctx.fillText(costStr, signX, signY + 8);
 
-          ctx.font = 'bold 12px Pretendard, sans-serif';
+          ctx.font = 'bold 11px Pretendard, sans-serif';
           const isMobile = canvas.width < 768;
           if (canAfford) {
             ctx.fillStyle = '#4ade80';
-            ctx.fillText(isMobile ? '✨ 해금 가능! [개척 버튼 터치]' : '✨ 해금 가능! [E 키 / 클릭]', signX, signY + 32);
+            ctx.fillText(isMobile ? '✨ 개척 가능! [개척 터치]' : '✨ 개척 가능! [E 키]', signX, signY + 30);
           } else {
             ctx.fillStyle = '#f87171';
-            ctx.fillText('자원 부족 [가까이 가서 확인]', signX, signY + 32);
+            ctx.fillText('미개척 구역 [자원 부족]', signX, signY + 30);
           }
         }
       }
 
-      // 5. Draw Entities (Trees, Rocks, Gold Rocks)
+      // 5. Draw Entities (Trees, Rocks, Gold Rocks, Core Gems)
       const sortedEntities = [...entitiesRef.current].sort((a, b) => a.y - b.y);
 
       for (const ent of sortedEntities) {
@@ -1869,7 +1829,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
 
         if (ent.type === 'tree') {
-          // Tree1.png: 1536x256 (8 frames of 192x256)
           const treeFrame = Math.floor((now / 220) % 8);
           ctx.drawImage(
             assets.tree,
@@ -1877,13 +1836,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             drawX - 64, drawY - 160, 160, 200
           );
         } else if (ent.type === 'rock') {
-          // Rock1.png: 64x64
           ctx.drawImage(assets.rock1, drawX, drawY - 16, 64, 64);
         } else if (ent.type === 'gold_rock') {
-          // Gold tinted rock
           ctx.save();
           ctx.drawImage(assets.rock2, drawX, drawY - 16, 64, 64);
-          // Sparkle overlay
           ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
           ctx.beginPath();
           ctx.arc(drawX + 32, drawY + 16, 24, 0, Math.PI * 2);
@@ -1891,7 +1847,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.restore();
         }
 
-        // Draw Health Bar if damaged
         if (ent.hp < ent.maxHp) {
           const barW = 40;
           const barH = 5;
@@ -1905,23 +1860,41 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      // 5-1. Draw Buildings (방어 타워, 성벽, 방책)
+      // 5-1. Draw Buildings: 중세 뾰족한 목재 말뚝 방책 & 석재 성벽 & 타워
       for (const b of buildingsRef.current) {
         ctx.save();
         if (b.type === 'fence') {
-          ctx.fillStyle = '#78350f';
-          ctx.fillRect(b.x - 14, b.y - 14, 28, 28);
-          ctx.fillStyle = '#b45309';
-          ctx.fillRect(b.x - 12, b.y - 12, 24, 24);
-          ctx.strokeStyle = '#451a03';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(b.x - 14, b.y - 14, 28, 28);
-          ctx.beginPath();
-          ctx.moveTo(b.x - 10, b.y - 10);
-          ctx.lineTo(b.x + 10, b.y + 10);
-          ctx.moveTo(b.x + 10, b.y - 10);
-          ctx.lineTo(b.x - 10, b.y + 10);
-          ctx.stroke();
+          // 진정한 중세 목재 방책(Wooden Palisade): 뾰족한 원목 말뚝 3개 묶음 + 가로 띠목
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+          ctx.fillRect(b.x - 14, b.y + 8, 28, 5);
+
+          const logWidth = 8;
+          for (let li = -1; li <= 1; li++) {
+            const lx = b.x + li * 9;
+            ctx.fillStyle = '#854d0e';
+            ctx.fillRect(lx - 4, b.y - 10, logWidth, 22);
+
+            ctx.fillStyle = '#a16207';
+            ctx.beginPath();
+            ctx.moveTo(lx, b.y - 18);
+            ctx.lineTo(lx + 4, b.y - 10);
+            ctx.lineTo(lx - 4, b.y - 10);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = '#451a03';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(lx - 4, b.y - 10, logWidth, 22);
+          }
+
+          ctx.fillStyle = '#713f12';
+          ctx.fillRect(b.x - 15, b.y - 6, 30, 4);
+          ctx.fillRect(b.x - 15, b.y + 4, 30, 4);
+
+          ctx.fillStyle = '#e2e8f0';
+          ctx.fillRect(b.x - 9, b.y - 5, 2, 2);
+          ctx.fillRect(b.x, b.y - 5, 2, 2);
+          ctx.fillRect(b.x + 9, b.y - 5, 2, 2);
         } else if (b.type === 'wall') {
           ctx.fillStyle = '#334155';
           ctx.fillRect(b.x - 16, b.y - 16, 32, 32);
@@ -1974,65 +1947,64 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      // 5-2. Draw Monsters (좀비, 스켈레톤, 보스)
+      // 5-2. Draw Monsters: Tiny Swords 정품 애니메이션 스프라이트 (redPawnRun & redPawnAxe)
       for (const m of monstersRef.current) {
         ctx.save();
-        if (m.type === 'zombie') {
-          ctx.fillStyle = '#4d7c0f';
-          ctx.beginPath();
-          ctx.arc(m.x, m.y - 8, 10, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#7e22ce';
-          ctx.fillRect(m.x - 8, m.y, 16, 16);
-          ctx.fillStyle = '#ef4444';
-          ctx.fillRect(m.x - 4, m.y - 10, 3, 3);
-          ctx.fillRect(m.x + 2, m.y - 10, 3, 3);
-        } else if (m.type === 'skeleton') {
-          ctx.fillStyle = '#f1f5f9';
-          ctx.beginPath();
-          ctx.arc(m.x, m.y - 8, 10, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#94a3b8';
-          ctx.fillRect(m.x - 6, m.y, 12, 16);
-          ctx.fillStyle = '#0f172a';
-          ctx.fillRect(m.x - 4, m.y - 10, 3, 3);
-          ctx.fillRect(m.x + 2, m.y - 10, 3, 3);
-        } else if (m.type === 'boss') {
-          const glow = ctx.createRadialGradient(m.x, m.y, 10, m.x, m.y, 45);
-          glow.addColorStop(0, 'rgba(239, 68, 68, 0.45)');
-          glow.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = glow;
-          ctx.beginPath();
-          ctx.arc(m.x, m.y, 45, 0, Math.PI * 2);
-          ctx.fill();
 
-          ctx.fillStyle = '#881337';
+        const isBoss = m.type === 'boss';
+        const isAttacking = now - m.lastAttackTime < 450;
+        const enemySprite = isAttacking ? assets.redPawnAxe : assets.redPawnRun;
+        const animFrame = Math.floor((now / 130) % 6);
+        const spriteSize = 192;
+        const scale = isBoss ? 1.6 : 0.95;
+
+        // Facing direction towards Capital (256, 256)
+        const faceDir = 256 < m.x ? -1 : 1;
+
+        ctx.translate(m.x, m.y);
+        ctx.scale(faceDir * scale, scale);
+
+        // A. 몬스터 오라 및 발밑 이펙트
+        if (isBoss) {
+          // 거대한 보스 붉은 악마 마법진
+          ctx.save();
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.45)';
           ctx.beginPath();
-          ctx.arc(m.x, m.y - 12, 22, 0, Math.PI * 2);
+          ctx.arc(0, 15, 38, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = '#4c0519';
-          ctx.fillRect(m.x - 18, m.y + 6, 36, 30);
-          ctx.fillStyle = '#fbbf24';
-          ctx.beginPath();
-          ctx.moveTo(m.x - 16, m.y - 20);
-          ctx.lineTo(m.x - 28, m.y - 38);
-          ctx.lineTo(m.x - 8, m.y - 26);
-          ctx.moveTo(m.x + 16, m.y - 20);
-          ctx.lineTo(m.x + 28, m.y - 38);
-          ctx.lineTo(m.x + 8, m.y - 26);
-          ctx.fill();
-          ctx.fillStyle = '#fde047';
-          ctx.fillRect(m.x - 10, m.y - 16, 6, 6);
-          ctx.fillRect(m.x + 4, m.y - 16, 6, 6);
+          ctx.restore();
+        } else if (m.type === 'skeleton') {
+          ctx.filter = 'grayscale(90%) brightness(130%)';
+        } else {
+          // 좀비 독기
+          ctx.filter = 'hue-rotate(60deg) saturate(140%)';
         }
+
+        // B. Tiny Swords 프레임 애니메이션 그리기
+        if (enemySprite && enemySprite.complete) {
+          ctx.drawImage(
+            enemySprite,
+            animFrame * spriteSize, 0, spriteSize, spriteSize,
+            -48, -60, 96, 96
+          );
+        }
+
         ctx.restore();
 
-        const mw = m.type === 'boss' ? 60 : 30;
-        const mh = m.type === 'boss' ? 6 : 4;
+        // C. 보스 뿔 & 체력 바 표시
+        const mw = isBoss ? 64 : 32;
+        const mh = isBoss ? 6 : 4;
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(m.x - mw / 2, m.y - (m.type === 'boss' ? 42 : 24), mw, mh);
-        ctx.fillStyle = m.type === 'boss' ? '#e11d48' : '#f43f5e';
-        ctx.fillRect(m.x - mw / 2, m.y - (m.type === 'boss' ? 42 : 24), (m.hp / m.maxHp) * mw, mh);
+        ctx.fillRect(m.x - mw / 2, m.y - (isBoss ? 45 : 26), mw, mh);
+        ctx.fillStyle = isBoss ? '#dc2626' : '#f43f5e';
+        ctx.fillRect(m.x - mw / 2, m.y - (isBoss ? 45 : 26), (m.hp / m.maxHp) * mw, mh);
+
+        if (isBoss) {
+          ctx.fillStyle = '#fbbf24';
+          ctx.font = 'black 11px Pretendard, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('👑 BOSS', m.x, m.y - 52);
+        }
       }
 
       // 5-3. Draw Projectiles (화살, 뼈다귀, 포탄)
@@ -2119,122 +2091,63 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       ctx.restore();
 
-      // 10. Draw Minimap (Screen-Space: in upper right corner, compact size)
+      // 10. Draw Minimap (Screen-Space: on Desktop only to prevent obscuring mobile view)
       const isMobile = canvas.width < 768;
-      const minimapSize = isMobile ? 84 : 108;
-      const margin = isMobile ? 12 : 16;
-      const mmX = canvas.width - minimapSize - margin;
-      const mmY = isMobile ? 54 : 66;
+      if (!isMobile) {
+        const minimapSize = 108;
+        const margin = 16;
+        const mmX = canvas.width - minimapSize - margin;
+        const mmY = 56;
 
-      // Minimap background box
-      ctx.save();
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(mmX, mmY, minimapSize, minimapSize, isMobile ? 10 : 12);
-      ctx.fill();
-      ctx.stroke();
-
-      // Minimap Header / Title
-      const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = isMobile ? 'bold 9px Pretendard, sans-serif' : 'bold 10px Pretendard, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(
-        isMobile ? `🗺️ ${unlockedTotal}/${islandsRef.current.length}` : `🗺️ 지도 (${unlockedTotal}/${islandsRef.current.length})`,
-        mmX + (isMobile ? 6 : 8),
-        mmY + (isMobile ? 12 : 14)
-      );
-
-      // Grid center inside minimap (5x5 grid: -2 to 2)
-      const mmCenterX = mmX + minimapSize / 2;
-      const mmCenterY = mmY + minimapSize / 2 + (isMobile ? 5 : 6);
-      const mmStep = isMobile ? 14 : 18;
-      const islandBoxSize = isMobile ? 9 : 12;
-
-      // Draw connecting bridges between adjacent unlocked islands
-      ctx.strokeStyle = '#8d6e63';
-      ctx.lineWidth = isMobile ? 2 : 2.5;
-      for (const isl of islandsRef.current) {
-        if (!isl.unlocked) continue;
-        const ix = mmCenterX + isl.gridX * mmStep;
-        const iy = mmCenterY + isl.gridY * mmStep;
-
-        const right = islandsRef.current.find(
-          (o) => o.unlocked && o.gridX === isl.gridX + 1 && o.gridY === isl.gridY
-        );
-        if (right) {
-          ctx.beginPath();
-          ctx.moveTo(ix, iy);
-          ctx.lineTo(ix + mmStep, iy);
-          ctx.stroke();
-        }
-
-        const bottom = islandsRef.current.find(
-          (o) => o.unlocked && o.gridX === isl.gridX && o.gridY === isl.gridY + 1
-        );
-        if (bottom) {
-          ctx.beginPath();
-          ctx.moveTo(ix, iy);
-          ctx.lineTo(ix, iy + mmStep);
-          ctx.stroke();
-        }
-      }
-
-      // Draw island nodes
-      for (const isl of islandsRef.current) {
-        const ix = mmCenterX + isl.gridX * mmStep;
-        const iy = mmCenterY + isl.gridY * mmStep;
-
-        if (isl.unlocked) {
-          ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
-          ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, isMobile ? 2.5 : 3);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        } else {
-          const canAfford =
-            inventory.wood >= isl.costWood &&
-            inventory.stone >= isl.costStone &&
-            inventory.gold >= isl.costGold;
-
-          ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.4)' : 'rgba(51, 65, 85, 0.7)';
-          ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, isMobile ? 2.5 : 3);
-          ctx.fill();
-          ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.6)';
-          ctx.lineWidth = canAfford ? 1.2 : 0.8;
-          ctx.stroke();
-        }
-      }
-
-      // Draw remote players on minimap
-      remotePlayersRef.current.forEach((rp) => {
-        const rNormX = mmCenterX + ((rp.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-        const rNormY = mmCenterY + ((rp.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-        ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(rNormX, rNormY, isMobile ? 2 : 2.5, 0, Math.PI * 2);
+        ctx.roundRect(mmX, mmY, minimapSize, minimapSize, 12);
         ctx.fill();
-      });
+        ctx.stroke();
 
-      // Draw local player marker on minimap (pulsing ring)
-      const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-      const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-      const pulseSize = (isMobile ? 2.5 : 3.5) + Math.sin(now / 180) * 1;
+        const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = 'bold 10px Pretendard, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`🗺️ 지도 (${unlockedTotal}/${islandsRef.current.length})`, mmX + 8, mmY + 14);
 
-      ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';
-      ctx.beginPath();
-      ctx.arc(pNormX, pNormY, pulseSize, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+        const mmCenterX = mmX + minimapSize / 2;
+        const mmCenterY = mmY + minimapSize / 2 + 6;
+        const mmStep = 18;
+        const islandBoxSize = 12;
 
-      ctx.restore();
+        for (const isl of islandsRef.current) {
+          const ix = mmCenterX + isl.gridX * mmStep;
+          const iy = mmCenterY + isl.gridY * mmStep;
+
+          if (isl.unlocked) {
+            ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
+            ctx.beginPath();
+            ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 3);
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = 'rgba(51, 65, 85, 0.7)';
+            ctx.beginPath();
+            ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 3);
+            ctx.fill();
+          }
+        }
+
+        const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+        const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+        ctx.fillStyle = '#00e5ff';
+        ctx.beginPath();
+        ctx.arc(pNormX, pNormY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
 
       animationId = requestAnimationFrame(render);
     };

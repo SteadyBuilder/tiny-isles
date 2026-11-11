@@ -1,9 +1,9 @@
 import { Island, Entity, BuildingType, VillageTier, Building } from '../types/game';
 
 export const TILE_SIZE = 64;
-export const ISLAND_TILES = 8; // 8x8 tiles per island (512x512 px)
+export const ISLAND_TILES = 8; // 8x8 tiles per territory (512x512 px)
 export const ISLAND_PX = TILE_SIZE * ISLAND_TILES;
-export const ISLAND_GAP = 96; // Water gap between islands
+export const ISLAND_GAP = 0; // 광활하게 이어지는 육지 영토 (바다 섬이 아닌 대륙 마을 단위)
 
 // 건물 정의 (방책, 성벽, 화살타워, 대포타워)
 export interface BuildingDef {
@@ -365,24 +365,82 @@ export const INITIAL_ISLANDS: Island[] = [
   };
 });
 
-// 초기 중심 마을(Capital)에 생성되는 기본 나무 방책들 (기획안: 나무 방책이 있음)
-export const INITIAL_CAPITAL_BUILDINGS: Building[] = [
-  // 중심 마을 (gridX: 0, gridY: 0, 원점 0, 0)
-  // 코어는 (256, 256)에 위치. 북/남/동/서 둘레에 방책 배치
-  { id: 'cap_f1', type: 'fence', x: 192, y: 160, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
-  { id: 'cap_f2', type: 'fence', x: 256, y: 160, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
-  { id: 'cap_f3', type: 'fence', x: 320, y: 160, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+// 초기 중심 마을(Capital) 외곽 둘레에 설치되는 목재 성벽 방책들 (기획안: 중심 마을 외곽에 나무 방책 배치)
+export const INITIAL_CAPITAL_BUILDINGS: Building[] = (() => {
+  const buildings: Building[] = [];
+  const coords: { x: number; y: number }[] = [];
 
-  { id: 'cap_f4', type: 'fence', x: 160, y: 224, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
-  { id: 'cap_f5', type: 'fence', x: 160, y: 288, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  // 북쪽 외곽선 (y = 48) - 중앙 256 부근은 출입구로 개방
+  for (let x = 48; x <= 464; x += 32) {
+    if (x >= 224 && x <= 288) continue; // 북문 개방
+    coords.push({ x, y: 48 });
+  }
 
-  { id: 'cap_f6', type: 'fence', x: 352, y: 224, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
-  { id: 'cap_f7', type: 'fence', x: 352, y: 288, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
+  // 남쪽 외곽선 (y = 464) - 남문 개방
+  for (let x = 48; x <= 464; x += 32) {
+    if (x >= 224 && x <= 288) continue; // 남문 개방
+    coords.push({ x, y: 464 });
+  }
 
-  { id: 'cap_f8', type: 'fence', x: 192, y: 352, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
-  { id: 'cap_f9', type: 'fence', x: 256, y: 352, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
-  { id: 'cap_f10', type: 'fence', x: 320, y: 352, hp: 80, maxHp: 80, territoryId: 0, range: 0, damage: 0, attackCooldown: 0, lastAttackTime: 0 },
-];
+  // 서쪽 외곽선 (x = 48) - 서문 개방
+  for (let y = 80; y <= 432; y += 32) {
+    if (y >= 224 && y <= 288) continue; // 서문 개방
+    coords.push({ x: 48, y });
+  }
+
+  // 동쪽 외곽선 (x = 464) - 동문 개방
+  for (let y = 80; y <= 432; y += 32) {
+    if (y >= 224 && y <= 288) continue; // 동문 개방
+    coords.push({ x: 464, y });
+  }
+
+  coords.forEach((c, idx) => {
+    buildings.push({
+      id: `cap_fence_${idx}`,
+      type: 'fence',
+      x: c.x,
+      y: c.y,
+      hp: 120,
+      maxHp: 120,
+      territoryId: 0,
+      range: 0,
+      damage: 0,
+      attackCooldown: 0,
+      lastAttackTime: 0,
+    });
+  });
+
+  // 4개 모서리에 초기 목재 화살 타워 2개 기본 배치 (방어선 구축)
+  buildings.push({
+    id: 'cap_tower_nw',
+    type: 'arrow_tower',
+    x: 80,
+    y: 80,
+    hp: 150,
+    maxHp: 150,
+    territoryId: 0,
+    range: 220,
+    damage: 18,
+    attackCooldown: 900,
+    lastAttackTime: 0,
+  });
+
+  buildings.push({
+    id: 'cap_tower_se',
+    type: 'arrow_tower',
+    x: 432,
+    y: 432,
+    hp: 150,
+    maxHp: 150,
+    territoryId: 0,
+    range: 220,
+    damage: 18,
+    attackCooldown: 900,
+    lastAttackTime: 0,
+  });
+
+  return buildings;
+})();
 
 export function getIslandOrigin(gridX: number, gridY: number): { x: number; y: number } {
   return {
