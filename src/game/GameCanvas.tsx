@@ -141,6 +141,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [onUnlockedCountChange, onUnlockedIslandIdsChange]);
 
   // Sync zoom prop with targetZoomRef
+  const onZoomChangeRef = useRef(onZoomChange);
+  useEffect(() => {
+    onZoomChangeRef.current = onZoomChange;
+  }, [onZoomChange]);
+
   useEffect(() => {
     if (typeof zoom === 'number' && !isNaN(zoom)) {
       targetZoomRef.current = Math.min(2.0, Math.max(0.5, Number(zoom.toFixed(2))));
@@ -671,28 +676,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   }, [inventory, onUpdateInventory]);
 
-  // Keyboard Event Listeners
+  // Keyboard & Action Event Listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       keysRef.current[e.key.toLowerCase()] = true;
       if (e.key === ' ' || e.key.toLowerCase() === 'e') {
         e.preventDefault();
-        tryInteract();
+        if (!e.repeat) {
+          tryInteract();
+        }
       } else if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
         e.preventDefault();
         const next = Math.min(2.0, Number((targetZoomRef.current + 0.15).toFixed(2)));
         targetZoomRef.current = next;
-        onZoomChange?.(next);
+        onZoomChangeRef.current?.(next);
       } else if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
         e.preventDefault();
         const next = Math.max(0.5, Number((targetZoomRef.current - 0.15).toFixed(2)));
         targetZoomRef.current = next;
-        onZoomChange?.(next);
+        onZoomChangeRef.current?.(next);
       } else if (e.key === '0' || e.code === 'Numpad0') {
         e.preventDefault();
         targetZoomRef.current = 1.0;
-        onZoomChange?.(1.0);
+        onZoomChangeRef.current?.(1.0);
       }
     };
 
@@ -700,11 +707,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       keysRef.current[e.key.toLowerCase()] = false;
     };
 
+    const handleWindowBlur = () => {
+      keysRef.current = {};
+    };
+
+    const handlePlayerAction = () => {
+      tryInteract();
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('player-action', handlePlayerAction);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('player-action', handlePlayerAction);
     };
   }, [tryInteract]);
 
@@ -737,8 +756,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const next = e.deltaY < 0 ? targetZoomRef.current + step : targetZoomRef.current - step;
       const clamped = Math.min(2.0, Math.max(0.5, Number(next.toFixed(2))));
       targetZoomRef.current = clamped;
-      onZoomChange?.(clamped);
+      onZoomChangeRef.current?.(clamped);
     };
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
     window.addEventListener('wheel', handleWheel, { passive: false });
 
     // Touch Pinch-to-Zoom handlers on mobile (two-finger spread/pinch)
@@ -758,28 +778,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && touchStartDist !== null && touchStartDist > 0) {
+      if (e.touches.length === 2) {
         e.preventDefault();
         isPinchingRef.current = true;
         mouseTargetRef.current.active = false;
+
         const currentDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
+
+        if (touchStartDist === null || touchStartDist <= 0) {
+          touchStartDist = currentDist;
+          touchStartZoom = targetZoomRef.current;
+          return;
+        }
+
         const factor = currentDist / touchStartDist;
         const next = Math.min(2.0, Math.max(0.5, Number((touchStartZoom * factor).toFixed(2))));
         targetZoomRef.current = next;
-        onZoomChange?.(next);
+        onZoomChangeRef.current?.(next);
       }
     };
 
-    const handleTouchEnd = () => {
-      if (touchStartDist !== null) {
-        isPinchingRef.current = false;
-        touchStartDist = null;
-        lastPinchEndTimeRef.current = Date.now();
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        if (touchStartDist !== null || isPinchingRef.current) {
+          isPinchingRef.current = false;
+          touchStartDist = null;
+          lastPinchEndTimeRef.current = Date.now();
+        }
       }
     };
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: true });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -1240,13 +1275,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', handleResize);
+
+      canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('touchcancel', handleTouchEnd);
+
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [assetsLoaded, onZoomChange]);
+  }, [assetsLoaded]);
 
   // Character drawing helper
   const drawCharacter = (

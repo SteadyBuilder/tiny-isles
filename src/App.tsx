@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { GameCanvas } from './game/GameCanvas';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
@@ -72,14 +72,14 @@ export function App() {
     }
   };
 
-  const handleMobileAction = () => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
-  };
+  const handleMobileAction = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('player-action'));
+  }, []);
 
-  const handleZoomChange = (newZoom: number) => {
+  const handleZoomChange = useCallback((newZoom: number) => {
     setZoom(newZoom);
     storage.saveZoom(newZoom);
-  };
+  }, []);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#1e3d59]">

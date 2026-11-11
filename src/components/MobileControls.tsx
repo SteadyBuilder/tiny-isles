@@ -97,6 +97,16 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     onAction();
   }, [onAction]);
 
+  const stopActionHold = useCallback(() => {
+    actionPointerIdRef.current = null;
+    setIsActionActive(false);
+
+    if (actionIntervalRef.current) {
+      clearInterval(actionIntervalRef.current);
+      actionIntervalRef.current = null;
+    }
+  }, []);
+
   const handleActionPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (actionPointerIdRef.current !== null) return;
     actionPointerIdRef.current = e.pointerId;
@@ -121,31 +131,35 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     }, 220);
   };
 
-  const stopActionHold = (e?: React.PointerEvent<HTMLDivElement>) => {
-    if (e && actionPointerIdRef.current !== null && e.pointerId !== actionPointerIdRef.current) {
-      return;
-    }
-    if (e) {
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {
-        // ignore
-      }
-    }
-    actionPointerIdRef.current = null;
-    setIsActionActive(false);
+  // Global safety release listeners when action is active
+  useEffect(() => {
+    if (!isActionActive) return;
 
-    if (actionIntervalRef.current) {
-      clearInterval(actionIntervalRef.current);
-      actionIntervalRef.current = null;
-    }
-  };
+    const handleGlobalRelease = () => {
+      stopActionHold();
+    };
+
+    window.addEventListener('pointerup', handleGlobalRelease, { passive: true });
+    window.addEventListener('pointercancel', handleGlobalRelease, { passive: true });
+    window.addEventListener('touchend', handleGlobalRelease, { passive: true });
+    window.addEventListener('touchcancel', handleGlobalRelease, { passive: true });
+    window.addEventListener('blur', handleGlobalRelease);
+
+    return () => {
+      window.removeEventListener('pointerup', handleGlobalRelease);
+      window.removeEventListener('pointercancel', handleGlobalRelease);
+      window.removeEventListener('touchend', handleGlobalRelease);
+      window.removeEventListener('touchcancel', handleGlobalRelease);
+      window.removeEventListener('blur', handleGlobalRelease);
+    };
+  }, [isActionActive, stopActionHold]);
 
   useEffect(() => {
     return () => {
       joystickRef.current = { x: 0, y: 0 };
       if (actionIntervalRef.current) {
         clearInterval(actionIntervalRef.current);
+        actionIntervalRef.current = null;
       }
     };
   }, [joystickRef]);
