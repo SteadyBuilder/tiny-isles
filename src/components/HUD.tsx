@@ -383,6 +383,7 @@ export const HUD: React.FC<HUDProps> = ({
                   <li>• <strong className="text-white">이동:</strong> 왼쪽 하단의 <strong>가상 조이스틱</strong>을 드래그하여 자유롭게 이동</li>
                   <li>• <strong className="text-white">채집/행동:</strong> 오른쪽 하단 <strong>⚔️ 버튼</strong>을 탭하거나 화면의 나무/바위를 직접 터치</li>
                   <li>• <strong className="text-white">섬 개척:</strong> 새 섬 표지판에 다가가면 나타나는 <strong>🏝️ [개척] 버튼</strong> 터치</li>
+                  <li>• <strong className="text-white">시야/줌:</strong> 우측 <strong>+/- 버튼</strong> 또는 화면을 <strong>두 손가락으로 핀치</strong>하여 줌인/줌아웃</li>
                   <li>• <strong className="text-white">전체 지도:</strong> 상단 <strong>🗺️ 버튼</strong>을 터치해 21개 섬 위치와 해금 현황 확인</li>
                 </ul>
               </div>
@@ -394,6 +395,7 @@ export const HUD: React.FC<HUDProps> = ({
                   <li>• 이동: <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">W</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">A</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">S</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">D</kbd> 또는 마우스 클릭</li>
                   <li>• 채집: <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">Space</kbd> 또는 마우스 클릭</li>
                   <li>• 섬 개척: 표지판 근처에서 <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">E</kbd> 키 누르기</li>
+                  <li>• 시야/줌: <strong className="text-white">마우스 휠 스크롤</strong>, 우측 <strong>+/- 버튼</strong>, 또는 <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">+</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">-</kbd> (초기화: <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">0</kbd>)</li>
                 </ul>
               </div>
 

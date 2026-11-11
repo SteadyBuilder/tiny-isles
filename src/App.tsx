@@ -3,6 +3,7 @@ import { GameCanvas } from './game/GameCanvas';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
+import { ZoomControls } from './components/ZoomControls';
 import { Inventory, Island, PlayerColor } from './types/game';
 import { storage } from './lib/storage';
 import { INITIAL_ISLANDS } from './game/constants';
@@ -19,6 +20,9 @@ export function App() {
     unlocked: unlockedIslandIds.length,
     total: INITIAL_ISLANDS.length,
   });
+
+  // Camera Zoom state (0.5x to 2.0x, with localStorage persistence)
+  const [zoom, setZoom] = useState<number>(() => storage.loadZoom());
 
   // Mobile state
   const [nearIsland, setNearIsland] = useState<Island | null>(null);
@@ -73,6 +77,32 @@ export function App() {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
   };
 
+  const handleZoomIn = () => {
+    setZoom((prev) => {
+      const next = Math.min(2.0, Number((prev + 0.15).toFixed(2)));
+      storage.saveZoom(next);
+      return next;
+    });
+  };
+
+  const handleZoomOut = () => {
+    setZoom((prev) => {
+      const next = Math.max(0.5, Number((prev - 0.15).toFixed(2)));
+      storage.saveZoom(next);
+      return next;
+    });
+  };
+
+  const handleResetZoom = () => {
+    setZoom(1.0);
+    storage.saveZoom(1.0);
+  };
+
+  const handleZoomChange = (newZoom: number) => {
+    setZoom(newZoom);
+    storage.saveZoom(newZoom);
+  };
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#1e3d59]">
       <HUD
@@ -101,6 +131,15 @@ export function App() {
         onNearIslandChange={setNearIsland}
         onPlayerPositionChange={setPlayerGridPos}
         onOpenMinimap={() => setShowMinimapModal(true)}
+        zoom={zoom}
+        onZoomChange={handleZoomChange}
+      />
+
+      <ZoomControls
+        zoom={zoom}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetZoom={handleResetZoom}
       />
 
       <MobileControls

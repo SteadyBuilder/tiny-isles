@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   PROFILE: 'tiny_isles_profile',
   INVENTORY: 'tiny_isles_inventory',
   UNLOCKED_ISLANDS: 'tiny_isles_unlocked_islands',
+  ZOOM: 'tiny_isles_zoom',
 } as const;
 
 export interface SavedProfile {
@@ -97,11 +98,35 @@ export const storage = {
     }
   },
 
+  loadZoom: (): number => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.ZOOM);
+      if (data) {
+        const parsed = parseFloat(data);
+        if (!isNaN(parsed) && parsed >= 0.5 && parsed <= 2.0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load zoom from localStorage:', e);
+    }
+    return 1.0;
+  },
+
+  saveZoom: (zoom: number): void => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.ZOOM, zoom.toFixed(2));
+    } catch (e) {
+      console.warn('Failed to save zoom to localStorage:', e);
+    }
+  },
+
   resetAll: (): void => {
     try {
       localStorage.removeItem(STORAGE_KEYS.PROFILE);
       localStorage.removeItem(STORAGE_KEYS.INVENTORY);
       localStorage.removeItem(STORAGE_KEYS.UNLOCKED_ISLANDS);
+      localStorage.removeItem(STORAGE_KEYS.ZOOM);
     } catch (e) {
       console.warn('Failed to reset storage:', e);
     }

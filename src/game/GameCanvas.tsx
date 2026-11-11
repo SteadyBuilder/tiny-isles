@@ -28,6 +28,8 @@ interface GameCanvasProps {
   onNearIslandChange?: (island: Island | null) => void;
   onPlayerPositionChange?: (pos: { gridX: number; gridY: number }) => void;
   onOpenMinimap?: () => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -42,10 +44,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onNearIslandChange,
   onPlayerPositionChange,
   onOpenMinimap,
+  zoom = 1.0,
+  onZoomChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastNearIslandRef = useRef<Island | null>(null);
   const lastGridPosRef = useRef<{ gridX: number; gridY: number }>({ gridX: 0, gridY: 0 });
+
+  // Camera Zoom State
+  const targetZoomRef = useRef<number>(zoom);
+  const zoomRef = useRef<number>(zoom);
+  const isPinchingRef = useRef<boolean>(false);
+  const lastPinchEndTimeRef = useRef<number>(0);
 
   // Loading state
   const [assetsLoaded, setAssetsLoaded] = useState(false);
@@ -128,6 +138,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       onUnlockedCountChange(unlockedIds.length, islandsRef.current.length);
     }
   }, [onUnlockedCountChange, onUnlockedIslandIdsChange]);
+
+  // Sync zoom prop with targetZoomRef
+  useEffect(() => {
+    if (typeof zoom === 'number' && !isNaN(zoom)) {
+      targetZoomRef.current = Math.min(2.0, Math.max(0.5, Number(zoom.toFixed(2))));
+    }
+  }, [zoom]);
 
   // Update local player info when props change & sync via presence
   useEffect(() => {
@@ -656,10 +673,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Keyboard Event Listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       keysRef.current[e.key.toLowerCase()] = true;
       if (e.key === ' ' || e.key.toLowerCase() === 'e') {
         e.preventDefault();
         tryInteract();
+      } else if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
+        e.preventDefault();
+        const next = Math.min(2.0, Number((targetZoomRef.current + 0.15).toFixed(2)));
+        targetZoomRef.current = next;
+        onZoomChange?.(next);
+      } else if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
+        e.preventDefault();
+        const next = Math.max(0.5, Number((targetZoomRef.current - 0.15).toFixed(2)));
+        targetZoomRef.current = next;
+        onZoomChange?.(next);
+      } else if (e.key === '0' || e.code === 'Numpad0') {
+        e.preventDefault();
+        targetZoomRef.current = 1.0;
+        onZoomChange?.(1.0);
       }
     };
 
@@ -693,6 +725,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
     handleResize();
     window.addEventListener('resize', handleResize);
+
+    // Wheel Zoom handler (smooth mouse wheel zoom)
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = 0.12;
+      const next = e.deltaY < 0 ? targetZoomRef.current + step : targetZoomRef.current - step;
+      const clamped = Math.min(2.0, Math.max(0.5, Number(next.toFixed(2))));
+      targetZoomRef.current = clamped;
+      onZoomChange?.(clamped);
+    };
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    // Touch Pinch-to-Zoom handlers
+    let touchStartDist: number | null = null;
+    let touchStartZoom = 1.0;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        isPinchingRef.current = true;
+        mouseTargetRef.current.active = false;
+        touchStartDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        touchStartZoom = targetZoomRef.current;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchStartDist !== null && touchStartDist > 0) {
+        e.preventDefault();
+        isPinchingRef.current = true;
+        mouseTargetRef.current.active = false;
+        const currentDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = currentDist / touchStartDist;
+        const next = Math.min(2.0, Math.max(0.5, Number((touchStartZoom * factor).toFixed(2))));
+        targetZoomRef.current = next;
+        onZoomChange?.(next);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (touchStartDist !== null) {
+        isPinchingRef.current = false;
+        touchStartDist = null;
+        lastPinchEndTimeRef.current = Date.now();
+      }
+    };
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: true });
+    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     const render = () => {
       const assets = assetsRef.current;
@@ -797,17 +885,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       cameraRef.current.x += (player.x - cameraRef.current.x) * 0.1;
       cameraRef.current.y += (player.y - cameraRef.current.y) * 0.1;
 
+      // 2-1. Smooth Zoom lerp
+      zoomRef.current += (targetZoomRef.current - zoomRef.current) * 0.18;
+
       const camX = Math.round(cameraRef.current.x);
       const camY = Math.round(cameraRef.current.y);
-      const viewLeft = camX - canvas.width / 2;
-      const viewTop = camY - canvas.height / 2;
 
       // Clear & Draw Deep Ocean Background
       ctx.fillStyle = '#1e3d59';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.save();
-      ctx.translate(-viewLeft, -viewTop);
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.scale(zoomRef.current, zoomRef.current);
+      ctx.translate(-camX, -camY);
 
       // 3. Draw Water Grid Foam effect
       const now = Date.now();
@@ -1144,8 +1235,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', handleResize);
+      canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [assetsLoaded]);
+  }, [assetsLoaded, onZoomChange]);
 
   // Character drawing helper
   const drawCharacter = (
@@ -1251,9 +1347,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (screenX >= canvas.width - 110 && screenY >= canvas.height - 110) return;
     }
 
-    // Fixed world coordinate at time of click
-    const worldClickX = screenX + cameraRef.current.x - canvas.width / 2;
-    const worldClickY = screenY + cameraRef.current.y - canvas.height / 2;
+    if (isPinchingRef.current || Date.now() - lastPinchEndTimeRef.current < 250) {
+      return;
+    }
+
+    // World coordinate at time of click (adjusted for zoom scale & camera position)
+    const currentZoom = zoomRef.current;
+    const worldClickX = cameraRef.current.x + (screenX - canvas.width / 2) / currentZoom;
+    const worldClickY = cameraRef.current.y + (screenY - canvas.height / 2) / currentZoom;
 
     const player = localPlayerRef.current;
     const distToPlayer = Math.hypot(worldClickX - player.x, worldClickY - player.y);
