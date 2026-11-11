@@ -1,0 +1,37 @@
+[gd_scene load_steps=5 format=3 uid="uid://e4x7b2k9p0m1w"]
+
+[ext_resource type="Script" path="res://scenes/world/resource_node.gd" id="1_res"]
+[ext_resource type="Texture2D" uid="uid://dm0klnvg865t1" path="res://assets/tiny_swords/Terrain/Resources/Wood/Trees/Tree1.png" id="2_tree_tex"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_trunk"]
+radius = 16.0
+height = 36.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_gather"]
+radius = 48.0
+
+[node name="ResourceTree" type="StaticBody2D"]
+y_sort_enabled = true
+collision_layer = 1
+collision_mask = 6
+script = ExtResource("1_res")
+resource_type = "wood"
+max_harvests = 6
+yield_per_hit = 3
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_tree_tex")
+hframes = 8
+offset = Vector2(0, -80)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -6)
+shape = SubResource("CapsuleShape2D_trunk")
+
+[node name="GatherArea" type="Area2D" parent="."]
+collision_layer = 1
+collision_mask = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="GatherArea"]
+position = Vector2(0, -6)
+shape = SubResource("CircleShape2D_gather")

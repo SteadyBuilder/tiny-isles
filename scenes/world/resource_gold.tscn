@@ -1,0 +1,35 @@
+[gd_scene load_steps=5 format=3 uid="uid://f5y8c3l0q1n2x"]
+
+[ext_resource type="Script" path="res://scenes/world/resource_node.gd" id="1_res"]
+[ext_resource type="Texture2D" uid="uid://dn1lmovh976u2" path="res://assets/tiny_swords/Terrain/Resources/Gold/Gold Stones/Gold Stone 1.png" id="2_gold_tex"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_stone"]
+radius = 24.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_gather"]
+radius = 42.0
+
+[node name="ResourceGold" type="StaticBody2D"]
+y_sort_enabled = true
+collision_layer = 1
+collision_mask = 6
+script = ExtResource("1_res")
+resource_type = "gold"
+max_harvests = 4
+yield_per_hit = 2
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_gold_tex")
+offset = Vector2(0, -20)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -6)
+shape = SubResource("CircleShape2D_stone")
+
+[node name="GatherArea" type="Area2D" parent="."]
+collision_layer = 1
+collision_mask = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="GatherArea"]
+position = Vector2(0, -6)
+shape = SubResource("CircleShape2D_gather")

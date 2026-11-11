@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3 uid="uid://dm0klnvg865tr"]
+[gd_scene load_steps=6 format=3 uid="uid://dm0klnvg865tr"]
 
 [ext_resource type="Script" path="res://scenes/buildings/core_crystal.gd" id="1_core"]
+[ext_resource type="Texture2D" uid="uid://d3m0klnvg865t" path="res://assets/tiny_swords/Buildings/Blue Buildings/Castle.png" id="2_castle"]
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_col"]
-radius = 24.0
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_castle"]
+size = Vector2(240, 70)
 
 [sub_resource type="Gradient" id="Gradient_crystal"]
 colors = PackedColorArray(0.3, 0.8, 1, 1, 0, 0.4, 0.9, 0)
@@ -16,27 +17,31 @@ fill = 1
 fill_from = Vector2(0.5, 0.5)
 fill_to = Vector2(0.95, 0.95)
 
-[node name="CoreCrystal" type="StaticBody2D"]
+[node name="CoreCastle" type="StaticBody2D"]
+y_sort_enabled = true
 collision_layer = 1
 collision_mask = 6
 script = ExtResource("1_core")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("CircleShape2D_col")
-
 [node name="Sprite2D" type="Sprite2D" parent="."]
-offset = Vector2(0, -8)
+texture = ExtResource("2_castle")
+offset = Vector2(0, -90)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 0)
+shape = SubResource("RectangleShape2D_castle")
 
 [node name="PointLight2D" type="PointLight2D" parent="."]
+position = Vector2(0, -90)
 color = Color(0.25, 0.75, 1, 1)
-energy = 1.8
+energy = 2.0
 texture = SubResource("GradientTexture2D_crystal")
-texture_scale = 3.0
+texture_scale = 4.0
 
 [node name="HealthBar" type="ProgressBar" parent="."]
-offset_left = -30.0
-offset_top = -45.0
-offset_right = 30.0
-offset_bottom = -37.0
+offset_left = -60.0
+offset_top = -185.0
+offset_right = 60.0
+offset_bottom = -173.0
 value = 100.0
 show_percentage = false

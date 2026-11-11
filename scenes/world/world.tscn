@@ -1,12 +1,16 @@
-[gd_scene load_steps=8 format=3 uid="uid://b0yqw3v8jkl1a"]
+[gd_scene load_steps=12 format=3 uid="uid://b0yqw3v8jkl1a"]
 
 [ext_resource type="Script" path="res://scenes/world/world.gd" id="1_world"]
-[ext_resource type="PackedScene" uid="uid://dm0klnvg865tr" path="res://scenes/buildings/core_crystal.tscn" id="2_core"]
-[ext_resource type="PackedScene" uid="uid://b8x7yk0p6jqr" path="res://scenes/player/player.tscn" id="3_player"]
-[ext_resource type="PackedScene" uid="uid://c6n8y2k1q2w3e" path="res://scenes/buildings/tower.tscn" id="4_tower"]
-[ext_resource type="Script" path="res://scripts/wave_spawner.gd" id="5_spawner"]
-[ext_resource type="PackedScene" uid="uid://cx6n3v4m7p8q1" path="res://scenes/enemies/goblin_torch.tscn" id="6_goblin"]
-[ext_resource type="PackedScene" uid="uid://c7k5h4p9w0q1x" path="res://scenes/ui/hud.tscn" id="7_hud"]
+[ext_resource type="Texture2D" uid="uid://c5t6y7u8i9o0p" path="res://assets/tiny_swords/Terrain/Tileset/Tilemap_color1.png" id="2_tileset"]
+[ext_resource type="PackedScene" uid="uid://dm0klnvg865tr" path="res://scenes/buildings/core_crystal.tscn" id="3_core"]
+[ext_resource type="PackedScene" uid="uid://b8x7yk0p6jqr" path="res://scenes/player/player.tscn" id="4_player"]
+[ext_resource type="PackedScene" uid="uid://c6n8y2k1q2w3e" path="res://scenes/buildings/tower.tscn" id="5_tower"]
+[ext_resource type="PackedScene" uid="uid://e4x7b2k9p0m1w" path="res://scenes/world/resource_tree.tscn" id="6_tree"]
+[ext_resource type="PackedScene" uid="uid://f5y8c3l0q1n2x" path="res://scenes/world/resource_gold.tscn" id="7_gold"]
+[ext_resource type="PackedScene" uid="uid://b5t2k9v0x8m1w" path="res://scenes/buildings/wall.tscn" id="8_wall"]
+[ext_resource type="Script" path="res://scripts/wave_spawner.gd" id="9_spawner"]
+[ext_resource type="PackedScene" uid="uid://cx6n3v4m7p8q1" path="res://scenes/enemies/goblin_torch.tscn" id="10_goblin"]
+[ext_resource type="PackedScene" uid="uid://c7k5h4p9w0q1x" path="res://scenes/ui/hud.tscn" id="11_hud"]
 
 [sub_resource type="Environment" id="Environment_world"]
 background_mode = 3
@@ -31,20 +35,54 @@ environment = SubResource("Environment_world")
 color = Color(1, 0.98, 0.92, 1)
 energy = 0.95
 
+[node name="Ground" type="Sprite2D" parent="."]
+z_index = -10
+texture_repeat = 2
+texture = ExtResource("2_tileset")
+region_enabled = true
+region_rect = Rect2(0, 0, 2500, 2500)
+
 [node name="Entities" type="Node2D" parent="." groups=["entities"]]
 y_sort_enabled = true
 
-[node name="CoreCrystal" parent="Entities" instance=ExtResource("2_core")]
+[node name="CoreCastle" parent="Entities" instance=ExtResource("3_core")]
 position = Vector2(0, 0)
 
-[node name="DefenseTower" parent="Entities" instance=ExtResource("4_tower")]
-position = Vector2(-90, -60)
+[node name="LeftTower" parent="Entities" instance=ExtResource("5_tower")]
+position = Vector2(-160, -40)
 
-[node name="Player" parent="Entities" instance=ExtResource("3_player")]
-position = Vector2(50, 40)
+[node name="RightTower" parent="Entities" instance=ExtResource("5_tower")]
+position = Vector2(160, -40)
+
+[node name="Wall1" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-60, 90)
+
+[node name="Wall2" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(60, 90)
+
+[node name="Tree1" parent="Entities" instance=ExtResource("6_tree")]
+position = Vector2(-280, 80)
+
+[node name="Tree2" parent="Entities" instance=ExtResource("6_tree")]
+position = Vector2(-220, 160)
+
+[node name="Tree3" parent="Entities" instance=ExtResource("6_tree")]
+position = Vector2(250, 100)
+
+[node name="Tree4" parent="Entities" instance=ExtResource("6_tree")]
+position = Vector2(200, 200)
+
+[node name="GoldMine1" parent="Entities" instance=ExtResource("7_gold")]
+position = Vector2(280, -120)
+
+[node name="GoldMine2" parent="Entities" instance=ExtResource("7_gold")]
+position = Vector2(-260, -140)
+
+[node name="Player" parent="Entities" instance=ExtResource("4_player")]
+position = Vector2(0, 100)
 
 [node name="WaveSpawner" type="Node2D" parent="."]
-script = ExtResource("5_spawner")
-goblin_scene = ExtResource("6_goblin")
+script = ExtResource("9_spawner")
+goblin_scene = ExtResource("10_goblin")
 
-[node name="HUD" parent="." instance=ExtResource("7_hud")]
+[node name="HUD" parent="." instance=ExtResource("11_hud")]

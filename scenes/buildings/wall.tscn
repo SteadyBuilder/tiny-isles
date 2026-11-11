@@ -1,16 +1,21 @@
-[gd_scene load_steps=3 format=3 uid="uid://b5t2k9v0x8m1w"]
+[gd_scene load_steps=4 format=3 uid="uid://b5t2k9v0x8m1w"]
 
 [ext_resource type="Script" path="res://scenes/buildings/wall.gd" id="1_wall"]
+[ext_resource type="Texture2D" uid="uid://c5v2k9v0x8m1w" path="res://assets/tiny_swords/Terrain/Decorations/Rocks/Rock1.png" id="2_rock_tex"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
-size = Vector2(32, 32)
+size = Vector2(48, 36)
 
-[node name="Wall" type="StaticBody2D"]
+[node name="DefenseWall" type="StaticBody2D"]
+y_sort_enabled = true
 collision_layer = 1
 collision_mask = 6
 script = ExtResource("1_wall")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("RectangleShape2D_wall")
-
 [node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_rock_tex")
+offset = Vector2(0, -12)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 0)
+shape = SubResource("RectangleShape2D_wall")

@@ -2,37 +2,46 @@ extends CharacterBody2D
 class_name Player
 
 ## Player Controller for Tiny Isles
-## Supports 8-direction movement, attack/gather actions, and sprite flipping.
+## Tiny Swords Blue Warrior animation, 8-direction movement, attack & gather actions.
 
 signal health_changed(current: float, max: float)
 signal player_died()
 
-@export var move_speed: float = 160.0
+@export var move_speed: float = 170.0
 @export var max_health: float = 100.0
 var current_health: float = 100.0
 
 @export var attack_damage: float = 25.0
-@export var attack_cooldown: float = 0.4
+@export var attack_duration: float = 0.35
 var attack_timer: float = 0.0
 
-var is_attacking: bool = false
-var is_gathering: bool = false
+enum State { IDLE, RUN, ATTACK }
+var current_state: State = State.IDLE
 
-@onready var animation_player: AnimationPlayer = $AnimationPlayer if has_node("AnimationPlayer") else null
-@onready var sprite: Sprite2D = $Sprite2D if has_node("Sprite2D") else null
-@onready var attack_area: Area2D = $AttackArea if has_node("AttackArea") else null
+# Animation frames & timers
+var anim_timer: float = 0.0
+var current_frame: int = 0
+var anim_fps: float = 10.0
+
+# Preloaded Tiny Swords Blue Warrior textures
+var tex_idle = preload("res://assets/tiny_swords/Units/Blue Units/Warrior/Warrior_Idle.png")
+var tex_run = preload("res://assets/tiny_swords/Units/Blue Units/Warrior/Warrior_Run.png")
+var tex_attack = preload("res://assets/tiny_swords/Units/Blue Units/Warrior/Warrior_Attack1.png")
+
+@onready var sprite: Sprite2D = $Sprite2D
+@onready var attack_area: Area2D = $AttackArea
 
 func _ready() -> void:
 	add_to_group("player")
 	current_health = max_health
 	emit_signal("health_changed", current_health, max_health)
+	set_state(State.IDLE)
 
 func _physics_process(delta: float) -> void:
 	if attack_timer > 0.0:
 		attack_timer -= delta
 		if attack_timer <= 0.0:
-			is_attacking = false
-			is_gathering = false
+			set_state(State.IDLE)
 
 	# Attack input
 	if Input.is_action_just_pressed("action_attack") and attack_timer <= 0.0:
@@ -45,44 +54,72 @@ func _physics_process(delta: float) -> void:
 	# Movement (8-direction)
 	var input_vector = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	
-	if is_attacking or is_gathering:
+	if current_state == State.ATTACK:
 		velocity = velocity.move_toward(Vector2.ZERO, move_speed * 4.0 * delta)
 	else:
 		if input_vector != Vector2.ZERO:
 			velocity = input_vector.normalized() * move_speed
 			update_facing(input_vector.x)
+			if current_state != State.RUN:
+				set_state(State.RUN)
 		else:
 			velocity = velocity.move_toward(Vector2.ZERO, move_speed * 6.0 * delta)
+			if current_state != State.IDLE:
+				set_state(State.IDLE)
 
 	move_and_slide()
-	update_animations(input_vector)
+	update_sprite_animation(delta)
+
+func set_state(new_state: State) -> void:
+	current_state = new_state
+	current_frame = 0
+	anim_timer = 0.0
+	
+	match current_state:
+		State.IDLE:
+			sprite.texture = tex_idle
+			sprite.hframes = 8
+			sprite.vframes = 1
+			anim_fps = 8.0
+		State.RUN:
+			sprite.texture = tex_run
+			sprite.hframes = 6
+			sprite.vframes = 1
+			anim_fps = 10.0
+		State.ATTACK:
+			sprite.texture = tex_attack
+			sprite.hframes = 4
+			sprite.vframes = 1
+			anim_fps = 11.0
+
+func update_sprite_animation(delta: float) -> void:
+	if not sprite:
+		return
+		
+	anim_timer += delta
+	var frame_duration = 1.0 / anim_fps
+	
+	if anim_timer >= frame_duration:
+		anim_timer -= frame_duration
+		current_frame += 1
+		
+		if current_frame >= sprite.hframes:
+			if current_state == State.ATTACK:
+				current_frame = sprite.hframes - 1
+			else:
+				current_frame = 0
+				
+		sprite.frame = current_frame
 
 func update_facing(dir_x: float) -> void:
 	if abs(dir_x) > 0.05:
-		if sprite:
-			sprite.flip_h = (dir_x < 0)
+		sprite.flip_h = (dir_x < 0)
 		if attack_area:
 			attack_area.scale.x = -1.0 if dir_x < 0 else 1.0
 
-func update_animations(input_vec: Vector2) -> void:
-	if not animation_player:
-		return
-	if is_attacking:
-		if animation_player.has_animation("attack"):
-			animation_player.play("attack")
-	elif is_gathering:
-		if animation_player.has_animation("gather"):
-			animation_player.play("gather")
-	elif input_vec != Vector2.ZERO:
-		if animation_player.has_animation("run"):
-			animation_player.play("run")
-	else:
-		if animation_player.has_animation("idle"):
-			animation_player.play("idle")
-
 func perform_attack() -> void:
-	is_attacking = true
-	attack_timer = attack_cooldown
+	set_state(State.ATTACK)
+	attack_timer = attack_duration
 	
 	if attack_area:
 		var bodies = attack_area.get_overlapping_bodies()
@@ -91,10 +128,9 @@ func perform_attack() -> void:
 				body.take_damage(attack_damage)
 
 func perform_gather() -> void:
-	is_gathering = true
-	attack_timer = 0.5
+	set_state(State.ATTACK)
+	attack_timer = attack_duration
 	
-	# Check for resource nodes (Trees, Rocks, Gold mines)
 	if attack_area:
 		var bodies = attack_area.get_overlapping_bodies()
 		for body in bodies:
@@ -106,10 +142,9 @@ func take_damage(amount: float) -> void:
 	emit_signal("health_changed", current_health, max_health)
 	
 	# Damage flash effect
-	if sprite:
-		var tween = create_tween()
-		tween.tween_property(sprite, "modulate", Color(1, 0.3, 0.3), 0.1)
-		tween.tween_property(sprite, "modulate", Color.WHITE, 0.15)
+	var tween = create_tween()
+	tween.tween_property(sprite, "modulate", Color(1.5, 0.3, 0.3), 0.1)
+	tween.tween_property(sprite, "modulate", Color.WHITE, 0.15)
 		
 	if current_health <= 0.0:
 		die()
