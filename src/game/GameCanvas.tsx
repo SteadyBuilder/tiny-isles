@@ -838,9 +838,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           player.action = 'run';
         }
 
-        // Footstep sound
+        // Footstep sound (relaxed '뚜벅뚜벅' walking pace)
         const now = Date.now();
-        if (now - lastStepSoundTime > 280) {
+        if (now - lastStepSoundTime > 430) {
           sound.playStep();
           lastStepSoundTime = now;
         }

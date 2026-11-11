@@ -397,28 +397,28 @@ class SoundSystem {
     osc.stop(ctx.currentTime + 0.08);
   }
 
-  // 발자국 소리 (Crisp walking footstep - alternating left/right)
+  // 발자국 소리 (Leisurely walking footsteps - alternating left/right)
   public playStep() {
     if (this.settings.muted || !this.settings.sfxEnabled) return;
     this.stepToggle = !this.stepToggle;
     const bufferName = this.stepToggle ? 'step' : 'step2';
-    if (this.playBuffer(bufferName, 0.85, 0.08)) return;
+    if (this.playBuffer(bufferName, 0.4, 0.04)) return;
 
-    // Fallback Oscillator
+    // Fallback Oscillator (Mellow low-mid tap)
     const ctx = this.initCtx();
     if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    const baseFreq = this.stepToggle ? 140 : 120;
-    osc.frequency.setValueAtTime(baseFreq + Math.random() * 20, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.05);
-    gain.gain.setValueAtTime(0.12 * this.settings.sfxVolume, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+    const baseFreq = this.stepToggle ? 115 : 100;
+    osc.frequency.setValueAtTime(baseFreq + Math.random() * 10, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.06);
+    gain.gain.setValueAtTime(0.06 * this.settings.sfxVolume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
-    osc.stop(ctx.currentTime + 0.05);
+    osc.stop(ctx.currentTime + 0.06);
   }
 
   // 자원 파괴 소리 (Tree felled / Rock broken)
