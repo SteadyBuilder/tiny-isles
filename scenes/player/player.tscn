@@ -1,7 +1,7 @@
 [gd_scene load_steps=6 format=3 uid="uid://b8x7yk0p6jqr"]
 
 [ext_resource type="Script" path="res://scenes/player/player.gd" id="1_player"]
-[ext_resource type="Texture2D" uid="uid://bm7u8v6s0lq8x" path="res://assets/tiny_swords/Units/Blue Units/Warrior/Warrior_Idle.png" id="2_warrior"]
+[ext_resource type="Texture2D" path="res://assets/tiny_swords/Units/Blue Units/Pawn/Pawn_Idle Axe.png" id="2_pawn"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_body"]
 radius = 12.0
@@ -28,7 +28,7 @@ collision_mask = 5
 script = ExtResource("1_player")
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
-texture = ExtResource("2_warrior")
+texture = ExtResource("2_pawn")
 hframes = 8
 offset = Vector2(0, -28)
 

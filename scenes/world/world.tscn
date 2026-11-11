@@ -1,16 +1,16 @@
-[gd_scene load_steps=12 format=3 uid="uid://b0yqw3v8jkl1a"]
+[gd_scene format=3 uid="uid://b0yqw3v8jkl1a"]
 
-[ext_resource type="Script" path="res://scenes/world/world.gd" id="1_world"]
-[ext_resource type="Texture2D" uid="uid://cx6m2l0v8k9p3" path="res://assets/tiny_swords/Terrain/Tileset/Grass_Seamless.png" id="2_grass"]
+[ext_resource type="Script" uid="uid://5via6oumi8r0" path="res://scenes/world/world.gd" id="1_world"]
+[ext_resource type="Texture2D" uid="uid://d4deujsg6wtsi" path="res://assets/tiny_swords/Terrain/Tileset/Grass_Seamless.png" id="2_grass"]
 [ext_resource type="PackedScene" uid="uid://dm0klnvg865tr" path="res://scenes/buildings/core_crystal.tscn" id="3_core"]
 [ext_resource type="PackedScene" uid="uid://b8x7yk0p6jqr" path="res://scenes/player/player.tscn" id="4_player"]
 [ext_resource type="PackedScene" uid="uid://c6n8y2k1q2w3e" path="res://scenes/buildings/tower.tscn" id="5_tower"]
-[ext_resource type="PackedScene" uid="uid://e4x7b2k9p0m1w" path="res://scenes/world/resource_tree.tscn" id="6_tree"]
-[ext_resource type="PackedScene" uid="uid://f5y8c3l0q1n2x" path="res://scenes/world/resource_gold.tscn" id="7_gold"]
-[ext_resource type="PackedScene" uid="uid://b5t2k9v0x8m1w" path="res://scenes/buildings/wall.tscn" id="8_wall"]
-[ext_resource type="Script" path="res://scripts/wave_spawner.gd" id="9_spawner"]
+[ext_resource type="PackedScene" uid="uid://bakcp0n05sra5" path="res://scenes/world/resource_tree.tscn" id="6_tree"]
+[ext_resource type="PackedScene" uid="uid://cbldq1oq6tsb6" path="res://scenes/world/resource_gold.tscn" id="7_gold"]
+[ext_resource type="PackedScene" uid="uid://b5t2lav0x8m1w" path="res://scenes/buildings/wall.tscn" id="8_wall"]
+[ext_resource type="Script" uid="uid://bmisu0lqkh42b" path="res://scripts/wave_spawner.gd" id="9_spawner"]
 [ext_resource type="PackedScene" uid="uid://cx6n3v4m7p8q1" path="res://scenes/enemies/goblin_torch.tscn" id="10_goblin"]
-[ext_resource type="PackedScene" uid="uid://c7k5h4p9w0q1x" path="res://scenes/ui/hud.tscn" id="11_hud"]
+[ext_resource type="PackedScene" uid="uid://c7k5h4qaw0q1x" path="res://scenes/ui/hud.tscn" id="11_hud"]
 
 [sub_resource type="Environment" id="Environment_world"]
 background_mode = 3
@@ -18,125 +18,123 @@ glow_enabled = true
 glow_levels/1 = 0.4
 glow_levels/2 = 0.7
 glow_levels/3 = 1.0
-glow_intensity = 0.3
+glow_levels/4 = 0.5
 glow_strength = 0.85
-glow_bloom = 0.0
 glow_blend_mode = 2
-glow_hdr_threshold = 1.0
 
-[node name="World" type="Node2D"]
+[node name="World" type="Node2D" unique_id=1677222572]
 y_sort_enabled = true
 script = ExtResource("1_world")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=100884240]
 environment = SubResource("Environment_world")
 
-[node name="DirectionalLight2D" type="DirectionalLight2D" parent="."]
+[node name="DirectionalLight2D" type="DirectionalLight2D" parent="." unique_id=1063321203]
 color = Color(1, 0.98, 0.94, 1)
 energy = 0.75
 
-[node name="Ground" type="Sprite2D" parent="."]
+[node name="Ground" type="Sprite2D" parent="." unique_id=168471770]
 z_index = -10
 texture_repeat = 2
+position = Vector2(0, 0)
 texture = ExtResource("2_grass")
 region_enabled = true
-region_rect = Rect2(-1600, -1600, 3200, 3200)
+region_rect = Rect2(-3600, -3600, 7200, 7200)
 
-[node name="Entities" type="Node2D" parent="." groups=["entities"]]
+[node name="Entities" type="Node2D" parent="." unique_id=981904027 groups=["entities"]]
 y_sort_enabled = true
 
-[node name="CoreCastle" parent="Entities" instance=ExtResource("3_core")]
-position = Vector2(0, 0)
+[node name="CoreCastle" parent="Entities" unique_id=765497613 instance=ExtResource("3_core")]
 
-[node name="LeftTower" parent="Entities" instance=ExtResource("5_tower")]
+[node name="LeftTower" parent="Entities" unique_id=674271380 instance=ExtResource("5_tower")]
 position = Vector2(-150, -30)
 
-[node name="RightTower" parent="Entities" instance=ExtResource("5_tower")]
+[node name="RightTower" parent="Entities" unique_id=388789653 instance=ExtResource("5_tower")]
 position = Vector2(150, -30)
 
-[node name="Palisade_N1" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_N1" parent="Entities" unique_id=1187947007 instance=ExtResource("8_wall")]
 position = Vector2(-200, -220)
 
-[node name="Palisade_N2" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_N2" parent="Entities" unique_id=838020046 instance=ExtResource("8_wall")]
 position = Vector2(-140, -220)
 
-[node name="Palisade_N3" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_N3" parent="Entities" unique_id=934274519 instance=ExtResource("8_wall")]
 position = Vector2(-80, -220)
 
-[node name="Palisade_N4" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_N4" parent="Entities" unique_id=66981609 instance=ExtResource("8_wall")]
 position = Vector2(80, -220)
 
-[node name="Palisade_N5" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_N5" parent="Entities" unique_id=462402943 instance=ExtResource("8_wall")]
 position = Vector2(140, -220)
 
-[node name="Palisade_N6" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_N6" parent="Entities" unique_id=1848028750 instance=ExtResource("8_wall")]
 position = Vector2(200, -220)
 
-[node name="Palisade_S1" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_S1" parent="Entities" unique_id=68731273 instance=ExtResource("8_wall")]
 position = Vector2(-200, 220)
 
-[node name="Palisade_S2" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_S2" parent="Entities" unique_id=921949797 instance=ExtResource("8_wall")]
 position = Vector2(-140, 220)
 
-[node name="Palisade_S3" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_S3" parent="Entities" unique_id=931064273 instance=ExtResource("8_wall")]
 position = Vector2(-80, 220)
 
-[node name="Palisade_S4" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_S4" parent="Entities" unique_id=1706221941 instance=ExtResource("8_wall")]
 position = Vector2(80, 220)
 
-[node name="Palisade_S5" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_S5" parent="Entities" unique_id=492986481 instance=ExtResource("8_wall")]
 position = Vector2(140, 220)
 
-[node name="Palisade_S6" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_S6" parent="Entities" unique_id=1114019779 instance=ExtResource("8_wall")]
 position = Vector2(200, 220)
 
-[node name="Palisade_W1" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_W1" parent="Entities" unique_id=1186041811 instance=ExtResource("8_wall")]
 position = Vector2(-220, -160)
 
-[node name="Palisade_W2" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_W2" parent="Entities" unique_id=217739589 instance=ExtResource("8_wall")]
 position = Vector2(-220, -100)
 
-[node name="Palisade_W3" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_W3" parent="Entities" unique_id=1876347484 instance=ExtResource("8_wall")]
 position = Vector2(-220, 100)
 
-[node name="Palisade_W4" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_W4" parent="Entities" unique_id=1803015005 instance=ExtResource("8_wall")]
 position = Vector2(-220, 160)
 
-[node name="Palisade_E1" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_E1" parent="Entities" unique_id=535258059 instance=ExtResource("8_wall")]
 position = Vector2(220, -160)
 
-[node name="Palisade_E2" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_E2" parent="Entities" unique_id=1865251518 instance=ExtResource("8_wall")]
 position = Vector2(220, -100)
 
-[node name="Palisade_E3" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_E3" parent="Entities" unique_id=362756435 instance=ExtResource("8_wall")]
 position = Vector2(220, 100)
 
-[node name="Palisade_E4" parent="Entities" instance=ExtResource("8_wall")]
+[node name="Palisade_E4" parent="Entities" unique_id=1418736537 instance=ExtResource("8_wall")]
 position = Vector2(220, 160)
 
-[node name="Tree1" parent="Entities" instance=ExtResource("6_tree")]
+[node name="Tree1" parent="Entities" unique_id=1768672000 instance=ExtResource("6_tree")]
 position = Vector2(-320, 70)
 
-[node name="Tree2" parent="Entities" instance=ExtResource("6_tree")]
+[node name="Tree2" parent="Entities" unique_id=1956102189 instance=ExtResource("6_tree")]
 position = Vector2(-280, 180)
 
-[node name="Tree3" parent="Entities" instance=ExtResource("6_tree")]
+[node name="Tree3" parent="Entities" unique_id=2933422 instance=ExtResource("6_tree")]
 position = Vector2(320, 80)
 
-[node name="Tree4" parent="Entities" instance=ExtResource("6_tree")]
+[node name="Tree4" parent="Entities" unique_id=893672037 instance=ExtResource("6_tree")]
 position = Vector2(290, 210)
 
-[node name="GoldMine1" parent="Entities" instance=ExtResource("7_gold")]
+[node name="GoldMine1" parent="Entities" unique_id=2029700538 instance=ExtResource("7_gold")]
 position = Vector2(300, -140)
 
-[node name="GoldMine2" parent="Entities" instance=ExtResource("7_gold")]
+[node name="GoldMine2" parent="Entities" unique_id=1609706693 instance=ExtResource("7_gold")]
 position = Vector2(-300, -150)
 
-[node name="Player" parent="Entities" instance=ExtResource("4_player")]
+[node name="Player" parent="Entities" unique_id=1092518265 instance=ExtResource("4_player")]
 position = Vector2(0, 90)
 
-[node name="WaveSpawner" type="Node2D" parent="."]
+[node name="WaveSpawner" type="Node2D" parent="." unique_id=1897378083]
 script = ExtResource("9_spawner")
 goblin_scene = ExtResource("10_goblin")
 
-[node name="HUD" parent="." instance=ExtResource("11_hud")]
+[node name="HUD" parent="." unique_id=949507287 instance=ExtResource("11_hud")]
