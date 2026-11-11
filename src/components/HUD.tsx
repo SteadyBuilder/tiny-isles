@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Inventory, PlayerColor } from '../types/game';
 import { sound } from '../lib/sound';
-import { Volume2, VolumeX, Users, HelpCircle, Palette, Share2, Check } from 'lucide-react';
+import { Volume2, VolumeX, Users, HelpCircle, Palette, Share2, Check, RotateCcw } from 'lucide-react';
 
 interface HUDProps {
   inventory: Inventory;
@@ -10,6 +10,7 @@ interface HUDProps {
   setPlayerName: (name: string) => void;
   playerColor: PlayerColor;
   setPlayerColor: (color: PlayerColor) => void;
+  onResetGame?: () => void;
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -19,6 +20,7 @@ export const HUD: React.FC<HUDProps> = ({
   setPlayerName,
   playerColor,
   setPlayerColor,
+  onResetGame,
 }) => {
   const [isMuted, setIsMuted] = useState(sound.isMuted());
   const [showHelp, setShowHelp] = useState(false);
@@ -180,14 +182,33 @@ export const HUD: React.FC<HUDProps> = ({
                   오른쪽 상단 [친구 초대] 링크를 복사해 다른 브라우저 탭이나 스마트폰으로 접속하면 같은 섬에서 실시간으로 마주칩니다!
                 </span>
               </div>
+
+              <div className="flex items-start gap-3 bg-white/5 p-3 rounded-xl">
+                <span className="font-bold text-emerald-300 w-16 shrink-0">자동 저장</span>
+                <span className="text-xs text-slate-300">
+                  자원, 캐릭터 프로필, 해금한 섬 상태는 브라우저에 안전하게 자동 저장되어 언제든 이어서 플레이할 수 있습니다.
+                </span>
+              </div>
             </div>
 
-            <button
-              onClick={() => setShowHelp(false)}
-              className="mt-6 w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-extrabold rounded-xl shadow-lg transition"
-            >
-              확인하고 시작하기
-            </button>
+            <div className="mt-6 flex items-center gap-3">
+              {onResetGame && (
+                <button
+                  onClick={onResetGame}
+                  className="px-4 py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
+                  title="자원 및 해금 상태 리셋"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  초기화
+                </button>
+              )}
+              <button
+                onClick={() => setShowHelp(false)}
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-extrabold rounded-xl shadow-lg transition text-sm"
+              >
+                확인하고 시작하기
+              </button>
+            </div>
           </div>
         </div>
       )}

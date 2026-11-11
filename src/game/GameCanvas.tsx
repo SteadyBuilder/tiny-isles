@@ -13,6 +13,7 @@ import {
 import { Entity, FloatingText, Inventory, Island, Particle, Player, PlayerAction, PlayerColor } from '../types/game';
 import { sound } from '../lib/sound';
 import { supabase } from '../lib/supabase';
+import { storage } from '../lib/storage';
 
 interface GameCanvasProps {
   playerName: string;
@@ -51,11 +52,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Remote Players State
   const remotePlayersRef = useRef<Map<string, Player>>(new Map());
 
-  // Islands & Entities State
-  const islandsRef = useRef<Island[]>(INITIAL_ISLANDS);
-  const entitiesRef = useRef<Entity[]>([
-    ...generateIslandEntities(0, 0, 0),
-  ]);
+  // Islands & Entities State (로드 시 로컬 스토리지에서 해금 상태 복원)
+  const islandsRef = useRef<Island[]>(
+    (() => {
+      const savedUnlocked = storage.loadUnlockedIslands();
+      return INITIAL_ISLANDS.map((island) => ({
+        ...island,
+        unlocked: savedUnlocked.includes(island.id) || island.id === 0,
+      }));
+    })()
+  );
+  const entitiesRef = useRef<Entity[]>(
+    (() => {
+      const savedUnlocked = storage.loadUnlockedIslands();
+      const allEntities: Entity[] = [];
+      for (const isl of INITIAL_ISLANDS) {
+        if (savedUnlocked.includes(isl.id) || isl.id === 0) {
+          allEntities.push(...generateIslandEntities(isl.id, isl.gridX, isl.gridY));
+        }
+      }
+      return allEntities;
+    })()
+  );
 
   // Visual Effects
   const particlesRef = useRef<Particle[]>([]);
@@ -144,8 +162,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         } else if (data.type === 'island_unlocked') {
           const { islandId, unlockedBy } = data.payload;
           unlockIslandLocally(islandId, unlockedBy, false);
+        } else if (data.type === 'sync_world_request') {
+          const unlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
+          localBus.postMessage({
+            type: 'sync_world_response',
+            senderId: myId,
+            payload: { unlockedIds },
+          });
+        } else if (data.type === 'sync_world_response') {
+          const { unlockedIds } = data.payload || {};
+          if (Array.isArray(unlockedIds)) {
+            for (const id of unlockedIds) {
+              const isl = islandsRef.current.find((i) => i.id === id);
+              if (isl && !isl.unlocked) {
+                unlockIslandLocally(id, '동료 모험가', false);
+              }
+            }
+          }
         }
       };
+
+      // 접속 시 같은 브라우저 탭들에 월드 상태 동기화 요청
+      localBus.postMessage({
+        type: 'sync_world_request',
+        senderId: myId,
+      });
     }
 
     // 2. Supabase Realtime Channel (Cross-device global multiplayer)
@@ -253,6 +294,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const { islandId, unlockedBy } = payload;
         unlockIslandLocally(islandId, unlockedBy, false);
       })
+      .on('broadcast', { event: 'sync_world_request' }, () => {
+        const unlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
+        channel.send({
+          type: 'broadcast',
+          event: 'sync_world_response',
+          payload: { unlockedIds },
+        });
+      })
+      .on('broadcast', { event: 'sync_world_response' }, ({ payload }) => {
+        const { unlockedIds } = payload || {};
+        if (Array.isArray(unlockedIds)) {
+          for (const id of unlockedIds) {
+            const isl = islandsRef.current.find((i) => i.id === id);
+            if (isl && !isl.unlocked) {
+              unlockIslandLocally(id, '동료 모험가', false);
+            }
+          }
+        }
+      })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await channel.track({
@@ -261,6 +321,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             color: localPlayerRef.current.color,
           });
           sendMoveBroadcast();
+
+          // 신규 접속 시 월드 상태 동기화 요청
+          channel.send({
+            type: 'broadcast',
+            event: 'sync_world_request',
+            payload: { requesterId: myId },
+          });
         }
       });
 
@@ -374,6 +441,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (!target || target.unlocked) return;
 
     target.unlocked = true;
+
+    // Save unlocked islands state to localStorage
+    const currentUnlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
+    storage.saveUnlockedIslands(currentUnlockedIds);
 
     // Spawn entities for newly unlocked island
     const newEntities = generateIslandEntities(target.id, target.gridX, target.gridY);
