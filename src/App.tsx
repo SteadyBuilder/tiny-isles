@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { GameCanvas } from './game/GameCanvas';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
-import { Inventory, PlayerColor } from './types/game';
+import { MinimapModal } from './components/MinimapModal';
+import { Inventory, Island, PlayerColor } from './types/game';
 import { storage } from './lib/storage';
 import { INITIAL_ISLANDS } from './game/constants';
 
@@ -10,10 +11,22 @@ export function App() {
   const [profile, setProfile] = useState(() => storage.loadProfile());
   const [inventory, setInventory] = useState<Inventory>(() => storage.loadInventory());
   const [onlineCount, setOnlineCount] = useState<number>(1);
+  const [unlockedIslandIds, setUnlockedIslandIds] = useState<number[]>(() => {
+    const saved = storage.loadUnlockedIslands();
+    return saved.length > 0 ? saved : [0];
+  });
   const [islandStats, setIslandStats] = useState({
-    unlocked: storage.loadUnlockedIslands().length,
+    unlocked: unlockedIslandIds.length,
     total: INITIAL_ISLANDS.length,
   });
+
+  // Mobile state
+  const [nearIsland, setNearIsland] = useState<Island | null>(null);
+  const [showMinimapModal, setShowMinimapModal] = useState<boolean>(false);
+  const [playerGridPos, setPlayerGridPos] = useState<{ gridX: number; gridY: number }>({ gridX: 0, gridY: 0 });
+
+  // Virtual Joystick Vector (mutable ref for 60fps performance without re-render)
+  const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // 프로필(이름, 색상) 변경 시 영속화
   const handleUpdateName = (name: string) => {
@@ -45,6 +58,10 @@ export function App() {
     setIslandStats({ unlocked, total });
   };
 
+  const handleUnlockedIslandIdsChange = (ids: number[]) => {
+    setUnlockedIslandIds(ids);
+  };
+
   const handleResetGame = () => {
     if (window.confirm('정말 게임 진행상황(자원 및 해금된 섬)을 초기화하시겠습니까?')) {
       storage.resetAll();
@@ -68,6 +85,7 @@ export function App() {
         unlockedCount={islandStats.unlocked}
         totalIslands={islandStats.total}
         onResetGame={handleResetGame}
+        onOpenMinimap={() => setShowMinimapModal(true)}
       />
 
       <GameCanvas
@@ -78,9 +96,27 @@ export function App() {
         onlineCount={onlineCount}
         setOnlineCount={setOnlineCount}
         onUnlockedCountChange={handleUnlockedCountChange}
+        onUnlockedIslandIdsChange={handleUnlockedIslandIdsChange}
+        joystickRef={joystickRef}
+        onNearIslandChange={setNearIsland}
+        onPlayerPositionChange={setPlayerGridPos}
       />
 
-      <MobileControls onAction={handleMobileAction} />
+      <MobileControls
+        onAction={handleMobileAction}
+        joystickRef={joystickRef}
+        nearIsland={nearIsland}
+      />
+
+      <MinimapModal
+        isOpen={showMinimapModal}
+        onClose={() => setShowMinimapModal(false)}
+        unlockedIslandIds={unlockedIslandIds}
+        inventory={inventory}
+        playerGridPos={playerGridPos}
+        playerColor={profile.color}
+        playerName={profile.name}
+      />
     </div>
   );
 }

@@ -23,6 +23,10 @@ interface GameCanvasProps {
   onlineCount: number;
   setOnlineCount: (count: number) => void;
   onUnlockedCountChange?: (count: number, total: number) => void;
+  onUnlockedIslandIdsChange?: (ids: number[]) => void;
+  joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
+  onNearIslandChange?: (island: Island | null) => void;
+  onPlayerPositionChange?: (pos: { gridX: number; gridY: number }) => void;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -32,8 +36,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onUpdateInventory,
   setOnlineCount,
   onUnlockedCountChange,
+  onUnlockedIslandIdsChange,
+  joystickRef,
+  onNearIslandChange,
+  onPlayerPositionChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastNearIslandRef = useRef<Island | null>(null);
+  const lastGridPosRef = useRef<{ gridX: number; gridY: number }>({ gridX: 0, gridY: 0 });
 
   // Loading state
   const [assetsLoaded, setAssetsLoaded] = useState(false);
@@ -108,11 +118,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, []);
 
   useEffect(() => {
-    if (onUnlockedCountChange) {
-      const unlockedCount = islandsRef.current.filter((isl) => isl.unlocked).length;
-      onUnlockedCountChange(unlockedCount, islandsRef.current.length);
+    const unlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
+    if (onUnlockedIslandIdsChange) {
+      onUnlockedIslandIdsChange(unlockedIds);
     }
-  }, [onUnlockedCountChange]);
+    if (onUnlockedCountChange) {
+      onUnlockedCountChange(unlockedIds.length, islandsRef.current.length);
+    }
+  }, [onUnlockedCountChange, onUnlockedIslandIdsChange]);
 
   // Update local player info when props change & sync via presence
   useEffect(() => {
@@ -457,6 +470,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (onUnlockedCountChange) {
       onUnlockedCountChange(currentUnlockedIds.length, islandsRef.current.length);
     }
+    if (onUnlockedIslandIdsChange) {
+      onUnlockedIslandIdsChange(currentUnlockedIds);
+    }
 
     // Spawn entities for newly unlocked island
     const newEntities = generateIslandEntities(target.id, target.gridX, target.gridY);
@@ -693,6 +709,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (keys['a'] || keys['arrowleft']) dx -= 1;
       if (keys['d'] || keys['arrowright']) dx += 1;
 
+      // Mobile Virtual Joystick movement
+      if (joystickRef?.current) {
+        const jx = joystickRef.current.x;
+        const jy = joystickRef.current.y;
+        if (Math.abs(jx) > 0.05 || Math.abs(jy) > 0.05) {
+          dx += jx;
+          dy += jy;
+          mouseTargetRef.current.active = false;
+        }
+      }
+
       // Cancel mouse target if keyboard is pressed
       if (dx !== 0 || dy !== 0) {
         mouseTargetRef.current.active = false;
@@ -711,8 +738,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       if (dx !== 0 || dy !== 0) {
         const len = Math.hypot(dx, dy);
-        player.x += (dx / len) * speed;
-        player.y += (dy / len) * speed;
+        const factor = Math.min(1, len);
+        player.x += (dx / len) * speed * factor;
+        player.y += (dy / len) * speed * factor;
 
         if (dx < 0) player.direction = 'left';
         else if (dx > 0) player.direction = 'right';
@@ -731,6 +759,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (player.action === 'run') {
           player.action = 'idle';
         }
+      }
+
+      // Track nearest locked island for mobile action button & contextual prompt
+      let nearLocked: Island | null = null;
+      for (const isl of islandsRef.current) {
+        if (!isl.unlocked) {
+          const origin = getIslandOrigin(isl.gridX, isl.gridY);
+          const signX = origin.x + 256;
+          const signY = origin.y + 256;
+          const dist = Math.hypot(player.x - signX, player.y - signY);
+          if (dist < 190) {
+            nearLocked = isl;
+            break;
+          }
+        }
+      }
+      if (nearLocked?.id !== lastNearIslandRef.current?.id) {
+        lastNearIslandRef.current = nearLocked;
+        onNearIslandChange?.(nearLocked);
+      }
+
+      // Track current player island grid coordinate for minimap
+      const currentGridX = Math.round(player.x / (ISLAND_PX + ISLAND_GAP));
+      const currentGridY = Math.round(player.y / (ISLAND_PX + ISLAND_GAP));
+      if (
+        currentGridX !== lastGridPosRef.current.gridX ||
+        currentGridY !== lastGridPosRef.current.gridY
+      ) {
+        lastGridPosRef.current = { gridX: currentGridX, gridY: currentGridY };
+        onPlayerPositionChange?.({ gridX: currentGridX, gridY: currentGridY });
       }
 
       // 2. Camera follow (smooth lerp)
@@ -857,9 +915,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.fillText(costStr, signX, signY + 8);
 
           ctx.font = 'bold 12px Pretendard, sans-serif';
+          const isMobile = canvas.width < 768;
           if (canAfford) {
             ctx.fillStyle = '#4ade80';
-            ctx.fillText('✨ 해금 가능! [E 키 / 클릭]', signX, signY + 32);
+            ctx.fillText(isMobile ? '✨ 해금 가능! [개척 버튼 터치]' : '✨ 해금 가능! [E 키 / 클릭]', signX, signY + 32);
           } else {
             ctx.fillStyle = '#f87171';
             ctx.fillText('자원 부족 [가까이 가서 확인]', signX, signY + 32);
@@ -959,117 +1018,119 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       ctx.restore();
 
-      // 10. Draw Minimap (Screen-Space in bottom-right corner)
-      const minimapSize = 160;
-      const margin = 16;
-      const mmX = canvas.width - minimapSize - margin;
-      const mmY = canvas.height - minimapSize - margin;
+      // 10. Draw Minimap (Screen-Space in bottom-right corner - desktop only to avoid overlapping mobile controls)
+      if (canvas.width >= 768) {
+        const minimapSize = 160;
+        const margin = 16;
+        const mmX = canvas.width - minimapSize - margin;
+        const mmY = canvas.height - minimapSize - margin;
 
-      // Minimap background box
-      ctx.save();
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(mmX, mmY, minimapSize, minimapSize, 12);
-      ctx.fill();
-      ctx.stroke();
-
-      // Minimap Header / Title
-      const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = 'bold 11px Pretendard, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`🗺️ 미니맵 (${unlockedTotal}/${islandsRef.current.length})`, mmX + 10, mmY + 18);
-
-      // Grid center inside minimap (5x5 grid: -2 to 2)
-      const mmCenterX = mmX + minimapSize / 2;
-      const mmCenterY = mmY + minimapSize / 2 + 8;
-      const mmStep = 25; // 25px per grid unit
-      const islandBoxSize = 18;
-
-      // Draw connecting bridges between adjacent unlocked islands
-      ctx.strokeStyle = '#8d6e63';
-      ctx.lineWidth = 3;
-      for (const isl of islandsRef.current) {
-        if (!isl.unlocked) continue;
-        const ix = mmCenterX + isl.gridX * mmStep;
-        const iy = mmCenterY + isl.gridY * mmStep;
-
-        const right = islandsRef.current.find(
-          (o) => o.unlocked && o.gridX === isl.gridX + 1 && o.gridY === isl.gridY
-        );
-        if (right) {
-          ctx.beginPath();
-          ctx.moveTo(ix, iy);
-          ctx.lineTo(ix + mmStep, iy);
-          ctx.stroke();
-        }
-
-        const bottom = islandsRef.current.find(
-          (o) => o.unlocked && o.gridX === isl.gridX && o.gridY === isl.gridY + 1
-        );
-        if (bottom) {
-          ctx.beginPath();
-          ctx.moveTo(ix, iy);
-          ctx.lineTo(ix, iy + mmStep);
-          ctx.stroke();
-        }
-      }
-
-      // Draw island nodes
-      for (const isl of islandsRef.current) {
-        const ix = mmCenterX + isl.gridX * mmStep;
-        const iy = mmCenterY + isl.gridY * mmStep;
-
-        if (isl.unlocked) {
-          ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
-          ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        } else {
-          const canAfford =
-            inventory.wood >= isl.costWood &&
-            inventory.stone >= isl.costStone &&
-            inventory.gold >= isl.costGold;
-
-          ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.35)' : 'rgba(51, 65, 85, 0.7)';
-          ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
-          ctx.fill();
-          ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.6)';
-          ctx.lineWidth = canAfford ? 1.5 : 1;
-          ctx.stroke();
-        }
-      }
-
-      // Draw remote players on minimap
-      remotePlayersRef.current.forEach((rp) => {
-        const rNormX = mmCenterX + ((rp.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-        const rNormY = mmCenterY + ((rp.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-        ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
+        // Minimap background box
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(rNormX, rNormY, 3, 0, Math.PI * 2);
+        ctx.roundRect(mmX, mmY, minimapSize, minimapSize, 12);
         ctx.fill();
-      });
+        ctx.stroke();
 
-      // Draw local player marker on minimap (pulsing ring)
-      const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-      const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-      const pulseSize = 4 + Math.sin(now / 180) * 1.5;
+        // Minimap Header / Title
+        const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = 'bold 11px Pretendard, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`🗺️ 미니맵 (${unlockedTotal}/${islandsRef.current.length})`, mmX + 10, mmY + 18);
 
-      ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';
-      ctx.beginPath();
-      ctx.arc(pNormX, pNormY, pulseSize, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+        // Grid center inside minimap (5x5 grid: -2 to 2)
+        const mmCenterX = mmX + minimapSize / 2;
+        const mmCenterY = mmY + minimapSize / 2 + 8;
+        const mmStep = 25; // 25px per grid unit
+        const islandBoxSize = 18;
 
-      ctx.restore();
+        // Draw connecting bridges between adjacent unlocked islands
+        ctx.strokeStyle = '#8d6e63';
+        ctx.lineWidth = 3;
+        for (const isl of islandsRef.current) {
+          if (!isl.unlocked) continue;
+          const ix = mmCenterX + isl.gridX * mmStep;
+          const iy = mmCenterY + isl.gridY * mmStep;
+
+          const right = islandsRef.current.find(
+            (o) => o.unlocked && o.gridX === isl.gridX + 1 && o.gridY === isl.gridY
+          );
+          if (right) {
+            ctx.beginPath();
+            ctx.moveTo(ix, iy);
+            ctx.lineTo(ix + mmStep, iy);
+            ctx.stroke();
+          }
+
+          const bottom = islandsRef.current.find(
+            (o) => o.unlocked && o.gridX === isl.gridX && o.gridY === isl.gridY + 1
+          );
+          if (bottom) {
+            ctx.beginPath();
+            ctx.moveTo(ix, iy);
+            ctx.lineTo(ix, iy + mmStep);
+            ctx.stroke();
+          }
+        }
+
+        // Draw island nodes
+        for (const isl of islandsRef.current) {
+          const ix = mmCenterX + isl.gridX * mmStep;
+          const iy = mmCenterY + isl.gridY * mmStep;
+
+          if (isl.unlocked) {
+            ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
+            ctx.beginPath();
+            ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          } else {
+            const canAfford =
+              inventory.wood >= isl.costWood &&
+              inventory.stone >= isl.costStone &&
+              inventory.gold >= isl.costGold;
+
+            ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.35)' : 'rgba(51, 65, 85, 0.7)';
+            ctx.beginPath();
+            ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, 4);
+            ctx.fill();
+            ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.6)';
+            ctx.lineWidth = canAfford ? 1.5 : 1;
+            ctx.stroke();
+          }
+        }
+
+        // Draw remote players on minimap
+        remotePlayersRef.current.forEach((rp) => {
+          const rNormX = mmCenterX + ((rp.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+          const rNormY = mmCenterY + ((rp.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+          ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
+          ctx.beginPath();
+          ctx.arc(rNormX, rNormY, 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Draw local player marker on minimap (pulsing ring)
+        const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+        const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+        const pulseSize = 4 + Math.sin(now / 180) * 1.5;
+
+        ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';
+        ctx.beginPath();
+        ctx.arc(pNormX, pNormY, pulseSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.restore();
+      }
 
       animationId = requestAnimationFrame(render);
     };
@@ -1166,13 +1227,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Ignore clicks inside minimap area (bottom-right)
-    const minimapSize = 160;
-    const margin = 16;
-    const mmX = canvas.width - minimapSize - margin;
-    const mmY = canvas.height - minimapSize - margin;
-    if (screenX >= mmX && screenX <= mmX + minimapSize && screenY >= mmY && screenY <= mmY + minimapSize) {
-      return;
+    // Ignore clicks in UI control areas
+    if (canvas.width >= 768) {
+      // Ignore clicks inside desktop minimap area (bottom-right)
+      const minimapSize = 160;
+      const margin = 16;
+      const mmX = canvas.width - minimapSize - margin;
+      const mmY = canvas.height - minimapSize - margin;
+      if (screenX >= mmX && screenX <= mmX + minimapSize && screenY >= mmY && screenY <= mmY + minimapSize) {
+        return;
+      }
+    } else {
+      // Ignore clicks in mobile joystick zone (bottom-left) and action button zone (bottom-right)
+      if (screenX <= 160 && screenY >= canvas.height - 160) return;
+      if (screenX >= canvas.width - 160 && screenY >= canvas.height - 160) return;
     }
 
     // Fixed world coordinate at time of click
