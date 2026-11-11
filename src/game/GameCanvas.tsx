@@ -14,6 +14,7 @@ import { Entity, FloatingText, Inventory, Island, Particle, Player, PlayerAction
 import { sound } from '../lib/sound';
 import { supabase } from '../lib/supabase';
 import { storage } from '../lib/storage';
+import { serverSync } from '../lib/serverSync';
 
 interface GameCanvasProps {
   playerName: string;
@@ -63,7 +64,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Local Player State
   const localPlayerRef = useRef<Player>({
-    id: 'p_' + Math.random().toString(36).substring(2, 9),
+    id: storage.getPlayerId(),
     name: playerName,
     x: 256,
     y: 256,
@@ -128,6 +129,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       assetsRef.current = assets;
       setAssetsLoaded(true);
     });
+  }, []);
+
+  // 서버 DB에서 해금된 섬 목록을 조회하여 로컬 월드와 동기화 (기존 해금 상태는 이펙트 없이 조용히 적용)
+  useEffect(() => {
+    let isMounted = true;
+    serverSync.fetchUnlockedIslands().then((records) => {
+      if (!isMounted || !records || records.length === 0) return;
+      for (const rec of records) {
+        const isl = islandsRef.current.find((i) => i.id === rec.island_id);
+        if (isl && !isl.unlocked) {
+          unlockIslandLocally(rec.island_id, rec.unlocked_by || '동료 모험가', false, false);
+        }
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -341,6 +359,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const { islandId, unlockedBy } = payload;
         unlockIslandLocally(islandId, unlockedBy, false);
       })
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'unlocked_islands' },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && typeof newRow.island_id === 'number') {
+            unlockIslandLocally(newRow.island_id, newRow.unlocked_by || '동료 모험가', false, true);
+          }
+        }
+      )
       .on('broadcast', { event: 'sync_world_request' }, () => {
         const unlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
         channel.send({
@@ -484,7 +512,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   };
 
   // Unlock Island Logic
-  const unlockIslandLocally = (islandId: number, unlockedBy: string, isLocalTrigger: boolean) => {
+  const unlockIslandLocally = (
+    islandId: number,
+    unlockedBy: string,
+    isLocalTrigger: boolean,
+    showEffects: boolean = true
+  ) => {
     const target = islandsRef.current.find((isl) => isl.id === islandId);
     if (!target || target.unlocked) return;
 
@@ -504,27 +537,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const newEntities = generateIslandEntities(target.id, target.gridX, target.gridY);
     entitiesRef.current.push(...newEntities);
 
-    // Fanfare and Confetti
-    sound.playUnlock();
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
+    if (showEffects) {
+      // Fanfare and Confetti
+      sound.playUnlock();
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
 
-    // Floating banner text
-    const origin = getIslandOrigin(target.gridX, target.gridY);
-    floatingTextsRef.current.push({
-      id: 'unlock_' + Math.random(),
-      text: `🎉 ${unlockedBy}님이 ${target.name}을 해금했습니다!`,
-      x: origin.x + 256,
-      y: origin.y + 200,
-      color: '#ffd700',
-      alpha: 1,
-      vy: -1.2,
-    });
+      // Floating banner text
+      const origin = getIslandOrigin(target.gridX, target.gridY);
+      floatingTextsRef.current.push({
+        id: 'unlock_' + Math.random(),
+        text: `🎉 ${unlockedBy}님이 ${target.name}을 해금했습니다!`,
+        x: origin.x + 256,
+        y: origin.y + 200,
+        color: '#ffd700',
+        alpha: 1,
+        vy: -1.2,
+      });
+    }
 
     if (isLocalTrigger) {
+      // 1. Supabase 서버 DB에 영구 저장 (전체 유저 공유)
+      serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);
+
+      // 2. 같은 브라우저 다른 탭 즉시 동기화
       if (localBusRef.current) {
         localBusRef.current.postMessage({
           type: 'island_unlocked',
@@ -532,6 +571,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           payload: { islandId, unlockedBy },
         });
       }
+      // 3. 다른 온라인 접속자 실시간 브로드캐스트
       if (channelRef.current) {
         channelRef.current.send({
           type: 'broadcast',

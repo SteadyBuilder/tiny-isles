@@ -2,12 +2,14 @@ import { Inventory, PlayerColor } from '../types/game';
 
 const STORAGE_KEYS = {
   PROFILE: 'tiny_isles_profile',
+  PLAYER_ID: 'tiny_isles_player_id',
   INVENTORY: 'tiny_isles_inventory',
   UNLOCKED_ISLANDS: 'tiny_isles_unlocked_islands',
   ZOOM: 'tiny_isles_zoom',
 } as const;
 
 export interface SavedProfile {
+  id?: string;
   name: string;
   color: PlayerColor;
 }
@@ -121,9 +123,23 @@ export const storage = {
     }
   },
 
+  getPlayerId: (): string => {
+    try {
+      let id = localStorage.getItem(STORAGE_KEYS.PLAYER_ID);
+      if (!id) {
+        id = 'p_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem(STORAGE_KEYS.PLAYER_ID, id);
+      }
+      return id;
+    } catch {
+      return 'p_' + Math.random().toString(36).substring(2, 9);
+    }
+  },
+
   resetAll: (): void => {
     try {
       localStorage.removeItem(STORAGE_KEYS.PROFILE);
+      localStorage.removeItem(STORAGE_KEYS.PLAYER_ID);
       localStorage.removeItem(STORAGE_KEYS.INVENTORY);
       localStorage.removeItem(STORAGE_KEYS.UNLOCKED_ISLANDS);
       localStorage.removeItem(STORAGE_KEYS.ZOOM);

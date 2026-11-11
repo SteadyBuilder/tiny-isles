@@ -64,3 +64,21 @@ export interface Particle {
   life: number;
   maxLife: number;
 }
+
+export interface ServerIslandRecord {
+  island_id: number;
+  island_name: string;
+  unlocked_by: string;
+  unlocked_at?: string;
+}
+
+export interface ServerPlayerRecord {
+  id: string;
+  name: string;
+  color: PlayerColor;
+  wood: number;
+  stone: number;
+  gold: number;
+  last_active_at?: string;
+  created_at?: string;
+}

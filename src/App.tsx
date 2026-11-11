@@ -1,13 +1,15 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GameCanvas } from './game/GameCanvas';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
 import { Inventory, Island, PlayerColor } from './types/game';
 import { storage } from './lib/storage';
+import { serverSync } from './lib/serverSync';
 import { INITIAL_ISLANDS } from './game/constants';
 
 export function App() {
+  const playerIdRef = useRef<string>(storage.getPlayerId());
   const [profile, setProfile] = useState(() => storage.loadProfile());
   const [inventory, setInventory] = useState<Inventory>(() => storage.loadInventory());
   const [onlineCount, setOnlineCount] = useState<number>(1);
@@ -20,6 +22,44 @@ export function App() {
     total: INITIAL_ISLANDS.length,
   });
 
+  // 서버에서 기존 플레이어 정보 복원
+  useEffect(() => {
+    let isMounted = true;
+    serverSync.fetchPlayer(playerIdRef.current).then((saved) => {
+      if (!isMounted || !saved) return;
+      if (saved.name) {
+        setProfile((prev) => {
+          const next = {
+            ...prev,
+            name: saved.name,
+            color: (saved.color as PlayerColor) || prev.color,
+          };
+          storage.saveProfile(next);
+          return next;
+        });
+      }
+      if (
+        typeof saved.wood === 'number' &&
+        typeof saved.stone === 'number' &&
+        typeof saved.gold === 'number'
+      ) {
+        setInventory({
+          wood: saved.wood,
+          stone: saved.stone,
+          gold: saved.gold,
+        });
+        storage.saveInventory({
+          wood: saved.wood,
+          stone: saved.stone,
+          gold: saved.gold,
+        });
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Camera Zoom state (0.5x to 2.0x, with localStorage persistence)
   const [zoom, setZoom] = useState<number>(() => storage.loadZoom());
 
@@ -31,11 +71,12 @@ export function App() {
   // Virtual Joystick Vector (mutable ref for 60fps performance without re-render)
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // 프로필(이름, 색상) 변경 시 영속화
+  // 프로필(이름, 색상) 변경 시 영속화 및 서버 동기화
   const handleUpdateName = (name: string) => {
     setProfile((prev) => {
       const next = { ...prev, name };
       storage.saveProfile(next);
+      serverSync.savePlayer(playerIdRef.current, next, inventory);
       return next;
     });
   };
@@ -44,15 +85,17 @@ export function App() {
     setProfile((prev) => {
       const next = { ...prev, color };
       storage.saveProfile(next);
+      serverSync.savePlayer(playerIdRef.current, next, inventory);
       return next;
     });
   };
 
-  // 인벤토리 변경 시 영속화
+  // 인벤토리 변경 시 영속화 및 서버 동기화
   const handleUpdateInventory = (updater: (prev: Inventory) => Inventory) => {
     setInventory((prev) => {
       const next = updater(prev);
       storage.saveInventory(next);
+      serverSync.savePlayer(playerIdRef.current, profile, next);
       return next;
     });
   };
