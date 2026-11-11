@@ -622,8 +622,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         [resType]: prev[resType] + 1,
       }));
 
-      sound.playPop();
-
       // Floating text
       const icon = resType === 'wood' ? '🪵 +1' : resType === 'gold' ? '🪙 +1' : '🪨 +1';
       const color = resType === 'wood' ? '#8bc34a' : resType === 'gold' ? '#ffd700' : '#cfd8dc';
@@ -668,7 +666,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     } else {
       // Swung tool in empty air
-      sound.playStep();
     }
   }, [inventory, onUpdateInventory]);
 

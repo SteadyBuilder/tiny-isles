@@ -52,6 +52,7 @@ class SoundSystem {
   private bgmAudio: HTMLAudioElement | null = null;
   private listeners: Set<(settings: SoundSettings) => void> = new Set();
   private hasInteracted: boolean = false;
+  private stepToggle: boolean = false;
 
   private settings: SoundSettings = {
     muted: false,
@@ -152,7 +153,7 @@ class SoundSystem {
   }
 
   private async preloadSFX() {
-    const sfxList = ['chop', 'mine', 'step', 'pop', 'break', 'unlock', 'click'];
+    const sfxList = ['chop', 'mine', 'step', 'step2', 'pop', 'break', 'unlock', 'click'];
     for (const name of sfxList) {
       this.loadSfxBuffer(name, `/assets/audio/sfx/${name}.mp3`);
     }
@@ -396,10 +397,12 @@ class SoundSystem {
     osc.stop(ctx.currentTime + 0.08);
   }
 
-  // 발자국 소리 (Soft grass footstep)
+  // 발자국 소리 (Crisp walking footstep - alternating left/right)
   public playStep() {
     if (this.settings.muted || !this.settings.sfxEnabled) return;
-    if (this.playBuffer('step', 0.6, 0.1)) return;
+    this.stepToggle = !this.stepToggle;
+    const bufferName = this.stepToggle ? 'step' : 'step2';
+    if (this.playBuffer(bufferName, 0.85, 0.08)) return;
 
     // Fallback Oscillator
     const ctx = this.initCtx();
@@ -407,9 +410,10 @@ class SoundSystem {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(100 + Math.random() * 20, ctx.currentTime);
+    const baseFreq = this.stepToggle ? 140 : 120;
+    osc.frequency.setValueAtTime(baseFreq + Math.random() * 20, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.05);
-    gain.gain.setValueAtTime(0.08 * this.settings.sfxVolume, ctx.currentTime);
+    gain.gain.setValueAtTime(0.12 * this.settings.sfxVolume, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
     osc.connect(gain);
     gain.connect(ctx.destination);

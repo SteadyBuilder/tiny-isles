@@ -14,8 +14,8 @@ All audio assets included in Tiny Isles are licensed under Creative Commons Zero
   - Author: Kenney (Kenney Vleugels, https://kenney.nl)
   - License: CC0 1.0 Universal (Public Domain)
 
-- **step** (`sfx/step.mp3`, `sfx/step.ogg`):
-  - Source: *Kenney Impact Sounds* (`step_grass`)
+- **step / step2** (`sfx/step.mp3`, `sfx/step.ogg`, `sfx/step2.mp3`, `sfx/step2.ogg`):
+  - Source: *Kenney RPG Audio* (`footstep00`, `footstep08`)
   - Author: Kenney (Kenney Vleugels, https://kenney.nl)
   - License: CC0 1.0 Universal (Public Domain)
 
