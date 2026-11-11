@@ -52,6 +52,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const lastNearIslandRef = useRef<Island | null>(null);
   const lastGridPosRef = useRef<{ gridX: number; gridY: number }>({ gridX: 0, gridY: 0 });
 
+  // Always-up-to-date refs to prevent stale closure issues in render loop & event listeners
+  const inventoryRef = useRef<Inventory>(inventory);
+  inventoryRef.current = inventory;
+
+  const onUpdateInventoryRef = useRef(onUpdateInventory);
+  onUpdateInventoryRef.current = onUpdateInventory;
+
+  const onNearIslandChangeRef = useRef(onNearIslandChange);
+  onNearIslandChangeRef.current = onNearIslandChange;
+
+  const onPlayerPositionChangeRef = useRef(onPlayerPositionChange);
+  onPlayerPositionChangeRef.current = onPlayerPositionChange;
+
   // Camera Zoom State
   const targetZoomRef = useRef<number>(zoom);
   const zoomRef = useRef<number>(zoom);
@@ -597,14 +610,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const signY = origin.y + 256;
         const dist = Math.hypot(px - signX, py - signY);
 
-        if (dist < 180) {
+        if (dist < 200) {
+          const curInv = inventoryRef.current;
           // Check costs
           if (
-            inventory.wood >= island.costWood &&
-            inventory.stone >= island.costStone &&
-            inventory.gold >= island.costGold
+            curInv.wood >= island.costWood &&
+            curInv.stone >= island.costStone &&
+            curInv.gold >= island.costGold
           ) {
-            onUpdateInventory((prev) => ({
+            onUpdateInventoryRef.current((prev) => ({
               wood: prev.wood - island.costWood,
               stone: prev.stone - island.costStone,
               gold: prev.gold - island.costGold,
@@ -615,7 +629,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             // Not enough resources notice
             floatingTextsRef.current.push({
               id: 'cost_' + Math.random(),
-              text: `자원이 부족합니다! (🪵${island.costWood} 🪨${island.costStone})`,
+              text: `자원이 부족합니다! (🪵${island.costWood} 🪨${island.costStone}${island.costGold > 0 ? ` 🪙${island.costGold}` : ''})`,
               x: signX,
               y: signY - 40,
               color: '#ff5252',
@@ -664,7 +678,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Add resource to inventory
       const resType = nearestEntity.type === 'tree' ? 'wood' : nearestEntity.type === 'gold_rock' ? 'gold' : 'stone';
-      onUpdateInventory((prev) => ({
+      onUpdateInventoryRef.current((prev) => ({
         ...prev,
         [resType]: prev[resType] + 1,
       }));
@@ -714,7 +728,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     } else {
       // Swung tool in empty air
     }
-  }, [inventory, onUpdateInventory]);
+  }, []);
+
+  const tryInteractRef = useRef(tryInteract);
+  tryInteractRef.current = tryInteract;
 
   // Keyboard & Action Event Listeners
   useEffect(() => {
@@ -927,7 +944,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const currentNow = Date.now();
       if ((keysRef.current[' '] || keysRef.current['e']) && currentNow - lastInteractTimeRef.current >= 240) {
         lastInteractTimeRef.current = currentNow;
-        tryInteract();
+        tryInteractRef.current();
       }
 
       // Track nearest locked island for mobile action button & contextual prompt
@@ -938,7 +955,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const signX = origin.x + 256;
           const signY = origin.y + 256;
           const dist = Math.hypot(player.x - signX, player.y - signY);
-          if (dist < 190) {
+          if (dist < 200) {
             nearLocked = isl;
             break;
           }
@@ -946,7 +963,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
       if (nearLocked?.id !== lastNearIslandRef.current?.id) {
         lastNearIslandRef.current = nearLocked;
-        onNearIslandChange?.(nearLocked);
+        onNearIslandChangeRef.current?.(nearLocked);
       }
 
       // Track current player island grid coordinate for minimap
@@ -957,7 +974,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         currentGridY !== lastGridPosRef.current.gridY
       ) {
         lastGridPosRef.current = { gridX: currentGridX, gridY: currentGridY };
-        onPlayerPositionChange?.({ gridX: currentGridX, gridY: currentGridY });
+        onPlayerPositionChangeRef.current?.({ gridX: currentGridX, gridY: currentGridY });
       }
 
       // 2. Camera follow (smooth lerp)
@@ -1063,10 +1080,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           // Signpost & Cost Badge
           const signX = origin.x + 256;
           const signY = origin.y + 256;
+          const currentInv = inventoryRef.current;
           const canAfford =
-            inventory.wood >= island.costWood &&
-            inventory.stone >= island.costStone &&
-            inventory.gold >= island.costGold;
+            currentInv.wood >= island.costWood &&
+            currentInv.stone >= island.costStone &&
+            currentInv.gold >= island.costGold;
 
           ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
           ctx.beginPath();
@@ -1093,7 +1111,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.fillText(isMobile ? '✨ 해금 가능! [개척 버튼 터치]' : '✨ 해금 가능! [E 키 / 클릭]', signX, signY + 32);
           } else {
             ctx.fillStyle = '#f87171';
-            ctx.fillText('자원 부족 [가까이 가서 확인]', signX, signY + 32);
+            ctx.fillText('자원 부족 (자원 채집 필요)', signX, signY + 32);
           }
         }
       }
@@ -1267,10 +1285,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.lineWidth = 1;
           ctx.stroke();
         } else {
+          const currentInv = inventoryRef.current;
           const canAfford =
-            inventory.wood >= isl.costWood &&
-            inventory.stone >= isl.costStone &&
-            inventory.gold >= isl.costGold;
+            currentInv.wood >= isl.costWood &&
+            currentInv.stone >= isl.costStone &&
+            currentInv.gold >= isl.costGold;
 
           ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.4)' : 'rgba(51, 65, 85, 0.7)';
           ctx.beginPath();
