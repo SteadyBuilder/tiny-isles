@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://f5y8c3l0q1n2x"]
+[gd_scene format=3 uid="uid://cbldq1oq6tsb6"]
 
 [ext_resource type="Script" path="res://scenes/world/resource_node.gd" id="1_res"]
 [ext_resource type="Texture2D" uid="uid://dn1lmovh976u2" path="res://assets/tiny_swords/Terrain/Resources/Gold/Gold Stones/Gold Stone 1.png" id="2_gold_tex"]

@@ -7,7 +7,7 @@
 size = Vector2(240, 70)
 
 [sub_resource type="Gradient" id="Gradient_crystal"]
-colors = PackedColorArray(0.3, 0.8, 1, 1, 0, 0.4, 0.9, 0)
+colors = PackedColorArray(0.3, 0.8, 1, 0.9, 0, 0.4, 0.9, 0)
 
 [sub_resource type="GradientTexture2D" id="GradientTexture2D_crystal"]
 gradient = SubResource("Gradient_crystal")
@@ -33,10 +33,10 @@ shape = SubResource("RectangleShape2D_castle")
 
 [node name="PointLight2D" type="PointLight2D" parent="."]
 position = Vector2(0, -90)
-color = Color(0.25, 0.75, 1, 1)
-energy = 2.0
+color = Color(0.25, 0.75, 1, 0.9)
+energy = 1.0
 texture = SubResource("GradientTexture2D_crystal")
-texture_scale = 4.0
+texture_scale = 2.5
 
 [node name="HealthBar" type="ProgressBar" parent="."]
 offset_left = -60.0

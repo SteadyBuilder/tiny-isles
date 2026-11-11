@@ -51,7 +51,7 @@ position_smoothing_speed = 7.0
 
 [node name="PointLight2D" type="PointLight2D" parent="."]
 position = Vector2(0, -10)
-color = Color(1, 0.88, 0.65, 1)
-energy = 0.9
+color = Color(1, 0.88, 0.65, 0.9)
+energy = 0.65
 texture = SubResource("GradientTexture2D_light")
-texture_scale = 2.0
+texture_scale = 1.6

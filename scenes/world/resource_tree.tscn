@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://e4x7b2k9p0m1w"]
+[gd_scene format=3 uid="uid://bakcp0n05sra5"]
 
 [ext_resource type="Script" path="res://scenes/world/resource_node.gd" id="1_res"]
 [ext_resource type="Texture2D" uid="uid://dm0klnvg865t1" path="res://assets/tiny_swords/Terrain/Resources/Wood/Trees/Tree1.png" id="2_tree_tex"]

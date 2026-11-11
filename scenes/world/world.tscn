@@ -1,7 +1,7 @@
 [gd_scene load_steps=12 format=3 uid="uid://b0yqw3v8jkl1a"]
 
 [ext_resource type="Script" path="res://scenes/world/world.gd" id="1_world"]
-[ext_resource type="Texture2D" uid="uid://c5t6y7u8i9o0p" path="res://assets/tiny_swords/Terrain/Tileset/Tilemap_color1.png" id="2_tileset"]
+[ext_resource type="Texture2D" uid="uid://cx6m2l0v8k9p3" path="res://assets/tiny_swords/Terrain/Tileset/Grass_Seamless.png" id="2_grass"]
 [ext_resource type="PackedScene" uid="uid://dm0klnvg865tr" path="res://scenes/buildings/core_crystal.tscn" id="3_core"]
 [ext_resource type="PackedScene" uid="uid://b8x7yk0p6jqr" path="res://scenes/player/player.tscn" id="4_player"]
 [ext_resource type="PackedScene" uid="uid://c6n8y2k1q2w3e" path="res://scenes/buildings/tower.tscn" id="5_tower"]
@@ -15,14 +15,14 @@
 [sub_resource type="Environment" id="Environment_world"]
 background_mode = 3
 glow_enabled = true
-glow_levels/1 = 1.0
-glow_levels/2 = 1.0
+glow_levels/1 = 0.4
+glow_levels/2 = 0.7
 glow_levels/3 = 1.0
-glow_levels/4 = 0.5
-glow_intensity = 0.8
-glow_strength = 1.15
-glow_bloom = 0.25
-glow_blend_mode = 0
+glow_intensity = 0.3
+glow_strength = 0.85
+glow_bloom = 0.0
+glow_blend_mode = 2
+glow_hdr_threshold = 1.0
 
 [node name="World" type="Node2D"]
 y_sort_enabled = true
@@ -32,15 +32,15 @@ script = ExtResource("1_world")
 environment = SubResource("Environment_world")
 
 [node name="DirectionalLight2D" type="DirectionalLight2D" parent="."]
-color = Color(1, 0.98, 0.92, 1)
-energy = 0.95
+color = Color(1, 0.98, 0.94, 1)
+energy = 0.75
 
 [node name="Ground" type="Sprite2D" parent="."]
 z_index = -10
 texture_repeat = 2
-texture = ExtResource("2_tileset")
+texture = ExtResource("2_grass")
 region_enabled = true
-region_rect = Rect2(0, 0, 2500, 2500)
+region_rect = Rect2(-1600, -1600, 3200, 3200)
 
 [node name="Entities" type="Node2D" parent="." groups=["entities"]]
 y_sort_enabled = true
@@ -49,37 +49,91 @@ y_sort_enabled = true
 position = Vector2(0, 0)
 
 [node name="LeftTower" parent="Entities" instance=ExtResource("5_tower")]
-position = Vector2(-160, -40)
+position = Vector2(-150, -30)
 
 [node name="RightTower" parent="Entities" instance=ExtResource("5_tower")]
-position = Vector2(160, -40)
+position = Vector2(150, -30)
 
-[node name="Wall1" parent="Entities" instance=ExtResource("8_wall")]
-position = Vector2(-60, 90)
+[node name="Palisade_N1" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-200, -220)
 
-[node name="Wall2" parent="Entities" instance=ExtResource("8_wall")]
-position = Vector2(60, 90)
+[node name="Palisade_N2" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-140, -220)
 
-[node name="Tree1" parent="Entities" instance=ExtResource("6_tree")]
-position = Vector2(-280, 80)
+[node name="Palisade_N3" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-80, -220)
 
-[node name="Tree2" parent="Entities" instance=ExtResource("6_tree")]
+[node name="Palisade_N4" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(80, -220)
+
+[node name="Palisade_N5" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(140, -220)
+
+[node name="Palisade_N6" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(200, -220)
+
+[node name="Palisade_S1" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-200, 220)
+
+[node name="Palisade_S2" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-140, 220)
+
+[node name="Palisade_S3" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-80, 220)
+
+[node name="Palisade_S4" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(80, 220)
+
+[node name="Palisade_S5" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(140, 220)
+
+[node name="Palisade_S6" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(200, 220)
+
+[node name="Palisade_W1" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-220, -160)
+
+[node name="Palisade_W2" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-220, -100)
+
+[node name="Palisade_W3" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(-220, 100)
+
+[node name="Palisade_W4" parent="Entities" instance=ExtResource("8_wall")]
 position = Vector2(-220, 160)
 
+[node name="Palisade_E1" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(220, -160)
+
+[node name="Palisade_E2" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(220, -100)
+
+[node name="Palisade_E3" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(220, 100)
+
+[node name="Palisade_E4" parent="Entities" instance=ExtResource("8_wall")]
+position = Vector2(220, 160)
+
+[node name="Tree1" parent="Entities" instance=ExtResource("6_tree")]
+position = Vector2(-320, 70)
+
+[node name="Tree2" parent="Entities" instance=ExtResource("6_tree")]
+position = Vector2(-280, 180)
+
 [node name="Tree3" parent="Entities" instance=ExtResource("6_tree")]
-position = Vector2(250, 100)
+position = Vector2(320, 80)
 
 [node name="Tree4" parent="Entities" instance=ExtResource("6_tree")]
-position = Vector2(200, 200)
+position = Vector2(290, 210)
 
 [node name="GoldMine1" parent="Entities" instance=ExtResource("7_gold")]
-position = Vector2(280, -120)
+position = Vector2(300, -140)
 
 [node name="GoldMine2" parent="Entities" instance=ExtResource("7_gold")]
-position = Vector2(-260, -140)
+position = Vector2(-300, -150)
 
 [node name="Player" parent="Entities" instance=ExtResource("4_player")]
-position = Vector2(0, 100)
+position = Vector2(0, 90)
 
 [node name="WaveSpawner" type="Node2D" parent="."]
 script = ExtResource("9_spawner")

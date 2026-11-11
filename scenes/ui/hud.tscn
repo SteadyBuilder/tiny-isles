@@ -1,6 +1,22 @@
-[gd_scene load_steps=2 format=3 uid="uid://c7k5h4p9w0q1x"]
+[gd_scene load_steps=3 format=3 uid="uid://c7k5h4p9w0q1x"]
 
 [ext_resource type="Script" path="res://scenes/ui/hud.gd" id="1_hud"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_capsule"]
+bg_color = Color(0.08, 0.11, 0.16, 0.82)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.4, 0.55, 0.5)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+content_margin_left = 16.0
+content_margin_top = 4.0
+content_margin_right = 16.0
+content_margin_bottom = 4.0
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
@@ -9,104 +25,96 @@ script = ExtResource("1_hud")
 layout_mode = 3
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 60.0
+offset_bottom = 44.0
 grow_horizontal = 2
 
-[node name="Panel" type="Panel" parent="TopBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="ResourceContainer" type="HBoxContainer" parent="TopBar"]
-layout_mode = 1
-anchors_preset = 4
-anchor_top = 0.5
-anchor_bottom = 0.5
-offset_left = 20.0
-offset_top = -15.0
-offset_right = 320.0
-offset_bottom = 15.0
-grow_vertical = 2
-theme_override_constants/separation = 24
-
-[node name="WoodLabel" type="Label" parent="TopBar/ResourceContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "🌲 50"
-
-[node name="StoneLabel" type="Label" parent="TopBar/ResourceContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "🪨 25"
-
-[node name="GoldLabel" type="Label" parent="TopBar/ResourceContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "🪙 10"
-
-[node name="WaveContainer" type="VBoxContainer" parent="TopBar"]
+[node name="CapsulePanel" type="PanelContainer" parent="TopBar"]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -100.0
+offset_left = -480.0
 offset_top = 6.0
-offset_right = 100.0
-offset_bottom = 54.0
+offset_right = 480.0
+offset_bottom = 42.0
 grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_capsule")
+
+[node name="HBox" type="HBoxContainer" parent="TopBar/CapsulePanel"]
+layout_mode = 2
+theme_override_constants/separation = 18
 alignment = 1
 
-[node name="WaveLabel" type="Label" parent="TopBar/WaveContainer"]
+[node name="WaveContainer" type="HBoxContainer" parent="TopBar/CapsulePanel/HBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "🕊️ PREPARE (Wave 1)"
-horizontal_alignment = 1
+theme_override_constants/separation = 8
 
-[node name="TimerLabel" type="Label" parent="TopBar/WaveContainer"]
+[node name="WaveLabel" type="Label" parent="TopBar/CapsulePanel/HBox/WaveContainer"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.45, 0.9, 0.6, 1)
+theme_override_font_sizes/font_size = 13
+text = "🕊️ PREPARE (W1)"
+vertical_alignment = 1
+
+[node name="TimerLabel" type="Label" parent="TopBar/CapsulePanel/HBox/WaveContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
 text = "01:00"
-horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="BottomHotbar" type="Control" parent="."]
-layout_mode = 3
-anchors_preset = 12
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = -70.0
-grow_horizontal = 2
-grow_vertical = 0
-
-[node name="HBoxContainer" type="HBoxContainer" parent="BottomHotbar"]
-layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -210.0
-offset_top = -55.0
-offset_right = 210.0
-offset_bottom = -10.0
-grow_horizontal = 2
-grow_vertical = 0
-theme_override_constants/separation = 16
-
-[node name="WallBtn" type="Button" parent="BottomHotbar/HBoxContainer"]
-custom_minimum_size = Vector2(130, 40)
+[node name="VSeparator1" type="VSeparator" parent="TopBar/CapsulePanel/HBox"]
 layout_mode = 2
-text = "[1] Wall (10W)"
 
-[node name="TowerBtn" type="Button" parent="BottomHotbar/HBoxContainer"]
-custom_minimum_size = Vector2(140, 40)
+[node name="ResourceContainer" type="HBoxContainer" parent="TopBar/CapsulePanel/HBox"]
 layout_mode = 2
-text = "[2] Tower (25W 15S)"
+theme_override_constants/separation = 14
 
-[node name="CoreBtn" type="Button" parent="BottomHotbar/HBoxContainer"]
-custom_minimum_size = Vector2(150, 40)
+[node name="WoodLabel" type="Label" parent="TopBar/CapsulePanel/HBox/ResourceContainer"]
 layout_mode = 2
-text = "[3] Core (80W 40S 20G)"
+theme_override_font_sizes/font_size = 13
+text = "🌲 50"
+vertical_alignment = 1
+
+[node name="StoneLabel" type="Label" parent="TopBar/CapsulePanel/HBox/ResourceContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "🪨 25"
+vertical_alignment = 1
+
+[node name="GoldLabel" type="Label" parent="TopBar/CapsulePanel/HBox/ResourceContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "🪙 10"
+vertical_alignment = 1
+
+[node name="VSeparator2" type="VSeparator" parent="TopBar/CapsulePanel/HBox"]
+layout_mode = 2
+
+[node name="BuildHotbar" type="HBoxContainer" parent="TopBar/CapsulePanel/HBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BuildTitle" type="Label" parent="TopBar/CapsulePanel/HBox/BuildHotbar"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.8, 0.95, 0.8)
+theme_override_font_sizes/font_size = 12
+text = "🔨 건설:"
+vertical_alignment = 1
+
+[node name="WallLabel" type="Label" parent="TopBar/CapsulePanel/HBox/BuildHotbar"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "[1] 방책(10W)"
+vertical_alignment = 1
+
+[node name="TowerLabel" type="Label" parent="TopBar/CapsulePanel/HBox/BuildHotbar"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "[2] 타워(25W 15S)"
+vertical_alignment = 1
+
+[node name="CoreLabel" type="Label" parent="TopBar/CapsulePanel/HBox/BuildHotbar"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "[3] 전초기지(80W 40S 20G)"
+vertical_alignment = 1

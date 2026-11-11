@@ -2,13 +2,13 @@ extends CanvasLayer
 class_name GameHUD
 
 ## GameHUD
-## Displays resource counters, wave timer, health status, and building placement hotbar.
+## Ultra-slim 36px single-line floating capsule HUD.
 
-@onready var wood_label: Label = $TopBar/ResourceContainer/WoodLabel if has_node("TopBar/ResourceContainer/WoodLabel") else null
-@onready var stone_label: Label = $TopBar/ResourceContainer/StoneLabel if has_node("TopBar/ResourceContainer/StoneLabel") else null
-@onready var gold_label: Label = $TopBar/ResourceContainer/GoldLabel if has_node("TopBar/ResourceContainer/GoldLabel") else null
-@onready var wave_label: Label = $TopBar/WaveContainer/WaveLabel if has_node("TopBar/WaveContainer/WaveLabel") else null
-@onready var timer_label: Label = $TopBar/WaveContainer/TimerLabel if has_node("TopBar/WaveContainer/TimerLabel") else null
+@onready var wood_label: Label = $TopBar/CapsulePanel/HBox/ResourceContainer/WoodLabel
+@onready var stone_label: Label = $TopBar/CapsulePanel/HBox/ResourceContainer/StoneLabel
+@onready var gold_label: Label = $TopBar/CapsulePanel/HBox/ResourceContainer/GoldLabel
+@onready var wave_label: Label = $TopBar/CapsulePanel/HBox/WaveContainer/WaveLabel
+@onready var timer_label: Label = $TopBar/CapsulePanel/HBox/WaveContainer/TimerLabel
 
 var selected_building: String = ""
 
@@ -44,19 +44,18 @@ func _on_wave_state_changed(state: String, remaining: float, wave_index: int) ->
 		
 	if wave_label:
 		if state == "INVASION":
-			wave_label.text = "⚔️ WAVE " + str(wave_index) + " INVASION!"
-			wave_label.modulate = Color(1.0, 0.3, 0.3)
+			wave_label.text = "⚔️ 침공 (W" + str(wave_index) + ")!"
+			wave_label.modulate = Color(1.0, 0.35, 0.35)
 		else:
-			wave_label.text = "🕊️ PREPARE (Wave " + str(wave_index) + ")"
-			wave_label.modulate = Color(0.4, 0.9, 0.5)
+			wave_label.text = "🕊️ 평화 (W" + str(wave_index) + ")"
+			wave_label.modulate = Color(0.45, 0.9, 0.6)
 
 func try_select_building(type: String) -> void:
 	if GameManager.can_afford(type):
 		selected_building = type
 		place_building_at_player(type)
 	else:
-		# Flash resource insufficient feedback
-		print("Insufficient resources for: ", type)
+		print("자원이 부족합니다: ", type)
 
 func place_building_at_player(type: String) -> void:
 	var player = get_tree().get_first_node_in_group("player")
@@ -65,9 +64,8 @@ func place_building_at_player(type: String) -> void:
 		
 	var build_pos = player.global_position + Vector2(40, 0).rotated(randf() * TAU)
 	
-	# Core check: expansion must be outside current core, towers must be inside
 	if type != "core" and not GameManager.is_in_territory(build_pos):
-		print("Must build inside active crystal territory!")
+		print("코어 영토 영역 내부에서만 건설할 수 있습니다!")
 		return
 		
 	if GameManager.spend_for_building(type):
