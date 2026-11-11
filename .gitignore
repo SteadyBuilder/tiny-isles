@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Godot 4
+.godot/
+*.translation
+

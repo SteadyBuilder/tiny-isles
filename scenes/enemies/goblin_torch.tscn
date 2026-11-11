@@ -1,0 +1,39 @@
+[gd_scene load_steps=5 format=3 uid="uid://cx6n3v4m7p8q1"]
+
+[ext_resource type="Script" path="res://scenes/enemies/goblin.gd" id="1_goblin"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 10.0
+
+[sub_resource type="Gradient" id="Gradient_torch"]
+colors = PackedColorArray(1, 0.5, 0.1, 0.9, 0.8, 0.2, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_torch"]
+gradient = SubResource("Gradient_torch")
+width = 128
+height = 128
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0.9, 0.9)
+
+[node name="GoblinTorch" type="CharacterBody2D"]
+collision_layer = 4
+collision_mask = 7
+script = ExtResource("1_goblin")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 4)
+shape = SubResource("CircleShape2D_body")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+offset = Vector2(0, -6)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="."]
+path_desired_distance = 15.0
+target_desired_distance = 25.0
+
+[node name="TorchLight" type="PointLight2D" parent="."]
+color = Color(1, 0.55, 0.2, 1)
+energy = 0.9
+texture = SubResource("GradientTexture2D_torch")
+texture_scale = 1.2
