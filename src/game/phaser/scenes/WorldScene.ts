@@ -734,20 +734,20 @@ export class WorldScene extends Phaser.Scene {
           container.add(rightCorner);
         } else if (cb.slotIndex === 2 || cb.slotIndex === 3) {
           // [동쪽 / 서쪽 외곽 방책선] - 상단(-298)부터 하단(+238)까지 외곽을 완전히 둘러쌈
-          // 요구사항 (2): 왼쪽, 오른쪽의 문은 세로로 배치!
-          const gate = this.add.image(0, 0, 'woodPalisadeGateV');
-          gate.setDisplaySize(56, 100);
-          container.add(gate);
-
-          // 상단 수직 방책 날개 (y: -298 ~ -50 -> 중심: -174, 높이: 248)
-          const topWing = this.add.image(0, -174, 'woodPalisadeV');
-          topWing.setDisplaySize(56, 248);
+          // 상단 수직 방책 날개 (y: -298 ~ -45 -> 중심: -172, 높이: 256)
+          const topWing = this.add.image(0, -172, 'woodPalisadeV');
+          topWing.setDisplaySize(56, 256);
           container.add(topWing);
 
-          // 하단 수직 방책 날개 (y: +50 ~ +238 -> 중심: +144, 높이: 188)
-          const bottomWing = this.add.image(0, 144, 'woodPalisadeV');
-          bottomWing.setDisplaySize(56, 188);
+          // 하단 수직 방책 날개 (y: +45 ~ +238 -> 중심: +142, 높이: 196)
+          const bottomWing = this.add.image(0, 142, 'woodPalisadeV');
+          bottomWing.setDisplaySize(56, 196);
           container.add(bottomWing);
+
+          // 요구사항 (2): 왼쪽, 오른쪽의 문은 세로로 배치! (상하 날개와 틈새 없이 완벽 결합)
+          const gate = this.add.image(0, 0, 'woodPalisadeGateV');
+          gate.setDisplaySize(56, 116);
+          container.add(gate);
 
           // 상/하 모서리 연결 코너 기둥 (모서리 빈틈 완벽 밀폐)
           const topCorner = this.add.image(0, -298, 'woodPalisadeCorner');
