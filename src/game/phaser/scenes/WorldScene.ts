@@ -76,6 +76,10 @@ export class WorldScene extends Phaser.Scene {
   private eKey!: Phaser.Input.Keyboard.Key;
   private joystickVector = { x: 0, y: 0 };
   private mouseTarget: { x: number; y: number; active: boolean } = { x: 0, y: 0, active: false };
+  private touchIndicator!: Phaser.GameObjects.Image;
+  private touchTargetObj: { x: number; y: number } | null = null;
+  private pinchStartDist: number | null = null;
+  private pinchStartZoom: number = 1.0;
 
   // Multiplayer Channels
   private localBus: BroadcastChannel | null = null;
@@ -104,6 +108,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create() {
+    this.input.addPointer(2);
     const savedUnlocked = storage.loadUnlockedIslands();
     this.islands = INITIAL_ISLANDS.map((isl: Island) => ({
       ...isl,
@@ -602,11 +607,151 @@ export class WorldScene extends Phaser.Scene {
       EventBus.emit('zoom-changed', this.targetZoom);
     });
 
-    // Click / Pointer move to position
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+    // Touch Indicator (from GIF UI Cursors)
+    this.touchIndicator = this.add
+      .image(0, 0, 'cursorTarget')
+      .setVisible(false)
+      .setDepth(9999)
+      .setScale(0.35)
+      .setAlpha(0.85);
+
+    // Multi-touch Pinch to Zoom & Screen Touch Control
+    const handlePointerAction = (pointer: Phaser.Input.Pointer) => {
       if (pointer.rightButtonDown()) return;
+
+      // Two-finger pinch check
+      const p1 = this.input.pointer1;
+      const p2 = this.input.pointer2;
+      if (p1?.isDown && p2?.isDown) {
+        this.pinchStartDist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+        this.pinchStartZoom = this.targetZoom;
+        this.mouseTarget.active = false;
+        this.touchIndicator.setVisible(false);
+        return;
+      }
+
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      this.mouseTarget = { x: worldPoint.x, y: worldPoint.y, active: true };
+
+      // Check if user touched an entity (Tree, Rock, Sheep, Central Core, or locked Territory Sign)
+      let touchedEntity: EntityVisual | null = null;
+      let minEntDist = 55;
+      this.entityVisuals.forEach((ev) => {
+        const d = Math.hypot(worldPoint.x - (ev.entity.x + 16), worldPoint.y - (ev.entity.y + 16));
+        if (d < minEntDist) {
+          minEntDist = d;
+          touchedEntity = ev;
+        }
+      });
+
+      const distToCore = Math.hypot(worldPoint.x - CENTRAL_CORE.x, worldPoint.y - CENTRAL_CORE.y);
+      const isCoreTouched = distToCore < 60;
+
+      // Check locked territory sign
+      let touchedIslandSign: Island | null = null;
+      for (const isl of this.islands) {
+        if (!isl.unlocked) {
+          const origin = getIslandOrigin(isl.gridX, isl.gridY);
+          const signX = origin.x + 320;
+          const signY = origin.y + 320;
+          if (Math.hypot(worldPoint.x - signX, worldPoint.y - signY) < 60) {
+            touchedIslandSign = isl;
+            break;
+          }
+        }
+      }
+
+      const px = this.playerSprite.x;
+      const py = this.playerSprite.y;
+
+      if (touchedEntity || isCoreTouched || touchedIslandSign) {
+        let targetX = 0;
+        let targetY = 0;
+        if (touchedEntity) {
+          targetX = (touchedEntity as EntityVisual).entity.x + 16;
+          targetY = (touchedEntity as EntityVisual).entity.y + 16;
+        } else if (isCoreTouched) {
+          targetX = CENTRAL_CORE.x;
+          targetY = CENTRAL_CORE.y;
+        } else if (touchedIslandSign) {
+          const orig = getIslandOrigin(touchedIslandSign.gridX, touchedIslandSign.gridY);
+          targetX = orig.x + 320;
+          targetY = orig.y + 320;
+        }
+
+        const distFromPlayer = Math.hypot(px - targetX, py - targetY);
+        this.touchTargetObj = { x: targetX, y: targetY };
+
+        this.touchIndicator.setPosition(targetX, targetY).setVisible(true).setAlpha(1).setScale(0.45);
+        this.tweens.killTweensOf(this.touchIndicator);
+        this.tweens.add({
+          targets: this.touchIndicator,
+          scale: 0.35,
+          duration: 180,
+          yoyo: true,
+          repeat: -1,
+        });
+
+        if (distFromPlayer < 90) {
+          // Already within reach: immediate harvest/interact!
+          this.mouseTarget.active = false;
+          this.tryInteract();
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(15);
+          }
+        } else {
+          // Walk up to object
+          this.mouseTarget = { x: targetX, y: targetY, active: true };
+        }
+      } else {
+        // Tapped ground: move to location
+        this.touchTargetObj = null;
+        this.mouseTarget = { x: worldPoint.x, y: worldPoint.y, active: true };
+
+        this.touchIndicator.setPosition(worldPoint.x, worldPoint.y).setVisible(true).setAlpha(0.9).setScale(0.42);
+        this.tweens.killTweensOf(this.touchIndicator);
+        this.tweens.add({
+          targets: this.touchIndicator,
+          scale: 0.3,
+          alpha: 0.5,
+          duration: 350,
+          yoyo: true,
+          repeat: 2,
+        });
+      }
+    };
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      handlePointerAction(pointer);
+    });
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      // Pinch to zoom check
+      const p1 = this.input.pointer1;
+      const p2 = this.input.pointer2;
+      if (p1?.isDown && p2?.isDown) {
+        const curDist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+        if (this.pinchStartDist && this.pinchStartDist > 0) {
+          const factor = curDist / this.pinchStartDist;
+          const next = Math.min(2.0, Math.max(0.5, Number((this.pinchStartZoom * factor).toFixed(2))));
+          this.targetZoom = next;
+          EventBus.emit('zoom-changed', this.targetZoom);
+        }
+        return;
+      }
+
+      if (pointer.isDown && !this.touchTargetObj) {
+        // Drag-to-move continuous follow
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        this.mouseTarget = { x: worldPoint.x, y: worldPoint.y, active: true };
+        this.touchIndicator.setPosition(worldPoint.x, worldPoint.y).setVisible(true);
+      }
+    });
+
+    this.input.on('pointerup', () => {
+      this.pinchStartDist = null;
+      if (this.touchTargetObj) {
+        this.tweens.killTweensOf(this.touchIndicator);
+      }
     });
   }
 
@@ -760,11 +905,22 @@ export class WorldScene extends Phaser.Scene {
         this.mouseTarget.x,
         this.mouseTarget.y
       );
-      if (dist > 12) {
+
+      // If heading to an entity/sign/core, trigger interaction upon entering range (< 85px)
+      if (this.touchTargetObj && dist < 85) {
+        this.mouseTarget.active = false;
+        this.touchTargetObj = null;
+        this.touchIndicator.setVisible(false);
+        this.tryInteract();
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(15);
+        }
+      } else if (dist <= 14) {
+        this.mouseTarget.active = false;
+        this.touchIndicator.setVisible(false);
+      } else {
         vx = (this.mouseTarget.x - this.playerSprite.x) / dist;
         vy = (this.mouseTarget.y - this.playerSprite.y) / dist;
-      } else {
-        this.mouseTarget.active = false;
       }
     }
 
@@ -797,9 +953,24 @@ export class WorldScene extends Phaser.Scene {
     this.playerNameTag.setPosition(px, py - 42).setDepth(py + 30);
     this.playerIndicator.setPosition(px, py - 54).setDepth(py + 30);
 
-    // Continuous interaction when Space or E held
-    if ((this.spaceKey?.isDown || this.eKey?.isDown) && time - this.lastInteractTime >= 240) {
-      this.tryInteract();
+    // Continuous interaction when Space, E or Touch is held near an interactive object
+    const isHoldInput = (this.spaceKey?.isDown || this.eKey?.isDown || this.input.activePointer?.isDown);
+    if (isHoldInput && time - this.lastInteractTime >= 240) {
+      let isNearInteractive = Math.hypot(px - CENTRAL_CORE.x, py - CENTRAL_CORE.y) < 90;
+      if (!isNearInteractive) {
+        for (const ev of this.entityVisuals.values()) {
+          if (Math.hypot(px - (ev.entity.x + 16), py - (ev.entity.y + 16)) < 90) {
+            isNearInteractive = true;
+            break;
+          }
+        }
+      }
+      if (isNearInteractive) {
+        this.tryInteract();
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(12);
+        }
+      }
     }
 
     // Smooth Camera Zoom

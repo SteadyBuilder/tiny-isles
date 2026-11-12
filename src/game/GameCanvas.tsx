@@ -1715,11 +1715,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       return;
     }
 
-    if (isMobile) {
-      if (screenX <= 140 && screenY >= canvas.height - 140) return;
-      if (screenX >= canvas.width - 140 && screenY >= canvas.height - 140) return;
-    }
-
     if (isPinchingRef.current || Date.now() - lastPinchEndTimeRef.current < 250) {
       return;
     }

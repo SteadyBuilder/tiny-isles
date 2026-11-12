@@ -79,10 +79,19 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition"
+            className="relative w-8 h-8 active:scale-90 transition-transform flex items-center justify-center"
             aria-label="닫기"
           >
-            <X className="w-5 h-5" />
+            <img
+              src="/assets/ui/Buttons/SmallRedRoundButton_Regular.png"
+              alt="close"
+              className="w-full h-full pixel-art select-none"
+            />
+            <img
+              src="/assets/ui/Icons/Icon_09.png"
+              alt="x"
+              className="absolute w-3.5 h-3.5 pixel-art"
+            />
           </button>
         </div>
 
@@ -200,7 +209,10 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
                     : 'bg-red-950/30 border-red-500/40 text-red-300'
                 }`}>
-                  <div className="text-xs">🪵 목재</div>
+                  <div className="text-xs flex items-center justify-center gap-1">
+                    <img src="/assets/ui/Icons/Icon_02.png" alt="wood" className="w-3.5 h-3.5 pixel-art" />
+                    <span>목재</span>
+                  </div>
                   <div className="font-extrabold text-sm">
                     {inventory.wood} / {selectedIsland.costWood}
                   </div>
@@ -211,7 +223,10 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     ? 'bg-slate-800/60 border-slate-400/40 text-slate-200'
                     : 'bg-red-950/30 border-red-500/40 text-red-300'
                 }`}>
-                  <div className="text-xs">🪨 석재</div>
+                  <div className="text-xs flex items-center justify-center gap-1">
+                    <img src="/assets/ui/Icons/Icon_01.png" alt="stone" className="w-3.5 h-3.5 pixel-art" />
+                    <span>석재</span>
+                  </div>
                   <div className="font-extrabold text-sm">
                     {inventory.stone} / {selectedIsland.costStone}
                   </div>
@@ -222,7 +237,10 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     ? 'bg-yellow-950/40 border-yellow-500/40 text-yellow-200'
                     : 'bg-red-950/30 border-red-500/40 text-red-300'
                 }`}>
-                  <div className="text-xs">🪙 금화</div>
+                  <div className="text-xs flex items-center justify-center gap-1">
+                    <img src="/assets/ui/Icons/Icon_03.png" alt="gold" className="w-3.5 h-3.5 pixel-art" />
+                    <span>금화</span>
+                  </div>
                   <div className="font-extrabold text-sm">
                     {inventory.gold} / {selectedIsland.costGold}
                   </div>

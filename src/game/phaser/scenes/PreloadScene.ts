@@ -92,6 +92,9 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('waterFoam', '/assets/terrain/Water_Foam.png');
     this.load.image('cloud1', '/assets/decorations/Clouds_01.png');
     this.load.image('cloud2', '/assets/decorations/Clouds_02.png');
+
+    // UI Elements from GIF sample
+    this.load.image('cursorTarget', '/assets/ui/Cursors/Cursor_04.png');
   }
 
   create() {
