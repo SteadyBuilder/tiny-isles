@@ -4,10 +4,23 @@ import { PhaserGame } from './game/PhaserGame';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
-import { Inventory, Island, PlayerColor } from './types/game';
+import { VillageBuildModal } from './components/VillageBuildModal';
+import {
+  ConstructableType,
+  ConstructedBuilding,
+  Inventory,
+  Island,
+  PlayerColor,
+  WaveState,
+} from './types/game';
 import { storage } from './lib/storage';
 import { serverSync } from './lib/serverSync';
-import { INITIAL_ISLANDS } from './game/constants';
+import {
+  BOSS_WAVE_INTERVAL_SEC,
+  INITIAL_ISLANDS,
+  REGULAR_WAVE_INTERVAL_SEC,
+} from './game/constants';
+import { EventBus } from './game/phaser/EventBus';
 
 export function App() {
   const playerIdRef = useRef<string>(storage.getPlayerId());
@@ -22,6 +35,37 @@ export function App() {
     unlocked: unlockedIslandIds.length,
     total: INITIAL_ISLANDS.length,
   });
+
+  // Territories, Constructed Buildings & Wave State
+  const [territories, setTerritories] = useState<Island[]>(() => INITIAL_ISLANDS);
+  const [constructedBuildings, setConstructedBuildings] = useState<ConstructedBuilding[]>(() =>
+    storage.loadConstructedBuildings()
+  );
+  const [waveState, setWaveState] = useState<WaveState>({
+    regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC,
+    bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,
+    regularWaveRemainingSec: REGULAR_WAVE_INTERVAL_SEC,
+    bossWaveRemainingSec: BOSS_WAVE_INTERVAL_SEC,
+    waveCount: 0,
+    bossWaveCount: 0,
+    activeMonstersCount: 0,
+    activeBoss: null,
+    lastWaveMessage: null,
+    timeScale: 1,
+  });
+
+  const [showVillageModal, setShowVillageModal] = useState<boolean>(false);
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState<number>(0);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const alertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleShowAlert = useCallback((msg: string) => {
+    setAlertMessage(msg);
+    if (alertTimerRef.current) clearTimeout(alertTimerRef.current);
+    alertTimerRef.current = setTimeout(() => {
+      setAlertMessage(null);
+    }, 6500);
+  }, []);
 
   // 서버에서 기존 플레이어 정보 복원
   useEffect(() => {
@@ -61,7 +105,6 @@ export function App() {
     };
   }, []);
 
-  // 탭 닫기/새로고침 시 대기 중인 플레이어 자원/프로필 즉시 서버에 플러시
   useEffect(() => {
     const handleBeforeUnload = () => {
       serverSync.flushPlayerSync();
@@ -74,18 +117,16 @@ export function App() {
     };
   }, []);
 
-  // Camera Zoom state (0.5x to 2.0x, with localStorage persistence)
   const [zoom, setZoom] = useState<number>(() => storage.loadZoom());
-
-  // Mobile state
   const [nearIsland, setNearIsland] = useState<Island | null>(null);
   const [showMinimapModal, setShowMinimapModal] = useState<boolean>(false);
-  const [playerGridPos, setPlayerGridPos] = useState<{ gridX: number; gridY: number }>({ gridX: 0, gridY: 0 });
+  const [playerGridPos, setPlayerGridPos] = useState<{ gridX: number; gridY: number }>({
+    gridX: 0,
+    gridY: 0,
+  });
 
-  // Virtual Joystick Vector (mutable ref for 60fps performance without re-render)
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // 프로필(이름, 색상) 변경 시 영속화 및 서버 동기화
   const handleUpdateName = (name: string) => {
     setProfile((prev) => {
       const next = { ...prev, name };
@@ -104,7 +145,6 @@ export function App() {
     });
   };
 
-  // 인벤토리 변경 시 영속화 및 서버 동기화
   const handleUpdateInventory = (updater: (prev: Inventory) => Inventory) => {
     setInventory((prev) => {
       const next = updater(prev);
@@ -123,7 +163,7 @@ export function App() {
   };
 
   const handleResetGame = () => {
-    if (window.confirm('정말 게임 진행상황(자원 및 개척된 영지)을 초기화하시겠습니까?')) {
+    if (window.confirm('정말 게임 진행상황(자원, 점령한 땅, 건설된 마을 및 타워)을 초기화하시겠습니까?')) {
       storage.resetAll();
       window.location.reload();
     }
@@ -138,7 +178,31 @@ export function App() {
     storage.saveZoom(newZoom);
   }, []);
 
-  // Engine switch state (Phaser 3 default vs Canvas 2D)
+  const handleOpenVillageModalForCurrent = useCallback(() => {
+    const cur =
+      territories.find(
+        (t) =>
+          t.gridX === playerGridPos.gridX &&
+          t.gridY === playerGridPos.gridY &&
+          t.unlocked
+      ) || territories[0];
+    setSelectedTerritoryId(cur.id);
+    setShowVillageModal(true);
+  }, [territories, playerGridPos]);
+
+  const handleOpenVillageModalById = useCallback((territoryId: number) => {
+    setSelectedTerritoryId(territoryId);
+    setShowVillageModal(true);
+  }, []);
+
+  const currentTerritory =
+    territories.find(
+      (t) =>
+        t.gridX === playerGridPos.gridX &&
+        t.gridY === playerGridPos.gridY &&
+        t.unlocked
+    ) || territories[0];
+
   const [engineMode, setEngineMode] = useState<'phaser' | 'canvas'>('phaser');
 
   return (
@@ -165,8 +229,16 @@ export function App() {
         setPlayerColor={handleUpdateColor}
         unlockedCount={islandStats.unlocked}
         totalIslands={islandStats.total}
+        currentTerritory={currentTerritory}
+        waveState={waveState}
+        alertMessage={alertMessage}
         onResetGame={handleResetGame}
         onOpenMinimap={() => setShowMinimapModal(true)}
+        onOpenVillageModal={handleOpenVillageModalForCurrent}
+        onTriggerRegularWave={() => EventBus.emit('trigger-regular-wave')}
+        onTriggerBossWave={() => EventBus.emit('trigger-boss-wave')}
+        onChangeTimeScale={(scale) => EventBus.emit('set-wave-timescale', scale)}
+        onAddTestResources={() => EventBus.emit('add-test-resources')}
       />
 
       {engineMode === 'phaser' ? (
@@ -180,6 +252,11 @@ export function App() {
           setOnlineCount={setOnlineCount}
           onUnlockedCountChange={handleUnlockedCountChange}
           onUnlockedIslandIdsChange={handleUnlockedIslandIdsChange}
+          onTerritoriesChange={setTerritories}
+          onConstructedBuildingsChange={setConstructedBuildings}
+          onWaveStateChange={setWaveState}
+          onOpenVillageModal={handleOpenVillageModalById}
+          onGameAlert={handleShowAlert}
           joystickRef={joystickRef}
           onNearIslandChange={setNearIsland}
           onPlayerPositionChange={setPlayerGridPos}
@@ -216,11 +293,31 @@ export function App() {
       <MinimapModal
         isOpen={showMinimapModal}
         onClose={() => setShowMinimapModal(false)}
+        territories={territories}
         unlockedIslandIds={unlockedIslandIds}
         inventory={inventory}
         playerGridPos={playerGridPos}
         playerColor={profile.color}
         playerName={profile.name}
+        onManageTerritory={handleOpenVillageModalById}
+      />
+
+      <VillageBuildModal
+        isOpen={showVillageModal}
+        onClose={() => setShowVillageModal(false)}
+        territories={territories}
+        selectedTerritoryId={selectedTerritoryId}
+        onSelectTerritory={setSelectedTerritoryId}
+        constructedBuildings={constructedBuildings}
+        inventory={inventory}
+        onUpgradeVillage={(territoryId) => EventBus.emit('upgrade-village', territoryId)}
+        onConstructBuilding={(territoryId, type: ConstructableType) =>
+          EventBus.emit('construct-building', { territoryId, type })
+        }
+        onRepairCore={(territoryId) => EventBus.emit('repair-territory-core', territoryId)}
+        onTestDestroyCore={(territoryId) =>
+          EventBus.emit('damage-territory-core', { territoryId, damage: 9999 })
+        }
       />
     </div>
   );

@@ -1,10 +1,19 @@
-import { Inventory, PlayerColor } from '../types/game';
+import {
+  ConstructedBuilding,
+  Inventory,
+  PlayerColor,
+  VillageTier,
+} from '../types/game';
+import { getInitialConstructedBuildings, VILLAGE_TIER_CONFIGS } from '../game/constants';
 
 const STORAGE_KEYS = {
   PROFILE: 'tiny_isles_profile',
   PLAYER_ID: 'tiny_isles_player_id',
   INVENTORY: 'tiny_isles_inventory',
   UNLOCKED_ISLANDS: 'tiny_isles_unlocked_islands',
+  VILLAGE_TIERS: 'tiny_isles_village_tiers',
+  CONSTRUCTED_BUILDINGS: 'tiny_isles_constructed_buildings',
+  CORE_HPS: 'tiny_isles_core_hps',
   ZOOM: 'tiny_isles_zoom',
 } as const;
 
@@ -15,9 +24,9 @@ export interface SavedProfile {
 }
 
 const DEFAULT_INVENTORY: Inventory = {
-  wood: 5,
-  stone: 2,
-  gold: 0,
+  wood: 30,
+  stone: 20,
+  gold: 10,
 };
 
 export const storage = {
@@ -33,9 +42,8 @@ export const storage = {
     } catch (e) {
       console.warn('Failed to load profile from localStorage:', e);
     }
-    // 기본값 생성
     const defaultProfile: SavedProfile = {
-      name: '모험가_' + Math.floor(100 + Math.random() * 900),
+      name: '수호자_' + Math.floor(100 + Math.random() * 900),
       color: Math.random() > 0.5 ? 'blue' : 'red',
     };
     storage.saveProfile(defaultProfile);
@@ -83,20 +91,96 @@ export const storage = {
       if (data) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.includes(0) ? parsed : [0, ...parsed];
         }
       }
     } catch (e) {
       console.warn('Failed to load unlocked islands from localStorage:', e);
     }
-    return [0]; // 시작의 섬(0번)은 기본 해금
+    return [0]; // 중심 마을(0번)은 기본 점령 상태
   },
 
   saveUnlockedIslands: (islandIds: number[]): void => {
     try {
-      localStorage.setItem(STORAGE_KEYS.UNLOCKED_ISLANDS, JSON.stringify(islandIds));
+      const normalized = islandIds.includes(0) ? islandIds : [0, ...islandIds];
+      localStorage.setItem(STORAGE_KEYS.UNLOCKED_ISLANDS, JSON.stringify(normalized));
     } catch (e) {
       console.warn('Failed to save unlocked islands to localStorage:', e);
+    }
+  },
+
+  loadVillageTiers: (): Record<number, VillageTier> => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.VILLAGE_TIERS);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed && typeof parsed === 'object') {
+          // 중심 마을(0번)은 처음부터 중소마을(Lv.2) 이상 보장
+          if (!parsed[0] || parsed[0] < 2) {
+            parsed[0] = 2;
+          }
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load village tiers:', e);
+    }
+    return { 0: 2 };
+  },
+
+  saveVillageTiers: (tiers: Record<number, VillageTier>): void => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.VILLAGE_TIERS, JSON.stringify(tiers));
+    } catch (e) {
+      console.warn('Failed to save village tiers:', e);
+    }
+  },
+
+  loadConstructedBuildings: (): ConstructedBuilding[] => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load constructed buildings:', e);
+    }
+    const initial = getInitialConstructedBuildings();
+    storage.saveConstructedBuildings(initial);
+    return initial;
+  },
+
+  saveConstructedBuildings: (buildings: ConstructedBuilding[]): void => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS, JSON.stringify(buildings));
+    } catch (e) {
+      console.warn('Failed to save constructed buildings:', e);
+    }
+  },
+
+  loadCoreHps: (): Record<number, number> => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.CORE_HPS);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load core HPs:', e);
+    }
+    return { 0: VILLAGE_TIER_CONFIGS[2].coreMaxHp };
+  },
+
+  saveCoreHps: (coreHps: Record<number, number>): void => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.CORE_HPS, JSON.stringify(coreHps));
+    } catch (e) {
+      console.warn('Failed to save core HPs:', e);
     }
   },
 
@@ -142,6 +226,9 @@ export const storage = {
       localStorage.removeItem(STORAGE_KEYS.PLAYER_ID);
       localStorage.removeItem(STORAGE_KEYS.INVENTORY);
       localStorage.removeItem(STORAGE_KEYS.UNLOCKED_ISLANDS);
+      localStorage.removeItem(STORAGE_KEYS.VILLAGE_TIERS);
+      localStorage.removeItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
+      localStorage.removeItem(STORAGE_KEYS.CORE_HPS);
       localStorage.removeItem(STORAGE_KEYS.ZOOM);
     } catch (e) {
       console.warn('Failed to reset storage:', e);

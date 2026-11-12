@@ -51,6 +51,35 @@ export class PreloadScene extends Phaser.Scene {
       frameHeight: 192,
     });
 
+    // Monster & Boss Spritesheets
+    this.load.spritesheet('enemyBlackWarriorRun', '/assets/units/enemies/Black_Warrior_Run.png', {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+    this.load.spritesheet('enemyBlackWarriorAttack', '/assets/units/enemies/Black_Warrior_Attack.png', {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+    this.load.spritesheet('enemyPurpleWarriorRun', '/assets/units/enemies/Purple_Warrior_Run.png', {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+    this.load.spritesheet('enemyPurpleWarriorAttack', '/assets/units/enemies/Purple_Warrior_Attack.png', {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+    this.load.spritesheet('enemyArcherRun', '/assets/units/enemies/Black_Archer_Run.png', {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+
+    // Projectiles & FX
+    this.load.image('arrowProj', '/assets/fx/Arrow.png');
+    this.load.spritesheet('explosionFx', '/assets/fx/Explosion_01.png', {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+
     // Entity Spritesheets
     this.load.spritesheet('tree', '/assets/decorations/Tree1.png', {
       frameWidth: 192,
@@ -93,7 +122,7 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('cloud1', '/assets/decorations/Clouds_01.png');
     this.load.image('cloud2', '/assets/decorations/Clouds_02.png');
 
-    // UI Elements from GIF sample
+    // UI Elements
     this.load.image('cursorTarget', '/assets/ui/Cursors/Cursor_04.png');
   }
 
@@ -135,6 +164,56 @@ export class PreloadScene extends Phaser.Scene {
         repeat: 0,
       });
     });
+
+    // Enemy Monster Animations
+    if (this.textures.exists('enemyBlackWarriorRun')) {
+      this.anims.create({
+        key: 'monster_zombie_run',
+        frames: this.anims.generateFrameNumbers('enemyBlackWarriorRun', { start: 0, end: 5 }),
+        frameRate: 7,
+        repeat: -1,
+      });
+    }
+    if (this.textures.exists('enemyBlackWarriorAttack')) {
+      this.anims.create({
+        key: 'monster_zombie_attack',
+        frames: this.anims.generateFrameNumbers('enemyBlackWarriorAttack', { start: 0, end: 3 }),
+        frameRate: 10,
+        repeat: 0,
+      });
+    }
+    if (this.textures.exists('enemyArcherRun')) {
+      this.anims.create({
+        key: 'monster_skeleton_run',
+        frames: this.anims.generateFrameNumbers('enemyArcherRun', { start: 0, end: 3 }),
+        frameRate: 9,
+        repeat: -1,
+      });
+    }
+    if (this.textures.exists('enemyPurpleWarriorRun')) {
+      this.anims.create({
+        key: 'monster_boss_run',
+        frames: this.anims.generateFrameNumbers('enemyPurpleWarriorRun', { start: 0, end: 5 }),
+        frameRate: 6,
+        repeat: -1,
+      });
+    }
+    if (this.textures.exists('enemyPurpleWarriorAttack')) {
+      this.anims.create({
+        key: 'monster_boss_attack',
+        frames: this.anims.generateFrameNumbers('enemyPurpleWarriorAttack', { start: 0, end: 3 }),
+        frameRate: 9,
+        repeat: 0,
+      });
+    }
+    if (this.textures.exists('explosionFx')) {
+      this.anims.create({
+        key: 'explosion_anim',
+        frames: this.anims.generateFrameNumbers('explosionFx', { start: 0, end: 7 }),
+        frameRate: 16,
+        repeat: 0,
+      });
+    }
 
     // Trees
     if (this.textures.exists('tree')) {

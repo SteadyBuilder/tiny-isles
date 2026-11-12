@@ -2,7 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { createPhaserConfig } from './phaser/config';
 import { EventBus } from './phaser/EventBus';
-import { Inventory, Island, PlayerColor } from '../types/game';
+import {
+  ConstructedBuilding,
+  Inventory,
+  Island,
+  PlayerColor,
+  WaveState,
+} from '../types/game';
 
 interface PhaserGameProps {
   playerName: string;
@@ -13,6 +19,11 @@ interface PhaserGameProps {
   setOnlineCount: (count: number) => void;
   onUnlockedCountChange?: (count: number, total: number) => void;
   onUnlockedIslandIdsChange?: (ids: number[]) => void;
+  onTerritoriesChange?: (territories: Island[]) => void;
+  onConstructedBuildingsChange?: (buildings: ConstructedBuilding[]) => void;
+  onWaveStateChange?: (waveState: WaveState) => void;
+  onOpenVillageModal?: (territoryId: number) => void;
+  onGameAlert?: (msg: string) => void;
   joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
   onNearIslandChange?: (island: Island | null) => void;
   onPlayerPositionChange?: (pos: { gridX: number; gridY: number }) => void;
@@ -29,6 +40,11 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   setOnlineCount,
   onUnlockedCountChange,
   onUnlockedIslandIdsChange,
+  onTerritoriesChange,
+  onConstructedBuildingsChange,
+  onWaveStateChange,
+  onOpenVillageModal,
+  onGameAlert,
   joystickRef,
   onNearIslandChange,
   onPlayerPositionChange,
@@ -40,7 +56,6 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   const [loading, setLoading] = useState(true);
   const [loadRatio, setLoadRatio] = useState(0);
 
-  // Refs for callbacks to prevent stale closures
   const onUpdateInventoryRef = useRef(onUpdateInventory);
   onUpdateInventoryRef.current = onUpdateInventory;
 
@@ -49,6 +64,21 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
   const onUnlockedIslandIdsChangeRef = useRef(onUnlockedIslandIdsChange);
   onUnlockedIslandIdsChangeRef.current = onUnlockedIslandIdsChange;
+
+  const onTerritoriesChangeRef = useRef(onTerritoriesChange);
+  onTerritoriesChangeRef.current = onTerritoriesChange;
+
+  const onConstructedBuildingsChangeRef = useRef(onConstructedBuildingsChange);
+  onConstructedBuildingsChangeRef.current = onConstructedBuildingsChange;
+
+  const onWaveStateChangeRef = useRef(onWaveStateChange);
+  onWaveStateChangeRef.current = onWaveStateChange;
+
+  const onOpenVillageModalRef = useRef(onOpenVillageModal);
+  onOpenVillageModalRef.current = onOpenVillageModal;
+
+  const onGameAlertRef = useRef(onGameAlert);
+  onGameAlertRef.current = onGameAlert;
 
   const onNearIslandChangeRef = useRef(onNearIslandChange);
   onNearIslandChangeRef.current = onNearIslandChange;
@@ -62,7 +92,6 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   const setOnlineCountRef = useRef(setOnlineCount);
   setOnlineCountRef.current = setOnlineCount;
 
-  // Initialize Phaser Game instance
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -75,7 +104,6 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     const game = new Phaser.Game(config);
     gameRef.current = game;
 
-    // Listeners from Phaser
     const handleProgress = (val: number) => setLoadRatio(val);
     const handleComplete = () => setLoading(false);
 
@@ -86,6 +114,26 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     const handleUnlockedIslands = (ids: number[], total: number) => {
       onUnlockedIslandIdsChangeRef.current?.(ids);
       onUnlockedCountChangeRef.current?.(ids.length, total);
+    };
+
+    const handleTerritoriesUpdated = (territories: Island[]) => {
+      onTerritoriesChangeRef.current?.(territories);
+    };
+
+    const handleConstructedBuildingsUpdated = (buildings: ConstructedBuilding[]) => {
+      onConstructedBuildingsChangeRef.current?.(buildings);
+    };
+
+    const handleWaveStateUpdated = (waveState: WaveState) => {
+      onWaveStateChangeRef.current?.(waveState);
+    };
+
+    const handleOpenVillageModal = (territoryId: number) => {
+      onOpenVillageModalRef.current?.(territoryId);
+    };
+
+    const handleGameAlert = (msg: string) => {
+      onGameAlertRef.current?.(msg);
     };
 
     const handleNearIsland = (island: Island | null) => {
@@ -108,6 +156,11 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     EventBus.on('load-complete', handleComplete);
     EventBus.on('inventory-updated', handleInventoryUpdated);
     EventBus.on('unlocked-islands', handleUnlockedIslands);
+    EventBus.on('territories-updated', handleTerritoriesUpdated);
+    EventBus.on('constructed-buildings-updated', handleConstructedBuildingsUpdated);
+    EventBus.on('wave-state-updated', handleWaveStateUpdated);
+    EventBus.on('open-village-modal', handleOpenVillageModal);
+    EventBus.on('game-alert', handleGameAlert);
     EventBus.on('near-island-changed', handleNearIsland);
     EventBus.on('player-grid-pos-changed', handleGridPos);
     EventBus.on('zoom-changed', handleZoomChanged);
@@ -118,6 +171,11 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       EventBus.off('load-complete', handleComplete);
       EventBus.off('inventory-updated', handleInventoryUpdated);
       EventBus.off('unlocked-islands', handleUnlockedIslands);
+      EventBus.off('territories-updated', handleTerritoriesUpdated);
+      EventBus.off('constructed-buildings-updated', handleConstructedBuildingsUpdated);
+      EventBus.off('wave-state-updated', handleWaveStateUpdated);
+      EventBus.off('open-village-modal', handleOpenVillageModal);
+      EventBus.off('game-alert', handleGameAlert);
       EventBus.off('near-island-changed', handleNearIsland);
       EventBus.off('player-grid-pos-changed', handleGridPos);
       EventBus.off('zoom-changed', handleZoomChanged);
@@ -128,22 +186,18 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     };
   }, []);
 
-  // Update profile changes
   useEffect(() => {
     EventBus.emit('set-player-profile', { name: playerName, color: playerColor });
   }, [playerName, playerColor]);
 
-  // Update zoom
   useEffect(() => {
     EventBus.emit('set-zoom', zoom);
   }, [zoom]);
 
-  // Update inventory cache into Phaser
   useEffect(() => {
     EventBus.emit('set-inventory', inventory);
   }, [inventory]);
 
-  // Virtual Joystick Polling Loop (Sync to Phaser without React re-renders)
   useEffect(() => {
     let animId: number;
     const pollJoystick = () => {
@@ -159,7 +213,6 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     };
   }, [joystickRef]);
 
-  // Mobile Pinch-to-Zoom Gesture handler on the container
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -212,12 +265,11 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
   return (
     <div className="relative w-full h-full">
-      {/* Loading Overlay */}
       {loading && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 text-white">
           <div className="text-xl font-bold mb-3 flex items-center gap-2">
             <span className="animate-spin text-emerald-400">⚡</span>
-            <span>Phaser 3 월드 로딩 중...</span>
+            <span>실시간 마을 타워디펜스 월드 로딩 중...</span>
           </div>
           <div className="w-64 h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
             <div
@@ -229,7 +281,6 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         </div>
       )}
 
-      {/* Phaser Canvas Container */}
       <div
         ref={containerRef}
         id="phaser-game-container"
