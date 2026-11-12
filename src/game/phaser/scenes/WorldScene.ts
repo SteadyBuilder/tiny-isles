@@ -28,7 +28,6 @@ interface RemotePlayerVisual {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
   nameTag: Phaser.GameObjects.Text;
-  shadow: Phaser.GameObjects.Graphics;
   data: Player;
 }
 
@@ -36,14 +35,12 @@ interface EntityVisual {
   entity: Entity;
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
-  shadow: Phaser.GameObjects.Graphics;
   hpBar?: Phaser.GameObjects.Graphics;
 }
 
 export class WorldScene extends Phaser.Scene {
   // Player
   private playerSprite!: Phaser.Physics.Arcade.Sprite;
-  private playerShadow!: Phaser.GameObjects.Graphics;
   private playerNameTag!: Phaser.GameObjects.Text;
   private playerIndicator!: Phaser.GameObjects.Text;
   private playerColor: PlayerColor = 'blue';
@@ -65,7 +62,7 @@ export class WorldScene extends Phaser.Scene {
   // Graphics Layers
   private terrainGraphics!: Phaser.GameObjects.Graphics;
   private altarCardsContainer!: Phaser.GameObjects.Container;
-  private clouds: { shadow: Phaser.GameObjects.Graphics; sprite: Phaser.GameObjects.Image; speed: number }[] = [];
+  private clouds: { sprite: Phaser.GameObjects.Image; speed: number }[] = [];
 
   // Core Visuals
   private coreContainer!: Phaser.GameObjects.Container;
@@ -323,12 +320,6 @@ export class WorldScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
 
-    // Shadow
-    const shadow = this.add.graphics();
-    shadow.fillStyle(0x000000, 0.22);
-    shadow.fillEllipse(0, 10, 24, 8);
-    this.coreContainer.add(shadow);
-
     // Floating Magical Diamond Crystal
     const points = [
       { x: 0, y: -22 },
@@ -399,46 +390,6 @@ export class WorldScene extends Phaser.Scene {
       else if (b.type === 'barracks' || b.type === 'archery') bDepth = b.y + 230;
       container.setDepth(bDepth);
 
-      // Shadow
-      const shadow = this.add.graphics();
-      shadow.fillStyle(0x000000, 0.22);
-      let shadowY = b.height - 20;
-      let shadowW = b.width * 0.75;
-      let shadowH = 20;
-
-      if (b.type === 'castle') {
-        shadowY = 248;
-        shadowW = 260;
-        shadowH = 22;
-      } else if (b.type === 'house1') {
-        shadowY = 172;
-        shadowW = 88;
-        shadowH = 16;
-      } else if (b.type === 'house2') {
-        shadowY = 177;
-        shadowW = 92;
-        shadowH = 16;
-      } else if (b.type === 'house3') {
-        shadowY = 174;
-        shadowW = 90;
-        shadowH = 16;
-      } else if (b.type === 'tower') {
-        shadowY = 228;
-        shadowW = 76;
-        shadowH = 18;
-      } else if (b.type === 'barracks' || b.type === 'archery') {
-        shadowY = 230;
-        shadowW = 140;
-        shadowH = 20;
-      } else if (b.type === 'monastery') {
-        shadowY = 290;
-        shadowW = 180;
-        shadowH = 22;
-      }
-
-      shadow.fillEllipse(b.width / 2, shadowY, shadowW, shadowH);
-      container.add(shadow);
-
       // Building Image
       const img = this.add.image(0, 0, b.type).setOrigin(0, 0);
       img.setDisplaySize(b.width, b.height);
@@ -500,10 +451,6 @@ export class WorldScene extends Phaser.Scene {
     if (ent.type === 'rock' || ent.type === 'gold_rock') entDepth = ent.y + 20;
     container.setDepth(entDepth);
 
-    // Shadow
-    const shadow = this.add.graphics();
-    container.add(shadow);
-
     let sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
 
     if (ent.type === 'tree') {
@@ -511,16 +458,9 @@ export class WorldScene extends Phaser.Scene {
       const key = isTree3 ? 'tree3' : 'tree';
       const animKey = isTree3 ? 'tree3_anim' : 'tree_anim';
       const drawH = isTree3 ? 160 : 200;
-      const groundY = 26;
-      const trunkOriginY = isTree3 ? 170 / 192 : 241 / 256;
 
-      // Tree shadow: 접지선 바로 밑 아담한 타원
-      shadow.fillStyle(0x000000, 0.22);
-      shadow.fillEllipse(16, groundY, 42, 12);
-
-      const treeSprite = this.add.sprite(16, groundY, key);
+      const treeSprite = this.add.sprite(16, 40 - drawH / 2, key);
       treeSprite.setDisplaySize(160, drawH);
-      treeSprite.setOrigin(0.5, trunkOriginY);
       if (this.anims.exists(animKey)) {
         treeSprite.play(animKey);
       }
@@ -528,48 +468,25 @@ export class WorldScene extends Phaser.Scene {
     } else if (ent.type === 'rock') {
       const isRock2 = ent.id.includes('2');
       const rockKey = isRock2 ? 'rock2' : 'rock1';
-      const groundY = 26;
-      const rockOriginY = isRock2 ? 53 / 64 : 51 / 64;
 
-      // Rock shadow: 바위 바닥에 딱 맞는 그림자
-      shadow.fillStyle(0x000000, 0.22);
-      shadow.fillEllipse(32, groundY, isRock2 ? 38 : 28, 9);
-
-      const rockImg = this.add.image(32, groundY, rockKey);
+      const rockImg = this.add.image(32, 16, rockKey);
       rockImg.setDisplaySize(64, 64);
-      rockImg.setOrigin(0.5, rockOriginY);
       sprite = rockImg;
     } else if (ent.type === 'gold_rock') {
-      const groundY = 26;
-      const rockOriginY = 53 / 64;
-
-      shadow.fillStyle(0x000000, 0.22);
-      shadow.fillEllipse(32, groundY, 40, 10);
-
       if (this.textures.exists('goldResource')) {
-        const goldImg = this.add.image(32, groundY, 'goldResource');
+        const goldImg = this.add.image(32, 12, 'goldResource');
         goldImg.setDisplaySize(72, 72);
-        goldImg.setOrigin(0.5, 0.76);
         sprite = goldImg;
       } else {
-        const rockImg = this.add.image(32, groundY, 'rock2');
+        const rockImg = this.add.image(32, 16, 'rock2');
         rockImg.setDisplaySize(64, 64);
-        rockImg.setOrigin(0.5, rockOriginY);
         rockImg.setTint(0xffd700);
         sprite = rockImg;
       }
     } else {
-      // Sheep (128x128 frame, bbox: 41, 40, 86, 84 -> actual foot is at y=84)
-      const groundY = 26;
-      const sheepOriginY = 84 / 128; // 0.65625
-
-      // Sheep shadow: 양 발 바로 아래 꼭 맞는 크기
-      shadow.fillStyle(0x000000, 0.24);
-      shadow.fillEllipse(32, groundY, 26, 8);
-
-      const sheepSprite = this.add.sprite(32, groundY, 'sheep');
+      // Sheep
+      const sheepSprite = this.add.sprite(32, 24, 'sheep');
       sheepSprite.setDisplaySize(96, 96);
-      sheepSprite.setOrigin(0.5, sheepOriginY);
       if (this.anims.exists('sheep_anim')) {
         sheepSprite.play('sheep_anim');
       }
@@ -586,7 +503,6 @@ export class WorldScene extends Phaser.Scene {
       entity: ent,
       container,
       sprite,
-      shadow,
       hpBar,
     });
 
@@ -615,12 +531,6 @@ export class WorldScene extends Phaser.Scene {
   private createPlayer() {
     const startX = 320;
     const startY = 420;
-
-    // Ground Shadow (Foot is at py + 25)
-    this.playerShadow = this.add.graphics();
-    this.playerShadow.fillStyle(0x000000, 0.25);
-    this.playerShadow.fillEllipse(0, 0, 28, 9);
-    this.playerShadow.setPosition(startX, startY + 25);
 
     // Arcade Physics Sprite directly in world!
     this.playerSprite = this.physics.add.sprite(startX, startY, `${this.playerColor}PawnIdle`);
@@ -669,17 +579,13 @@ export class WorldScene extends Phaser.Scene {
     ];
 
     for (const c of cloudConfigs) {
-      // Ground shadow: depth -10 so it casts on the ground, below entities/players
-      const shadow = this.add.graphics();
-      shadow.setDepth(-10);
-
-      // Sky cloud: depth 2000 so it floats in the sky above everything
+      // Sky cloud: depth 2000 so it floats smoothly above the world
       const sprite = this.add.image(c.x, c.y, c.type);
       sprite.setScale(c.scale);
       sprite.setAlpha(0.65);
       sprite.setDepth(2000);
 
-      this.clouds.push({ shadow, sprite, speed: c.speed });
+      this.clouds.push({ sprite, speed: c.speed });
     }
   }
 
@@ -888,7 +794,6 @@ export class WorldScene extends Phaser.Scene {
     const px = this.playerSprite.x;
     const py = this.playerSprite.y;
     this.playerSprite.setDepth(py + 24);
-    this.playerShadow.setPosition(px, py + 25).setDepth(py + 20);
     this.playerNameTag.setPosition(px, py - 42).setDepth(py + 30);
     this.playerIndicator.setPosition(px, py - 54).setDepth(py + 30);
 
@@ -913,14 +818,6 @@ export class WorldScene extends Phaser.Scene {
         c.sprite.x = -2200;
         c.sprite.y = -800 + Math.random() * 2400;
       }
-      c.shadow.clear();
-      c.shadow.fillStyle(0x000000, 0.12);
-      c.shadow.fillEllipse(
-        c.sprite.x,
-        c.sprite.y + 120,
-        c.sprite.displayWidth / 2.2,
-        c.sprite.displayHeight / 3
-      );
     }
 
     // Throttle Multiplayer Position Broadcast (60ms)
@@ -1201,11 +1098,6 @@ export class WorldScene extends Phaser.Scene {
     if (!visual) {
       const container = this.add.container(data.x, data.y);
 
-      const shadow = this.add.graphics();
-      shadow.fillStyle(0x000000, 0.25);
-      shadow.fillEllipse(0, 25, 28, 9);
-      container.add(shadow);
-
       const sprite = this.add.sprite(0, 0, `${data.color}PawnIdle`);
       sprite.setDisplaySize(128, 128);
       container.add(sprite);
@@ -1220,7 +1112,7 @@ export class WorldScene extends Phaser.Scene {
       }).setOrigin(0.5);
       container.add(nameTag);
 
-      visual = { container, sprite, nameTag, shadow, data };
+      visual = { container, sprite, nameTag, data };
       this.remotePlayers.set(data.id, visual);
     }
 
