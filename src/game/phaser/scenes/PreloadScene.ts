@@ -117,6 +117,8 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('woodPalisadeH', '/assets/buildings/Wood_Palisade_H.png');
     this.load.image('woodPalisadeV', '/assets/buildings/Wood_Palisade_V.png');
     this.load.image('woodPalisadeGate', '/assets/buildings/Wood_Palisade_Gate.png');
+    this.load.image('woodPalisadeGateV', '/assets/buildings/Wood_Palisade_Gate_V.png');
+    this.load.image('woodPalisadeCorner', '/assets/buildings/Wood_Palisade_Corner.png');
 
     // Terrain & Environment
     this.load.image('grassSeamless', '/assets/terrain/Grass_Seamless.png');

@@ -708,31 +708,55 @@ export class WorldScene extends Phaser.Scene {
       if (isWood) {
         // Tiny Swords 나무 목책 (Palisade) 스프라이트 렌더링
         if (isHorizontal) {
-          // 좌우 수평 방책 (좌측 날개 + 중앙 목책 관문 + 우측 날개)
-          const leftWing = this.add.image(-135, 0, 'woodPalisadeH');
-          leftWing.setDisplaySize(170, 56);
+          // [북쪽 / 남쪽 외곽 방책선] - 마을 외곽을 완벽하게 감싸도록 양 모서리(-268, +268)까지 연장
+          // 중앙 수평 게이트 (가로 통로용 문, 폭 100px)
+          const gate = this.add.image(0, 0, 'woodPalisadeGate');
+          gate.setDisplaySize(100, 56);
+          container.add(gate);
+
+          // 좌측 수평 방책 날개 (x: -268 ~ -50 -> 중심: -159, 너비: 218)
+          const leftWing = this.add.image(-159, 0, 'woodPalisadeH');
+          leftWing.setDisplaySize(218, 56);
           container.add(leftWing);
 
-          const rightWing = this.add.image(135, 0, 'woodPalisadeH');
-          rightWing.setDisplaySize(170, 56);
+          // 우측 수평 방책 날개 (x: +50 ~ +268 -> 중심: +159, 너비: 218)
+          const rightWing = this.add.image(159, 0, 'woodPalisadeH');
+          rightWing.setDisplaySize(218, 56);
           container.add(rightWing);
 
-          const gate = this.add.image(0, 0, 'woodPalisadeGate');
-          gate.setDisplaySize(100, 50);
-          container.add(gate);
+          // 좌/우 모서리 연결 코너 기둥 (모서리 빈틈 완벽 밀폐)
+          const leftCorner = this.add.image(-268, 0, 'woodPalisadeCorner');
+          leftCorner.setDisplaySize(56, 56);
+          container.add(leftCorner);
+
+          const rightCorner = this.add.image(268, 0, 'woodPalisadeCorner');
+          rightCorner.setDisplaySize(56, 56);
+          container.add(rightCorner);
         } else if (cb.slotIndex === 2 || cb.slotIndex === 3) {
-          // 상하 수직 방책 (상단 날개 + 중앙 기둥 초소 + 하단 날개)
-          const topWing = this.add.image(0, -135, 'woodPalisadeV');
-          topWing.setDisplaySize(56, 170);
+          // [동쪽 / 서쪽 외곽 방책선] - 상단(-298)부터 하단(+238)까지 외곽을 완전히 둘러쌈
+          // 요구사항 (2): 왼쪽, 오른쪽의 문은 세로로 배치!
+          const gate = this.add.image(0, 0, 'woodPalisadeGateV');
+          gate.setDisplaySize(56, 100);
+          container.add(gate);
+
+          // 상단 수직 방책 날개 (y: -298 ~ -50 -> 중심: -174, 높이: 248)
+          const topWing = this.add.image(0, -174, 'woodPalisadeV');
+          topWing.setDisplaySize(56, 248);
           container.add(topWing);
 
-          const bottomWing = this.add.image(0, 135, 'woodPalisadeV');
-          bottomWing.setDisplaySize(56, 170);
+          // 하단 수직 방책 날개 (y: +50 ~ +238 -> 중심: +144, 높이: 188)
+          const bottomWing = this.add.image(0, 144, 'woodPalisadeV');
+          bottomWing.setDisplaySize(56, 188);
           container.add(bottomWing);
 
-          const centerPost = this.add.image(0, 0, 'woodPalisade');
-          centerPost.setDisplaySize(80, 80);
-          container.add(centerPost);
+          // 상/하 모서리 연결 코너 기둥 (모서리 빈틈 완벽 밀폐)
+          const topCorner = this.add.image(0, -298, 'woodPalisadeCorner');
+          topCorner.setDisplaySize(56, 56);
+          container.add(topCorner);
+
+          const bottomCorner = this.add.image(0, 238, 'woodPalisadeCorner');
+          bottomCorner.setDisplaySize(56, 56);
+          container.add(bottomCorner);
         } else {
           // 내부 슬롯에 지어진 단일 방책 요새
           const palisade = this.add.image(0, -10, 'woodPalisade');
@@ -749,17 +773,17 @@ export class WorldScene extends Phaser.Scene {
           // 좌우로 뻗은 성벽 (중앙 통로 게이트 표현 + 양 날개 방책)
           wallGraphics.fillStyle(mainColor, 0.92);
           wallGraphics.lineStyle(2.5, borderColor, 0.95);
-          wallGraphics.fillRoundedRect(-220, -14, 170, 28, 6);
-          wallGraphics.strokeRoundedRect(-220, -14, 170, 28, 6);
-          wallGraphics.fillRoundedRect(50, -14, 170, 28, 6);
-          wallGraphics.strokeRoundedRect(50, -14, 170, 28, 6);
+          wallGraphics.fillRoundedRect(-268, -14, 218, 28, 6);
+          wallGraphics.strokeRoundedRect(-268, -14, 218, 28, 6);
+          wallGraphics.fillRoundedRect(50, -14, 218, 28, 6);
+          wallGraphics.strokeRoundedRect(50, -14, 218, 28, 6);
 
           // 중앙 성문 바리케이드
           wallGraphics.fillStyle(0x475569, 0.85);
           wallGraphics.fillRoundedRect(-50, -10, 100, 20, 4);
           wallGraphics.strokeRoundedRect(-50, -10, 100, 20, 4);
 
-          for (let px = -205; px <= 205; px += 24) {
+          for (let px = -250; px <= 250; px += 24) {
             wallGraphics.fillStyle(0x94a3b8, 1);
             wallGraphics.fillCircle(px, 0, 5);
           }
@@ -767,16 +791,16 @@ export class WorldScene extends Phaser.Scene {
           // 상하로 뻗은 성벽
           wallGraphics.fillStyle(mainColor, 0.92);
           wallGraphics.lineStyle(2.5, borderColor, 0.95);
-          wallGraphics.fillRoundedRect(-14, -220, 28, 170, 6);
-          wallGraphics.strokeRoundedRect(-14, -220, 28, 170, 6);
-          wallGraphics.fillRoundedRect(-14, 50, 28, 170, 6);
-          wallGraphics.strokeRoundedRect(-14, 50, 28, 170, 6);
+          wallGraphics.fillRoundedRect(-14, -298, 28, 248, 6);
+          wallGraphics.strokeRoundedRect(-14, -298, 28, 248, 6);
+          wallGraphics.fillRoundedRect(-14, 50, 28, 188, 6);
+          wallGraphics.strokeRoundedRect(-14, 50, 28, 188, 6);
 
           wallGraphics.fillStyle(0x475569, 0.85);
           wallGraphics.fillRoundedRect(-10, -50, 20, 100, 4);
           wallGraphics.strokeRoundedRect(-10, -50, 20, 100, 4);
 
-          for (let py = -205; py <= 205; py += 24) {
+          for (let py = -280; py <= 220; py += 24) {
             wallGraphics.fillStyle(0x94a3b8, 1);
             wallGraphics.fillCircle(0, py, 5);
           }
