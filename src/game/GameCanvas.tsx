@@ -65,6 +65,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const onPlayerPositionChangeRef = useRef(onPlayerPositionChange);
   onPlayerPositionChangeRef.current = onPlayerPositionChange;
 
+  const onUnlockedIslandIdsChangeRef = useRef(onUnlockedIslandIdsChange);
+  onUnlockedIslandIdsChangeRef.current = onUnlockedIslandIdsChange;
+
+  const onUnlockedCountChangeRef = useRef(onUnlockedCountChange);
+  onUnlockedCountChangeRef.current = onUnlockedCountChange;
+
+  const isSubscribedRef = useRef<boolean>(false);
+
   // Camera Zoom State
   const targetZoomRef = useRef<number>(zoom);
   const zoomRef = useRef<number>(zoom);
@@ -144,16 +152,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     });
   }, []);
 
-  // 서버 DB에서 해금된 섬 목록을 조회하여 로컬 월드와 동기화 (기존 해금 상태는 이펙트 없이 조용히 적용)
+  // 서버 DB에서 해금된 섬 목록을 조회하여 로컬 월드와 일괄 동기화
   useEffect(() => {
     let isMounted = true;
     serverSync.fetchUnlockedIslands().then((records) => {
       if (!isMounted || !records || records.length === 0) return;
+      let hasNewUnlocks = false;
       for (const rec of records) {
         const isl = islandsRef.current.find((i) => i.id === rec.island_id);
         if (isl && !isl.unlocked) {
-          unlockIslandLocally(rec.island_id, rec.unlocked_by || '동료 모험가', false, false);
+          isl.unlocked = true;
+          const newEntities = generateIslandEntities(isl.id, isl.gridX, isl.gridY);
+          entitiesRef.current.push(...newEntities);
+          hasNewUnlocks = true;
         }
+      }
+      if (hasNewUnlocks) {
+        const currentUnlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
+        storage.saveUnlockedIslands(currentUnlockedIds);
+        onUnlockedIslandIdsChangeRef.current?.(currentUnlockedIds);
+        onUnlockedCountChangeRef.current?.(currentUnlockedIds.length, islandsRef.current.length);
       }
     });
     return () => {
@@ -188,7 +206,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     localPlayerRef.current.name = playerName;
     localPlayerRef.current.color = playerColor;
 
-    if (channelRef.current) {
+    if (channelRef.current && isSubscribedRef.current) {
       channelRef.current.track({
         id: localPlayerRef.current.id,
         name: playerName,
@@ -240,31 +258,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         } else if (data.type === 'island_unlocked') {
           const { islandId, unlockedBy } = data.payload;
           unlockIslandLocally(islandId, unlockedBy, false);
-        } else if (data.type === 'sync_world_request') {
-          const unlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
-          localBus.postMessage({
-            type: 'sync_world_response',
-            senderId: myId,
-            payload: { unlockedIds },
-          });
-        } else if (data.type === 'sync_world_response') {
-          const { unlockedIds } = data.payload || {};
-          if (Array.isArray(unlockedIds)) {
-            for (const id of unlockedIds) {
-              const isl = islandsRef.current.find((i) => i.id === id);
-              if (isl && !isl.unlocked) {
-                unlockIslandLocally(id, '동료 모험가', false);
-              }
-            }
-          }
         }
       };
-
-      // 접속 시 같은 브라우저 탭들에 월드 상태 동기화 요청
-      localBus.postMessage({
-        type: 'sync_world_request',
-        senderId: myId,
-      });
     }
 
     // 2. Supabase Realtime Channel (Cross-device global multiplayer)
@@ -298,7 +293,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
       }
 
-      if (channelRef.current) {
+      if (channelRef.current && isSubscribedRef.current) {
         channelRef.current.send({
           type: 'broadcast',
           event: 'player_move',
@@ -307,13 +302,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     };
 
-    // Presence update helper: maintains accurate online player count and handles join/leave
+    // Presence update helper: maintains accurate online player count and updates metadata
     const updatePresenceState = () => {
       const state = channel.presenceState();
       const keys = Object.keys(state);
       setOnlineCount(Math.max(1, keys.length));
 
-      // Register or update basic presence metadata for any existing player
+      // Update basic presence metadata (name/color) for currently active remote players
       keys.forEach((key) => {
         if (key !== myId) {
           const presences = state[key] as unknown as { id?: string; name?: string; color?: PlayerColor }[];
@@ -321,18 +316,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const p = presences[presences.length - 1];
             const pId = p.id || key;
             const existing = remotePlayersRef.current.get(pId);
-            if (!existing) {
-              remotePlayersRef.current.set(pId, {
-                id: pId,
-                name: p.name || '모험가',
-                color: p.color || 'blue',
-                x: 256,
-                y: 256,
-                direction: 'right',
-                action: 'idle',
-                lastUpdated: Date.now(),
-              });
-            } else {
+            if (existing) {
               if (p.name) existing.name = p.name;
               if (p.color) existing.color = p.color;
             }
@@ -374,7 +358,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       })
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'unlocked_islands' },
+        { event: '*', schema: 'public', table: 'unlocked_islands' },
         (payload) => {
           const newRow = payload.new as any;
           if (newRow && typeof newRow.island_id === 'number') {
@@ -382,40 +366,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
       )
-      .on('broadcast', { event: 'sync_world_request' }, () => {
-        const unlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
-        channel.send({
-          type: 'broadcast',
-          event: 'sync_world_response',
-          payload: { unlockedIds },
-        });
-      })
-      .on('broadcast', { event: 'sync_world_response' }, ({ payload }) => {
-        const { unlockedIds } = payload || {};
-        if (Array.isArray(unlockedIds)) {
-          for (const id of unlockedIds) {
-            const isl = islandsRef.current.find((i) => i.id === id);
-            if (isl && !isl.unlocked) {
-              unlockIslandLocally(id, '동료 모험가', false);
-            }
-          }
-        }
-      })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({
-            id: myId,
-            name: localPlayerRef.current.name,
-            color: localPlayerRef.current.color,
-          });
+          isSubscribedRef.current = true;
+          try {
+            await channel.track({
+              id: myId,
+              name: localPlayerRef.current.name,
+              color: localPlayerRef.current.color,
+            });
+          } catch (e) {
+            console.warn('[Realtime] presence track error:', e);
+          }
           sendMoveBroadcast();
-
-          // 신규 접속 시 월드 상태 동기화 요청
-          channel.send({
-            type: 'broadcast',
-            event: 'sync_world_request',
-            payload: { requesterId: myId },
-          });
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          isSubscribedRef.current = false;
         }
       });
 
@@ -444,19 +409,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Cleanup inactive remote players (no update received for > 8s)
       const now = Date.now();
-      let changed = false;
       remotePlayersRef.current.forEach((remote, key) => {
         if (now - remote.lastUpdated > 8000) {
           remotePlayersRef.current.delete(key);
-          changed = true;
         }
       });
-      if (changed) {
-        updatePresenceState();
-      }
     }, 66);
 
     return () => {
+      isSubscribedRef.current = false;
       clearInterval(moveInterval);
       if (localBus) localBus.close();
       if (channelRef.current) {
@@ -585,7 +546,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
       }
       // 3. 다른 온라인 접속자 실시간 브로드캐스트
-      if (channelRef.current) {
+      if (channelRef.current && isSubscribedRef.current) {
         channelRef.current.send({
           type: 'broadcast',
           event: 'island_unlocked',
@@ -708,7 +669,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           },
         });
       }
-      if (channelRef.current) {
+      if (channelRef.current && isSubscribedRef.current) {
         channelRef.current.send({
           type: 'broadcast',
           event: 'entity_hit',

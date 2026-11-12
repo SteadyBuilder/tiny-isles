@@ -24,6 +24,17 @@ create policy "모든 사용자 섬 해금 등록 허용"
   on public.unlocked_islands for insert
   with check (true);
 
+-- 누구나 섬 해금 정보 갱신 허용 (upsert 충돌 방지)
+create policy "모든 사용자 섬 해금 갱신 허용"
+  on public.unlocked_islands for update
+  using (true)
+  with check (true);
+
+-- 누구나 섬 해금 정보 삭제 허용 (초기화 지원)
+create policy "모든 사용자 섬 해금 삭제 허용"
+  on public.unlocked_islands for delete
+  using (true);
+
 -- 2. 플레이어 정보 및 자원(인벤토리) 테이블 생성
 create table if not exists public.players (
   id text primary key,
@@ -53,6 +64,10 @@ create policy "모든 사용자 플레이어 정보 갱신 허용"
   on public.players for update
   using (true)
   with check (true);
+
+create policy "모든 사용자 플레이어 정보 삭제 허용"
+  on public.players for delete
+  using (true);
 
 -- 3. 시작의 섬(0번) 기본 행 추가
 insert into public.unlocked_islands (island_id, island_name, unlocked_by)

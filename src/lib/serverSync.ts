@@ -58,7 +58,7 @@ export const serverSync = {
           unlocked_by: unlockedBy || '익명의 모험가',
           unlocked_at: new Date().toISOString(),
         },
-        { onConflict: 'island_id' }
+        { onConflict: 'island_id', ignoreDuplicates: true }
       );
 
       if (error) {
@@ -105,50 +105,75 @@ export const serverSync = {
   /**
    * 플레이어 정보 및 자원을 서버 DB에 동기화합니다 (디바운스 지원).
    */
-  savePlayer: (() => {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingData: {
-      playerId: string;
-      profile: SavedProfile;
-      inventory: Inventory;
-    } | null = null;
+  savePlayer: (playerId: string, profile: SavedProfile, inventory: Inventory, immediate = false) => {
+    playerSyncManager.schedule(playerId, profile, inventory, immediate);
+  },
 
-    const doSync = async () => {
-      if (!pendingData) return;
-      const { playerId, profile, inventory } = pendingData;
-      pendingData = null;
+  /**
+   * 탭 종료 또는 즉각 저장이 필요할 때 대기 중인 동기화 데이터를 즉시 전송합니다.
+   */
+  flushPlayerSync: () => {
+    playerSyncManager.flush();
+  },
+};
 
-      try {
-        const { error } = await supabase.from('players').upsert(
-          {
-            id: playerId,
-            name: profile.name,
-            color: profile.color,
-            wood: inventory.wood,
-            stone: inventory.stone,
-            gold: inventory.gold,
-            last_active_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
+const playerSyncManager = (() => {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingData: {
+    playerId: string;
+    profile: SavedProfile;
+    inventory: Inventory;
+  } | null = null;
 
-        if (error && (error.code === '42P01' || error.message?.includes('Could not find the table'))) {
-          warnTableMissing('players', error.message);
-        }
-      } catch (e) {
-        console.warn('[serverSync] savePlayer exception:', e);
+  const doSync = async () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    if (!pendingData) return;
+    const { playerId, profile, inventory } = pendingData;
+    pendingData = null;
+
+    try {
+      const { error } = await supabase.from('players').upsert(
+        {
+          id: playerId,
+          name: profile.name,
+          color: profile.color,
+          wood: inventory.wood,
+          stone: inventory.stone,
+          gold: inventory.gold,
+          last_active_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+
+      if (error && (error.code === '42P01' || error.message?.includes('Could not find the table'))) {
+        warnTableMissing('players', error.message);
       }
-    };
+    } catch (e) {
+      console.warn('[serverSync] savePlayer exception:', e);
+    }
+  };
 
-    return (playerId: string, profile: SavedProfile, inventory: Inventory, immediate = false) => {
+  return {
+    schedule: (playerId: string, profile: SavedProfile, inventory: Inventory, immediate = false) => {
       pendingData = { playerId, profile, inventory };
-      if (debounceTimer) clearTimeout(debounceTimer);
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
 
       if (immediate) {
         doSync();
       } else {
         debounceTimer = setTimeout(doSync, 1500);
       }
-    };
-  })(),
-};
+    },
+    flush: () => {
+      if (pendingData) {
+        doSync();
+      }
+    },
+  };
+})();

@@ -60,6 +60,19 @@ export function App() {
     };
   }, []);
 
+  // 탭 닫기/새로고침 시 대기 중인 플레이어 자원/프로필 즉시 서버에 플러시
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      serverSync.flushPlayerSync();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, []);
+
   // Camera Zoom state (0.5x to 2.0x, with localStorage persistence)
   const [zoom, setZoom] = useState<number>(() => storage.loadZoom());
 
