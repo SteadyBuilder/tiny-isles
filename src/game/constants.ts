@@ -1,12 +1,24 @@
-import { Island, Entity } from '../types/game';
+import { Island, Entity, Building, TerritoryCore } from '../types/game';
 
 export const TILE_SIZE = 64;
-export const ISLAND_TILES = 8; // 8x8 tiles per island (512x512 px)
-export const ISLAND_PX = TILE_SIZE * ISLAND_TILES;
-export const ISLAND_GAP = 96; // Water gap between islands
+export const TERRITORY_TILES = 10; // 10x10 tiles per territory (640x640 px)
+export const ISLAND_TILES = TERRITORY_TILES;
+export const TERRITORY_PX = TILE_SIZE * TERRITORY_TILES; // 640px
+export const ISLAND_PX = TERRITORY_PX;
+export const TERRITORY_GAP = 0; // Contiguous plains grid
+export const ISLAND_GAP = TERRITORY_GAP;
+
+// Central Territory Core definition (Heart of the kingdom)
+export const CENTRAL_CORE: TerritoryCore = {
+  x: 320,
+  y: 350,
+  level: 1,
+  name: '영지 코어 (Territory Core)',
+  islandId: 0,
+};
 
 export const INITIAL_ISLANDS: Island[] = [
-  // 1. 시작 및 중앙 허브
+  // 1. 시작 및 중앙 허브 (중심 마을)
   {
     id: 0,
     gridX: 0,
@@ -15,7 +27,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 0,
     costGold: 0,
     unlocked: true,
-    name: '시작의 섬 (Home Isle)',
+    name: '중심 마을 (Capital Village & Core)',
   },
 
   // 2. 1차 확장 (기본 십자 방향)
@@ -27,7 +39,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 6,
     costGold: 0,
     unlocked: false,
-    name: '동쪽 삼림지대 (East Woods)',
+    name: '동쪽 벌목 평원 (East Woodland Plains)',
   },
   {
     id: 2,
@@ -37,7 +49,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 15,
     costGold: 0,
     unlocked: false,
-    name: '남쪽 채석장 (South Quarry)',
+    name: '남쪽 채석 평원 (South Quarry Plains)',
   },
   {
     id: 3,
@@ -47,7 +59,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 25,
     costGold: 5,
     unlocked: false,
-    name: '서쪽 황금섬 (West Gold Isle)',
+    name: '서쪽 황금 평원 (West Goldfields)',
   },
   {
     id: 4,
@@ -57,10 +69,10 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 40,
     costGold: 15,
     unlocked: false,
-    name: '북쪽 왕관섬 (Crown Sanctuary)',
+    name: '북쪽 수호탑 언덕 (North Citadel Hill)',
   },
 
-  // 3. 2차 확장 (대각선 인접 섬 - 3x3 중심부 완성)
+  // 3. 2차 확장 (대각선 인접 영지 - 3x3 중심부 완성)
   {
     id: 5,
     gridX: 1,
@@ -111,7 +123,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 35,
     costGold: 8,
     unlocked: false,
-    name: '극동의 거목림 (Far East Redwood)',
+    name: '극동의 거목림 평원 (Far East Redwood)',
   },
   {
     id: 10,
@@ -141,10 +153,10 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 55,
     costGold: 25,
     unlocked: false,
-    name: '천공의 별빛 제단 (Celestial Star Altar)',
+    name: '천공의 별빛 성소 (Celestial Star Altar)',
   },
 
-  // 5. 4차 확장 (외곽 군도 링)
+  // 5. 4차 확장 (외곽 군도/영지 링)
   {
     id: 13,
     gridX: 2,
@@ -153,7 +165,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 40,
     costGold: 12,
     unlocked: false,
-    name: '동남쪽 밀수꾼의 코브 (Smuggler Cove)',
+    name: '동남쪽 밀수꾼의 평원 (Smuggler Plain)',
   },
   {
     id: 14,
@@ -163,7 +175,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 50,
     costGold: 12,
     unlocked: false,
-    name: '남동 산호 암초섬 (Coral Reef Isle)',
+    name: '남동 호수 암초 평원 (Lake Reef Plain)',
   },
   {
     id: 15,
@@ -173,7 +185,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 48,
     costGold: 15,
     unlocked: false,
-    name: '남서 거북 바위섬 (Turtle Shell Isle)',
+    name: '남서 거북 언덕 (Turtle Hill Plain)',
   },
   {
     id: 16,
@@ -183,7 +195,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 55,
     costGold: 22,
     unlocked: false,
-    name: '남서 해적 요새 (Pirate Fortress)',
+    name: '남서 국경 요새 (Frontier Fortress)',
   },
   {
     id: 17,
@@ -193,7 +205,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 40,
     costGold: 18,
     unlocked: false,
-    name: '북동 바람개비 언덕 (Breeze Windmill Isle)',
+    name: '북동 바람개비 언덕 (Breeze Windmill Plain)',
   },
   {
     id: 18,
@@ -203,7 +215,7 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 50,
     costGold: 22,
     unlocked: false,
-    name: '북동 오로라 관측소 (Aurora Observatory)',
+    name: '북동 오로라 관측지 (Aurora Observatory)',
   },
   {
     id: 19,
@@ -223,22 +235,274 @@ export const INITIAL_ISLANDS: Island[] = [
     costStone: 60,
     costGold: 30,
     unlocked: false,
-    name: '서북 그림자 봉우리 (Shadow Peak Isle)',
+    name: '서북 그림자 봉우리 (Shadow Peak Plain)',
   },
 ];
 
 export function getIslandOrigin(gridX: number, gridY: number): { x: number; y: number } {
   return {
-    x: gridX * (ISLAND_PX + ISLAND_GAP),
-    y: gridY * (ISLAND_PX + ISLAND_GAP),
+    x: gridX * (TERRITORY_PX + TERRITORY_GAP),
+    y: gridY * (TERRITORY_PX + TERRITORY_GAP),
   };
+}
+
+export function generateTerritoryBuildings(islandId: number, gridX: number, gridY: number): Building[] {
+  const origin = getIslandOrigin(gridX, gridY);
+  const buildings: Building[] = [];
+
+  switch (islandId) {
+    case 0: // 중심 마을 (Capital Village): 본성 + 주민 가옥들 + 수호 망루
+      buildings.push({
+        id: 'b_0_castle',
+        type: 'castle',
+        name: '왕국 본성 (Kingdom Castle)',
+        x: origin.x + 160,
+        y: origin.y + 40,
+        width: 320,
+        height: 256,
+        islandId,
+      });
+      buildings.push({
+        id: 'b_0_house1',
+        type: 'house1',
+        name: '주민 가옥 1',
+        x: origin.x + 24,
+        y: origin.y + 220,
+        width: 128,
+        height: 192,
+        islandId,
+      });
+      buildings.push({
+        id: 'b_0_house2',
+        type: 'house2',
+        name: '주민 가옥 2',
+        x: origin.x + 24,
+        y: origin.y + 420,
+        width: 128,
+        height: 192,
+        islandId,
+      });
+      buildings.push({
+        id: 'b_0_tower',
+        type: 'tower',
+        name: '동쪽 수호 망루',
+        x: origin.x + 488,
+        y: origin.y + 180,
+        width: 128,
+        height: 256,
+        islandId,
+      });
+      break;
+
+    case 1: // 동쪽 벌목 평원 (East Woods)
+      buildings.push({
+        id: 'b_1_lumberjack',
+        type: 'house1',
+        name: '벌목꾼 오두막',
+        x: origin.x + 40,
+        y: origin.y + 60,
+        width: 128,
+        height: 192,
+        islandId,
+      });
+      buildings.push({
+        id: 'b_1_storage',
+        type: 'house2',
+        name: '목재 저장소',
+        x: origin.x + 40,
+        y: origin.y + 360,
+        width: 128,
+        height: 192,
+        islandId,
+      });
+      break;
+
+    case 2: // 남쪽 채석 평원 (South Quarry)
+      buildings.push({
+        id: 'b_2_stonemason',
+        type: 'house2',
+        name: '석공 작업장',
+        x: origin.x + 40,
+        y: origin.y + 60,
+        width: 128,
+        height: 192,
+        islandId,
+      });
+      buildings.push({
+        id: 'b_2_tower',
+        type: 'tower',
+        name: '채석장 감시탑',
+        x: origin.x + 460,
+        y: origin.y + 80,
+        width: 128,
+        height: 256,
+        islandId,
+      });
+      break;
+
+    case 3: // 서쪽 황금 평원 (West Goldfields)
+      buildings.push({
+        id: 'b_3_smelter',
+        type: 'barracks',
+        name: '황금 제련소',
+        x: origin.x + 160,
+        y: origin.y + 60,
+        width: 192,
+        height: 256,
+        islandId,
+      });
+      break;
+
+    case 4: // 북쪽 수호탑 언덕 (North Citadel Hill)
+      buildings.push({
+        id: 'b_4_archery',
+        type: 'archery',
+        name: '북방 궁수 훈련소',
+        x: origin.x + 60,
+        y: origin.y + 60,
+        width: 192,
+        height: 256,
+        islandId,
+      });
+      buildings.push({
+        id: 'b_4_tower',
+        type: 'tower',
+        name: '북방 수호 대탑',
+        x: origin.x + 460,
+        y: origin.y + 60,
+        width: 128,
+        height: 256,
+        islandId,
+      });
+      break;
+
+    case 5: // 남동쪽 풍요의 과수원 (Southeast Orchard)
+      buildings.push({
+        id: 'b_5_farm',
+        type: 'house3',
+        name: '과수원 농가',
+        x: origin.x + 60,
+        y: origin.y + 60,
+        width: 128,
+        height: 192,
+        islandId,
+      });
+      break;
+
+    case 6: // 남서쪽 흑요석 광산 (Southwest Obsidian Mine)
+      buildings.push({
+        id: 'b_6_mine_camp',
+        type: 'barracks',
+        name: '흑요석 광산 주둔지',
+        x: origin.x + 60,
+        y: origin.y + 60,
+        width: 192,
+        height: 256,
+        islandId,
+      });
+      break;
+
+    case 7: // 북동쪽 에메랄드 숲 (Northeast Emerald Grove)
+      buildings.push({
+        id: 'b_7_lodge',
+        type: 'archery',
+        name: '에메랄드 순찰대 산장',
+        x: origin.x + 60,
+        y: origin.y + 60,
+        width: 192,
+        height: 256,
+        islandId,
+      });
+      break;
+
+    case 8: // 북서쪽 고대 유적지 (Northwest Ancient Ruins)
+      buildings.push({
+        id: 'b_8_monastery',
+        type: 'monastery',
+        name: '고대 성소 유적',
+        x: origin.x + 140,
+        y: origin.y + 40,
+        width: 192,
+        height: 320,
+        islandId,
+      });
+      break;
+
+    case 16: // 남서 국경 요새
+      buildings.push({
+        id: 'b_16_fortress',
+        type: 'castle',
+        name: '국경 요새 사령부',
+        x: origin.x + 160,
+        y: origin.y + 40,
+        width: 320,
+        height: 256,
+        islandId,
+      });
+      break;
+
+    default:
+      if (islandId % 3 === 0) {
+        buildings.push({
+          id: `b_${islandId}_tower`,
+          type: 'tower',
+          name: '국경 수호탑',
+          x: origin.x + 460,
+          y: origin.y + 80,
+          width: 128,
+          height: 256,
+          islandId,
+        });
+      } else if (islandId % 3 === 1) {
+        buildings.push({
+          id: `b_${islandId}_house`,
+          type: 'house1',
+          name: '개척민 주택',
+          x: origin.x + 60,
+          y: origin.y + 80,
+          width: 128,
+          height: 192,
+          islandId,
+        });
+      }
+      break;
+  }
+
+  return buildings;
+}
+
+export interface CollisionBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function getBuildingCollisionBox(b: Building): CollisionBox {
+  switch (b.type) {
+    case 'castle':
+      // Solid walls on sides and back, leaving entrance step walkable
+      return { x: b.x + 24, y: b.y + 110, w: b.width - 48, h: 100 };
+    case 'house1':
+    case 'house2':
+    case 'house3':
+      return { x: b.x + 16, y: b.y + 80, w: b.width - 32, h: 90 };
+    case 'tower':
+      return { x: b.x + 24, y: b.y + 140, w: b.width - 48, h: 90 };
+    case 'barracks':
+    case 'archery':
+      return { x: b.x + 24, y: b.y + 120, w: b.width - 48, h: 110 };
+    case 'monastery':
+      return { x: b.x + 24, y: b.y + 150, w: b.width - 48, h: 130 };
+    default:
+      return { x: b.x + 16, y: b.y + 80, w: b.width - 32, h: 80 };
+  }
 }
 
 export function generateIslandEntities(islandId: number, gridX: number, gridY: number): Entity[] {
   const origin = getIslandOrigin(gridX, gridY);
   const entities: Entity[] = [];
 
-  // Helper function to push entity safely within the island (margin 100~400)
   const addTree = (idSuffix: string, relX: number, relY: number) => {
     entities.push({
       id: `t_${islandId}_${idSuffix}`,
@@ -275,225 +539,159 @@ export function generateIslandEntities(islandId: number, gridX: number, gridY: n
     });
   };
 
+  const addSheep = (idSuffix: string, relX: number, relY: number) => {
+    entities.push({
+      id: `s_${islandId}_${idSuffix}`,
+      type: 'sheep',
+      x: origin.x + relX,
+      y: origin.y + relY,
+      hp: 3,
+      maxHp: 3,
+      islandId,
+    });
+  };
+
   switch (islandId) {
-    case 0: // Starting Isle: Balanced
-      addTree('1', 120, 140);
-      addTree('2', 360, 160);
-      addTree('3', 160, 360);
-      addRock('1', 380, 340);
-      addRock('2', 260, 240);
+    case 0: // 중심 마을 (Capital Village): 균형 잡힌 자원 + 귀여운 양들
+      addTree('1', 490, 480);
+      addTree('2', 430, 530);
+      addTree('3', 180, 530);
+      addRock('1', 500, 80);
+      addRock('2', 550, 130);
+      addGoldRock('1', 180, 340);
+      addSheep('1', 290, 490);
+      addSheep('2', 360, 510);
       break;
 
-    case 1: // East Woods: Tree galore
-      addTree('1', 130, 140);
-      addTree('2', 260, 150);
-      addTree('3', 380, 180);
-      addTree('4', 180, 340);
-      addTree('5', 340, 350);
-      addRock('1', 260, 260);
-      break;
-
-    case 2: // South Quarry: Stone & Gold
-      addRock('1', 140, 150);
-      addRock('2', 350, 160);
-      addRock('3', 160, 340);
-      addGoldRock('1', 360, 350);
-      addTree('1', 250, 240);
-      break;
-
-    case 3: // West Gold Isle: Gold rocks
-      addGoldRock('1', 150, 150);
-      addGoldRock('2', 350, 150);
-      addGoldRock('3', 250, 320);
-      addTree('1', 140, 320);
-      addRock('1', 360, 320);
-      break;
-
-    case 4: // Crown Sanctuary
-      addGoldRock('1', 200, 200);
-      addGoldRock('2', 320, 200);
-      addRock('1', 260, 140);
-      addTree('1', 150, 340);
-      addTree('2', 360, 340);
-      break;
-
-    case 5: // Southeast Orchard: Dense wood & small gold
-      addTree('1', 140, 140);
-      addTree('2', 260, 140);
-      addTree('3', 370, 150);
-      addTree('4', 160, 340);
-      addTree('5', 350, 340);
-      addRock('1', 260, 250);
-      addGoldRock('1', 260, 350);
-      break;
-
-    case 6: // Southwest Obsidian Mine: Heavy stone & gold
-      addRock('1', 140, 140);
-      addRock('2', 360, 150);
-      addRock('3', 260, 220);
-      addRock('4', 150, 350);
-      addGoldRock('1', 350, 340);
-      addGoldRock('2', 260, 360);
-      addTree('1', 140, 240);
-      break;
-
-    case 7: // Northeast Emerald Grove: Dense wood & gold
-      addTree('1', 130, 130);
-      addTree('2', 260, 150);
-      addTree('3', 380, 140);
-      addTree('4', 160, 350);
-      addTree('5', 360, 360);
-      addGoldRock('1', 250, 250);
-      addRock('1', 360, 250);
-      break;
-
-    case 8: // Northwest Ancient Ruins: Rich gold & stone
-      addGoldRock('1', 150, 150);
-      addGoldRock('2', 350, 150);
-      addGoldRock('3', 250, 340);
-      addRock('1', 150, 330);
-      addRock('2', 350, 330);
-      addRock('3', 260, 200);
-      addTree('1', 140, 240);
-      addTree('2', 370, 240);
-      break;
-
-    case 9: // Far East Redwood Forest: Giant lumberjack haven
-      addTree('1', 120, 130);
-      addTree('2', 240, 140);
-      addTree('3', 360, 140);
-      addTree('4', 140, 260);
-      addTree('5', 360, 270);
-      addTree('6', 180, 370);
-      addTree('7', 330, 370);
-      addRock('1', 250, 360);
-      break;
-
-    case 10: // Deep South Granite Cliffs: Heavy stone
-      addRock('1', 130, 140);
-      addRock('2', 260, 140);
-      addRock('3', 370, 150);
-      addRock('4', 140, 340);
-      addRock('5', 360, 340);
-      addGoldRock('1', 260, 250);
-      addGoldRock('2', 260, 360);
-      addTree('1', 140, 240);
-      break;
-
-    case 11: // Far West Sunforge: Pure gold motherlode
-      addGoldRock('1', 140, 140);
-      addGoldRock('2', 360, 140);
-      addGoldRock('3', 180, 340);
-      addGoldRock('4', 330, 340);
-      addGoldRock('5', 260, 240);
-      addRock('1', 150, 240);
-      addTree('1', 360, 240);
-      break;
-
-    case 12: // Celestial Star Altar: Sacred balance & high gold
-      addGoldRock('1', 180, 180);
-      addGoldRock('2', 330, 180);
-      addGoldRock('3', 260, 350);
-      addRock('1', 140, 280);
-      addRock('2', 370, 280);
-      addTree('1', 140, 140);
-      addTree('2', 370, 140);
-      addTree('3', 260, 130);
-      break;
-
-    case 13: // Smuggler's Cove: Mixed high tier
-      addTree('1', 140, 140);
+    case 1: // 동쪽 벌목 평원 (East Woods): 풍부한 목재
+      addTree('1', 220, 160);
       addTree('2', 360, 150);
-      addTree('3', 150, 340);
-      addTree('4', 350, 350);
-      addGoldRock('1', 260, 170);
-      addGoldRock('2', 260, 330);
-      addRock('1', 260, 250);
+      addTree('3', 500, 180);
+      addTree('4', 220, 360);
+      addTree('5', 380, 380);
+      addTree('6', 520, 390);
+      addTree('7', 350, 520);
+      addRock('1', 220, 500);
       break;
 
-    case 14: // Coral Reef Isle: Sea rocks & coral
-      addRock('1', 140, 140);
-      addRock('2', 360, 140);
-      addRock('3', 150, 350);
-      addRock('4', 360, 350);
-      addGoldRock('1', 260, 200);
-      addGoldRock('2', 260, 320);
-      addTree('1', 140, 240);
-      addTree('2', 370, 240);
+    case 2: // 남쪽 채석 평원 (South Quarry): 풍부한 석재와 광석
+      addRock('1', 220, 150);
+      addRock('2', 350, 160);
+      addRock('3', 200, 340);
+      addRock('4', 350, 360);
+      addRock('5', 500, 380);
+      addGoldRock('1', 480, 500);
+      addTree('1', 220, 500);
+      addSheep('1', 350, 510);
       break;
 
-    case 15: // Turtle Shell Isle: Durable stones
-      addRock('1', 150, 150);
-      addRock('2', 260, 140);
-      addRock('3', 360, 150);
-      addRock('4', 160, 330);
-      addRock('5', 350, 330);
-      addGoldRock('1', 260, 250);
-      addTree('1', 140, 240);
-      addTree('2', 370, 240);
+    case 3: // 서쪽 황금 평원 (West Goldfields): 풍부한 황금 노드
+      addGoldRock('1', 100, 180);
+      addGoldRock('2', 480, 180);
+      addGoldRock('3', 200, 420);
+      addGoldRock('4', 380, 440);
+      addRock('1', 480, 380);
+      addTree('1', 120, 480);
       break;
 
-    case 16: // Pirate Fortress: Massive gold stockpile
-      addGoldRock('1', 150, 150);
-      addGoldRock('2', 350, 150);
-      addGoldRock('3', 200, 260);
-      addGoldRock('4', 310, 260);
-      addRock('1', 150, 350);
-      addRock('2', 360, 350);
-      addTree('1', 260, 350);
-      break;
-
-    case 17: // Breeze Windmill Isle: Wind trees & gold
-      addTree('1', 140, 140);
-      addTree('2', 260, 130);
-      addTree('3', 370, 140);
-      addTree('4', 160, 340);
-      addTree('5', 360, 340);
+    case 4: // 북쪽 수호탑 언덕 (North Citadel Hill)
       addGoldRock('1', 260, 240);
-      addGoldRock('2', 260, 350);
-      addRock('1', 140, 240);
+      addGoldRock('2', 380, 240);
+      addRock('1', 260, 420);
+      addTree('1', 140, 460);
+      addTree('2', 480, 460);
       break;
 
-    case 18: // Aurora Observatory: Mysterious crystals & trees
-      addGoldRock('1', 150, 160);
-      addGoldRock('2', 360, 160);
-      addGoldRock('3', 260, 260);
-      addRock('1', 160, 340);
-      addRock('2', 360, 340);
-      addTree('1', 260, 140);
-      addTree('2', 140, 250);
-      addTree('3', 370, 250);
+    case 5: // 남동쪽 풍요의 과수원 (Southeast Orchard)
+      addTree('1', 240, 160);
+      addTree('2', 400, 160);
+      addTree('3', 520, 180);
+      addTree('4', 240, 360);
+      addTree('5', 420, 380);
+      addSheep('1', 260, 480);
+      addSheep('2', 340, 520);
+      addSheep('3', 440, 500);
+      addGoldRock('1', 520, 500);
       break;
 
-    case 19: // Moonlight Valley: Hidden valley
-      addRock('1', 140, 140);
-      addRock('2', 360, 140);
-      addRock('3', 260, 180);
-      addGoldRock('1', 160, 330);
-      addGoldRock('2', 350, 330);
-      addGoldRock('3', 260, 340);
-      addTree('1', 140, 240);
-      addTree('2', 370, 240);
+    case 6: // 남서쪽 흑요석 광산 (Southwest Obsidian Mine)
+      addRock('1', 300, 140);
+      addRock('2', 480, 160);
+      addRock('3', 180, 360);
+      addRock('4', 340, 380);
+      addGoldRock('1', 500, 380);
+      addGoldRock('2', 280, 500);
+      addTree('1', 120, 500);
       break;
 
-    case 20: // Shadow Peak Isle: Grand finale isle
-      addGoldRock('1', 150, 150);
-      addGoldRock('2', 360, 150);
-      addGoldRock('3', 180, 330);
-      addGoldRock('4', 330, 330);
-      addRock('1', 260, 160);
-      addRock('2', 260, 340);
-      addTree('1', 140, 240);
-      addTree('2', 370, 240);
+    case 7: // 북동쪽 에메랄드 숲 (Northeast Emerald Grove)
+      addTree('1', 300, 160);
+      addTree('2', 480, 160);
+      addTree('3', 180, 360);
+      addTree('4', 340, 380);
+      addTree('5', 500, 390);
+      addGoldRock('1', 260, 500);
+      addRock('1', 420, 500);
+      break;
+
+    case 8: // 북서쪽 고대 유적지 (Northwest Ancient Ruins)
+      addGoldRock('1', 80, 180);
+      addGoldRock('2', 460, 180);
+      addGoldRock('3', 140, 440);
+      addRock('1', 340, 440);
+      addRock('2', 480, 440);
+      addTree('1', 240, 520);
+      break;
+
+    case 9: // 극동의 거목림 평원
+      addTree('1', 160, 160);
+      addTree('2', 320, 160);
+      addTree('3', 480, 160);
+      addTree('4', 180, 340);
+      addTree('5', 360, 340);
+      addTree('6', 500, 360);
+      addTree('7', 240, 500);
+      addRock('1', 420, 500);
+      break;
+
+    case 10: // 남쪽 화강암 절벽
+      addRock('1', 160, 160);
+      addRock('2', 340, 160);
+      addRock('3', 500, 160);
+      addRock('4', 180, 360);
+      addRock('5', 460, 360);
+      addGoldRock('1', 300, 360);
+      addGoldRock('2', 320, 500);
+      addTree('1', 160, 500);
+      break;
+
+    case 11: // 극서 태양의 금광
+      addGoldRock('1', 160, 160);
+      addGoldRock('2', 480, 160);
+      addGoldRock('3', 200, 360);
+      addGoldRock('4', 440, 360);
+      addGoldRock('5', 320, 240);
+      addRock('1', 180, 500);
+      addTree('1', 460, 500);
+      break;
+
+    case 12: // 천공의 별빛 성소
+      addGoldRock('1', 200, 200);
+      addGoldRock('2', 440, 200);
+      addGoldRock('3', 320, 460);
+      addRock('1', 160, 360);
+      addRock('2', 480, 360);
+      addTree('1', 180, 500);
+      addTree('2', 460, 500);
       break;
 
     default:
-      // Fallback procedural placement
-      addTree('1', 150, 150);
-      addTree('2', 350, 150);
-      addRock('1', 150, 350);
-      addGoldRock('1', 350, 350);
-      addRock('2', 256, 256);
+      // Fallback
+      addTree('1', 180, 180);
+      addTree('2', 460, 180);
+      addRock('1', 180, 460);
+      addGoldRock('1', 460, 460);
+      addSheep('1', 320, 320);
       break;
   }
 

@@ -70,10 +70,10 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-black text-amber-300 tracking-wide flex items-center gap-1.5">
-                타이니 군도 전체 지도
+                왕국 영지 전체 지도
               </h2>
               <p className="text-xs text-slate-400">
-                해금 현황: <span className="text-emerald-400 font-bold">{unlockedCount}</span> / {totalCount} ({progressPercent}%)
+                개척 현황: <span className="text-emerald-400 font-bold">{unlockedCount}</span> / {totalCount} ({progressPercent}%)
               </p>
             </div>
           </div>
@@ -130,7 +130,7 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     title={island.name}
                   >
                     <span className="text-xs font-black">
-                      {island.id === 0 ? '🏠' : unlocked ? '🏝️' : affordable ? '✨' : '🔒'}
+                      {island.id === 0 ? '🏰' : unlocked ? '🚩' : affordable ? '✨' : '🔒'}
                     </span>
                     <span className="text-[9px] font-bold leading-none mt-0.5 opacity-80">
                       {island.id}
@@ -156,19 +156,19 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
           </div>
         </div>
 
-        {/* Selected Island Detail Card */}
+        {/* Selected Territory Detail Card */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="text-2xl">
-                {selectedIsland.id === 0 ? '🏠' : isUnlocked(selectedIsland.id) ? '🏝️' : '🔒'}
+                {selectedIsland.id === 0 ? '🏰' : isUnlocked(selectedIsland.id) ? '🚩' : '🔒'}
               </span>
               <div>
                 <h3 className="font-extrabold text-white text-sm sm:text-base">
                   #{selectedIsland.id} {selectedIsland.name}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  위치 좌표: ({selectedIsland.gridX}, {selectedIsland.gridY})
+                  영지 그리드 좌표: ({selectedIsland.gridX}, {selectedIsland.gridY})
                 </p>
               </div>
             </div>
@@ -190,17 +190,17 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
             </div>
           </div>
 
-          {/* Cost breakdown for locked islands */}
+          {/* Cost breakdown for locked territories */}
           {!isUnlocked(selectedIsland.id) && (
             <div className="mt-2 pt-2 border-t border-white/10">
-              <div className="text-xs font-semibold text-slate-300 mb-1.5">개척 필요 자원:</div>
+              <div className="text-xs font-semibold text-slate-300 mb-1.5">영지 개척 필요 자원:</div>
               <div className="grid grid-cols-3 gap-2">
                 <div className={`p-2 rounded-xl text-center border ${
                   inventory.wood >= selectedIsland.costWood
                     ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
                     : 'bg-red-950/30 border-red-500/40 text-red-300'
                 }`}>
-                  <div className="text-xs">🪵 나무</div>
+                  <div className="text-xs">🪵 목재</div>
                   <div className="font-extrabold text-sm">
                     {inventory.wood} / {selectedIsland.costWood}
                   </div>
@@ -211,7 +211,7 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     ? 'bg-slate-800/60 border-slate-400/40 text-slate-200'
                     : 'bg-red-950/30 border-red-500/40 text-red-300'
                 }`}>
-                  <div className="text-xs">🪨 돌</div>
+                  <div className="text-xs">🪨 석재</div>
                   <div className="font-extrabold text-sm">
                     {inventory.stone} / {selectedIsland.costStone}
                   </div>
@@ -222,7 +222,7 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     ? 'bg-yellow-950/40 border-yellow-500/40 text-yellow-200'
                     : 'bg-red-950/30 border-red-500/40 text-red-300'
                 }`}>
-                  <div className="text-xs">🪙 금</div>
+                  <div className="text-xs">🪙 금화</div>
                   <div className="font-extrabold text-sm">
                     {inventory.gold} / {selectedIsland.costGold}
                   </div>
@@ -235,7 +235,7 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
         {/* Footer info */}
         <div className="mt-3 text-center">
           <p className="text-[11px] text-slate-400">
-            💡 미개척 섬 표지판 근처로 이동하면 <span className="text-amber-300 font-bold">🏝️ [개척]</span> 버튼으로 해금할 수 있습니다.
+            💡 미개척 영지 제단 근처로 이동하면 <span className="text-amber-300 font-bold">🚩 [개척]</span> 버튼이나 <kbd className="px-1 py-0.5 bg-slate-700 rounded text-white">E</kbd> 키로 개척할 수 있습니다.
           </p>
         </div>
       </div>

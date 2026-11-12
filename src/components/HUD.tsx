@@ -96,15 +96,15 @@ export const HUD: React.FC<HUDProps> = ({
             </div>
           </div>
 
-          {/* Island Explorer Badge (Click to open map) */}
+          {/* Territory Explorer Badge (Click to open map) */}
           <button
             onClick={onOpenMinimap}
             className="flex items-center gap-2 bg-black/65 backdrop-blur-md px-3 py-2 rounded-2xl border border-emerald-500/30 shadow-xl hover:bg-emerald-950/40 transition active:scale-95"
-            title="클릭하여 전체 군도 지도 보기"
+            title="클릭하여 왕국 전체 영지 지도 보기"
           >
             <Compass className="w-5 h-5 text-emerald-400" />
             <div className="flex flex-col leading-none text-left">
-              <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase">군도 개척</span>
+              <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase">영지 개척</span>
               <span className="font-extrabold text-white text-sm">
                 <span className="text-emerald-300">{unlockedCount}</span>
                 <span className="text-white/40 mx-0.5">/</span>
@@ -362,10 +362,10 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="font-extrabold text-amber-300 block mb-1 text-sm">📱 스마트폰 조작법</span>
                 <ul className="space-y-1.5 text-xs text-slate-300">
                   <li>• <strong className="text-white">이동:</strong> 왼쪽 하단의 <strong>가상 조이스틱</strong>을 드래그하여 자유롭게 이동</li>
-                  <li>• <strong className="text-white">채집/공격:</strong> 오른쪽 하단 <strong>⚔️ 버튼</strong>을 탭하거나 <strong>누르고 있으면 연속 채집/공격</strong></li>
-                  <li>• <strong className="text-white">섬 개척:</strong> 새 섬 표지판에 다가가면 나타나는 <strong>🏝️ [개척] 버튼</strong> 터치</li>
+                  <li>• <strong className="text-white">채집/공격/상호작용:</strong> 오른쪽 하단 <strong>⚔️ 버튼</strong>을 탭하거나 <strong>누르고 있으면 연속 채집</strong></li>
+                  <li>• <strong className="text-white">영지 코어 & 개척:</strong> 중심 마을 코어에서 공명하고, 미개척지 제단에 다가가 <strong>🚩 [개척] 버튼</strong> 터치</li>
                   <li>• <strong className="text-white">시야/줌:</strong> 화면을 <strong>두 손가락으로 조작(넓히기: 확대, 줄이기: 축소)</strong></li>
-                  <li>• <strong className="text-white">미니맵:</strong> 우측 상단 <strong>🗺️ 미니맵</strong>을 터치해 21개 섬 전체 지도 및 해금 확인</li>
+                  <li>• <strong className="text-white">미니맵:</strong> 우측 상단 <strong>🗺️ 미니맵</strong>을 터치해 21개 평원 영지 지도 및 개척 확인</li>
                 </ul>
               </div>
 
@@ -374,8 +374,8 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="font-extrabold text-slate-300 block mb-1 text-sm">💻 PC 키보드 & 마우스 조작법</span>
                 <ul className="space-y-1 text-xs text-slate-400">
                   <li>• 이동: <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">W</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">A</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">S</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">D</kbd> 또는 마우스 클릭</li>
-                  <li>• 채집/공격: <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">Space</kbd> 키를 누르고 있으면 연속 실행 또는 마우스 클릭</li>
-                  <li>• 섬 개척: 표지판 근처에서 <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">E</kbd> 키 누르기</li>
+                  <li>• 채집/공격: <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">Space</kbd> 키 누르고 있기 또는 마우스 클릭</li>
+                  <li>• 영지 코어 공명 & 개척: 코어 및 개척 제단 근처에서 <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[11px] text-white">E</kbd> 키 누르기</li>
                   <li>• 시야/줌: <strong className="text-white">마우스 휠 스크롤</strong> (확대/축소) 또는 키보드 <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">+</kbd><kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white ml-0.5">-</kbd> (초기화: <kbd className="px-1 py-0.5 bg-slate-700 rounded text-[11px] text-white">0</kbd>)</li>
                 </ul>
               </div>
@@ -384,14 +384,14 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="flex items-start gap-2.5 bg-white/5 p-2.5 rounded-xl">
                 <span className="font-bold text-amber-300 shrink-0">🌐 멀티플레이</span>
                 <span className="text-xs text-slate-300">
-                  [친구 초대] 링크를 공유해 다른 스마트폰이나 PC로 접속하면 같은 월드에서 실시간으로 함께 플레이할 수 있습니다.
+                  [친구 초대] 링크를 공유해 다른 기기로 접속하면 같은 평원 영지에서 실시간으로 함께 왕국을 개척할 수 있습니다.
                 </span>
               </div>
 
               <div className="flex items-start gap-2.5 bg-white/5 p-2.5 rounded-xl">
                 <span className="font-bold text-emerald-300 shrink-0">💾 자동 저장</span>
                 <span className="text-xs text-slate-300">
-                  자원과 군도 개척 상태는 브라우저에 자동 저장되어 언제든 다시 접속해 이어서 즐길 수 있습니다.
+                  자원과 영지 개척 상태는 브라우저 및 서버에 자동 동기화되어 언제든 이어서 즐길 수 있습니다.
                 </span>
               </div>
             </div>

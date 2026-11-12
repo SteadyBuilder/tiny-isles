@@ -2,15 +2,25 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { GameAssets, loadGameAssets } from './AssetLoader';
 import {
-  ISLAND_GAP,
-  ISLAND_PX,
-  ISLAND_TILES,
+  TERRITORY_PX,
   INITIAL_ISLANDS,
-  TILE_SIZE,
+  CENTRAL_CORE,
   generateIslandEntities,
+  generateTerritoryBuildings,
   getIslandOrigin,
+  getBuildingCollisionBox,
 } from './constants';
-import { Entity, FloatingText, Inventory, Island, Particle, Player, PlayerAction, PlayerColor } from '../types/game';
+import {
+  Building,
+  Entity,
+  FloatingText,
+  Inventory,
+  Island,
+  Particle,
+  Player,
+  PlayerAction,
+  PlayerColor,
+} from '../types/game';
 import { sound } from '../lib/sound';
 import { supabase } from '../lib/supabase';
 import { storage } from '../lib/storage';
@@ -33,6 +43,14 @@ interface GameCanvasProps {
   onZoomChange?: (zoom: number) => void;
 }
 
+interface Cloud {
+  x: number;
+  y: number;
+  speed: number;
+  scale: number;
+  type: 1 | 2;
+}
+
 export const GameCanvas: React.FC<GameCanvasProps> = ({
   playerName,
   playerColor,
@@ -52,7 +70,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const lastNearIslandRef = useRef<Island | null>(null);
   const lastGridPosRef = useRef<{ gridX: number; gridY: number }>({ gridX: 0, gridY: 0 });
 
-  // Always-up-to-date refs to prevent stale closure issues in render loop & event listeners
+  // Up-to-date refs for callbacks
   const inventoryRef = useRef<Inventory>(inventory);
   inventoryRef.current = inventory;
 
@@ -71,24 +89,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const onUnlockedCountChangeRef = useRef(onUnlockedCountChange);
   onUnlockedCountChangeRef.current = onUnlockedCountChange;
 
-  const isSubscribedRef = useRef<boolean>(false);
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
 
-  // Camera Zoom State
+  const isSubscribedRef = useRef<boolean>(false);
   const targetZoomRef = useRef<number>(zoom);
   const zoomRef = useRef<number>(zoom);
   const isPinchingRef = useRef<boolean>(false);
   const lastPinchEndTimeRef = useRef<number>(0);
 
+  // Sync zoom prop changes into targetZoomRef
+  useEffect(() => {
+    targetZoomRef.current = zoom;
+  }, [zoom]);
+
   // Loading state
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
 
-  // Local Player State
+  // Local Player State (Spawns in Central Town Square)
   const localPlayerRef = useRef<Player>({
     id: storage.getPlayerId(),
     name: playerName,
-    x: 256,
-    y: 256,
+    x: 320,
+    y: 420,
     direction: 'right',
     action: 'idle',
     color: playerColor,
@@ -98,7 +122,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Remote Players State
   const remotePlayersRef = useRef<Map<string, Player>>(new Map());
 
-  // Islands & Entities State (로드 시 로컬 스토리지에서 해금 상태 복원)
+  // Territories, Buildings, Entities State
   const islandsRef = useRef<Island[]>(
     (() => {
       const savedUnlocked = storage.loadUnlockedIslands();
@@ -108,6 +132,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }));
     })()
   );
+
+  const buildingsRef = useRef<Building[]>(
+    (() => {
+      const savedUnlocked = storage.loadUnlockedIslands();
+      const allBuildings: Building[] = [];
+      for (const isl of INITIAL_ISLANDS) {
+        if (savedUnlocked.includes(isl.id) || isl.id === 0) {
+          allBuildings.push(...generateTerritoryBuildings(isl.id, isl.gridX, isl.gridY));
+        }
+      }
+      return allBuildings;
+    })()
+  );
+
   const entitiesRef = useRef<Entity[]>(
     (() => {
       const savedUnlocked = storage.loadUnlockedIslands();
@@ -121,38 +159,63 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     })()
   );
 
+  // Core Resonance timestamp
+  const lastCoreResonanceRef = useRef<number>(0);
+
+  // Ambient Drifting Clouds
+  const cloudsRef = useRef<Cloud[]>([
+    { x: -400, y: -200, speed: 0.35, scale: 0.9, type: 1 },
+    { x: 150, y: 100, speed: 0.42, scale: 1.1, type: 2 },
+    { x: 800, y: -80, speed: 0.3, scale: 0.85, type: 1 },
+    { x: -100, y: 650, speed: 0.38, scale: 1.0, type: 2 },
+    { x: 600, y: 800, speed: 0.28, scale: 0.95, type: 1 },
+    { x: -700, y: 350, speed: 0.34, scale: 1.05, type: 2 },
+  ]);
+
+  // Seamless Grass Canvas Pattern cache
+  const grassPatternRef = useRef<CanvasPattern | null>(null);
+
   // Visual Effects
   const particlesRef = useRef<Particle[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
 
   // Input State
   const keysRef = useRef<{ [key: string]: boolean }>({});
-  const mouseTargetRef = useRef<{ worldX: number; worldY: number; active: boolean }>({ worldX: 0, worldY: 0, active: false });
+  const mouseTargetRef = useRef<{ worldX: number; worldY: number; active: boolean }>({
+    worldX: 0,
+    worldY: 0,
+    active: false,
+  });
 
   // Camera
-  const cameraRef = useRef({ x: 256, y: 256 });
+  const cameraRef = useRef({ x: 320, y: 420 });
 
-  // Action cooldown & continuous hold timer
+  // Action cooldown timer
   const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInteractTimeRef = useRef<number>(0);
 
-  // Local BroadcastChannel for instant same-browser sync
+  // Broadcast Channels
   const localBusRef = useRef<BroadcastChannel | null>(null);
-
-  // Supabase Realtime Channel Reference
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  // Preload Assets
   const assetsRef = useRef<GameAssets | null>(null);
 
+  // Update profile
   useEffect(() => {
-    loadGameAssets((progress) => setLoadProgress(progress)).then((assets) => {
+    localPlayerRef.current.name = playerName;
+    localPlayerRef.current.color = playerColor;
+  }, [playerName, playerColor]);
+
+  // Load Assets
+  useEffect(() => {
+    loadGameAssets((ratio) => {
+      setLoadProgress(ratio);
+    }).then((assets) => {
       assetsRef.current = assets;
       setAssetsLoaded(true);
     });
   }, []);
 
-  // 서버 DB에서 해금된 섬 목록을 조회하여 로컬 월드와 일괄 동기화
+  // Fetch Unlocked Territories from Server DB
   useEffect(() => {
     let isMounted = true;
     serverSync.fetchUnlockedIslands().then((records) => {
@@ -164,6 +227,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           isl.unlocked = true;
           const newEntities = generateIslandEntities(isl.id, isl.gridX, isl.gridY);
           entitiesRef.current.push(...newEntities);
+          const newBuildings = generateTerritoryBuildings(isl.id, isl.gridX, isl.gridY);
+          buildingsRef.current.push(...newBuildings);
           hasNewUnlocks = true;
         }
       }
@@ -187,69 +252,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (onUnlockedCountChange) {
       onUnlockedCountChange(unlockedIds.length, islandsRef.current.length);
     }
-  }, [onUnlockedCountChange, onUnlockedIslandIdsChange]);
+  }, [onUnlockedIslandIdsChange, onUnlockedCountChange]);
 
-  // Sync zoom prop with targetZoomRef
-  const onZoomChangeRef = useRef(onZoomChange);
-  useEffect(() => {
-    onZoomChangeRef.current = onZoomChange;
-  }, [onZoomChange]);
-
-  useEffect(() => {
-    if (typeof zoom === 'number' && !isNaN(zoom)) {
-      targetZoomRef.current = Math.min(2.0, Math.max(0.5, Number(zoom.toFixed(2))));
-    }
-  }, [zoom]);
-
-  // Update local player info when props change & sync via presence
-  useEffect(() => {
-    localPlayerRef.current.name = playerName;
-    localPlayerRef.current.color = playerColor;
-
-    if (channelRef.current && isSubscribedRef.current) {
-      channelRef.current.track({
-        id: localPlayerRef.current.id,
-        name: playerName,
-        color: playerColor,
-      });
-    }
-  }, [playerName, playerColor]);
-
-  // Handle remote player position & action update
-  const handleRemotePlayerMove = useCallback((p: Player) => {
-    if (!p || p.id === localPlayerRef.current.id) return;
-
-    const existing = remotePlayersRef.current.get(p.id);
-    if (existing) {
-      existing.name = p.name;
-      existing.color = p.color;
-      existing.direction = p.direction;
-      existing.action = p.action;
-      existing.x = p.x;
-      existing.y = p.y;
-      existing.lastUpdated = Date.now();
+  // Remote player movement handler
+  const handleRemotePlayerMove = useCallback((playerData: Player) => {
+    if (playerData.id === localPlayerRef.current.id) return;
+    const remote = remotePlayersRef.current.get(playerData.id);
+    if (remote) {
+      remote.x = playerData.x;
+      remote.y = playerData.y;
+      remote.direction = playerData.direction;
+      remote.action = playerData.action;
+      remote.color = playerData.color;
+      remote.name = playerData.name;
+      remote.lastUpdated = Date.now();
     } else {
-      remotePlayersRef.current.set(p.id, {
-        ...p,
+      remotePlayersRef.current.set(playerData.id, {
+        ...playerData,
         lastUpdated: Date.now(),
       });
-      setOnlineCount(remotePlayersRef.current.size + 1);
     }
-  }, [setOnlineCount]);
+  }, []);
 
-  // Realtime & Local Multi-Tab Setup
+  // Multiplayer setup (BroadcastChannel & Supabase Realtime)
   useEffect(() => {
-    const myId = localPlayerRef.current.id;
-
-    // 1. Local Browser BroadcastChannel (Instant local multi-tab sync)
-    const localBus = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('tiny_isles_sync') : null;
-    localBusRef.current = localBus;
-
-    if (localBus) {
-      localBus.onmessage = (event) => {
-        const data = event.data;
-        if (!data || data.senderId === myId) return;
-
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const bus = new BroadcastChannel('tiny_isles_multiplayer');
+      localBusRef.current = bus;
+      bus.onmessage = (event) => {
+        const { data } = event;
+        if (!data || data.senderId === localPlayerRef.current.id) return;
         if (data.type === 'player_move') {
           handleRemotePlayerMove(data.payload);
         } else if (data.type === 'hit') {
@@ -262,88 +294,38 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       };
     }
 
-    // 2. Supabase Realtime Channel (Cross-device global multiplayer)
-    const channel = supabase.channel('tiny_isles_world', {
+    const roomId = 'tiny_isles_global_hub';
+    const channel = supabase.channel(roomId, {
       config: {
-        presence: { key: myId },
-        broadcast: { ack: false, self: false },
+        broadcast: { self: false },
+        presence: { key: localPlayerRef.current.id },
       },
     });
     channelRef.current = channel;
 
-    // Send immediate movement broadcast
-    const sendMoveBroadcast = () => {
-      const p = localPlayerRef.current;
-      const payload: Player = {
-        id: p.id,
-        name: p.name,
-        color: p.color,
-        x: Math.round(p.x),
-        y: Math.round(p.y),
-        direction: p.direction,
-        action: p.action,
-        lastUpdated: Date.now(),
-      };
-
-      if (localBus) {
-        localBus.postMessage({
-          type: 'player_move',
-          senderId: myId,
-          payload,
-        });
-      }
-
-      if (channelRef.current && isSubscribedRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'player_move',
-          payload,
-        });
-      }
-    };
-
-    // Presence update helper: maintains accurate online player count and updates metadata
-    const updatePresenceState = () => {
-      const state = channel.presenceState();
-      const keys = Object.keys(state);
-      setOnlineCount(Math.max(1, keys.length));
-
-      // Update basic presence metadata (name/color) for currently active remote players
-      keys.forEach((key) => {
-        if (key !== myId) {
-          const presences = state[key] as unknown as { id?: string; name?: string; color?: PlayerColor }[];
-          if (presences && presences.length > 0) {
-            const p = presences[presences.length - 1];
-            const pId = p.id || key;
-            const existing = remotePlayersRef.current.get(pId);
-            if (existing) {
-              if (p.name) existing.name = p.name;
-              if (p.color) existing.color = p.color;
-            }
-          }
-        }
-      });
-    };
-
     channel
       .on('presence', { event: 'sync' }, () => {
-        updatePresenceState();
+        const presenceState = channel.presenceState();
+        const onlineIds = Object.keys(presenceState);
+        const count = Math.max(1, onlineIds.length);
+        setOnlineCount(count);
       })
-      .on('presence', { event: 'join' }, () => {
-        updatePresenceState();
-        // Greet newly joined player by announcing our position immediately
-        sendMoveBroadcast();
-      })
-      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        if (Array.isArray(leftPresences)) {
-          leftPresences.forEach((lp: any) => {
-            const key = lp.id || lp.presence_ref;
-            if (key) {
-              remotePlayersRef.current.delete(key);
-            }
+      .on('presence', { event: 'join' }, ({ key }) => {
+        if (key !== localPlayerRef.current.id && !remotePlayersRef.current.has(key)) {
+          remotePlayersRef.current.set(key, {
+            id: key,
+            name: '탐험가',
+            x: 320,
+            y: 420,
+            direction: 'right',
+            action: 'idle',
+            color: 'blue',
+            lastUpdated: Date.now(),
           });
         }
-        updatePresenceState();
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        remotePlayersRef.current.delete(key);
       })
       .on('broadcast', { event: 'player_move' }, ({ payload }) => {
         handleRemotePlayerMove(payload);
@@ -356,70 +338,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const { islandId, unlockedBy } = payload;
         unlockIslandLocally(islandId, unlockedBy, false);
       })
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'unlocked_islands' },
-        (payload) => {
-          const newRow = payload.new as any;
-          if (newRow && typeof newRow.island_id === 'number') {
-            unlockIslandLocally(newRow.island_id, newRow.unlocked_by || '동료 모험가', false, true);
-          }
-        }
-      )
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           isSubscribedRef.current = true;
-          try {
-            await channel.track({
-              id: myId,
-              name: localPlayerRef.current.name,
-              color: localPlayerRef.current.color,
-            });
-          } catch (e) {
-            console.warn('[Realtime] presence track error:', e);
-          }
-          sendMoveBroadcast();
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          isSubscribedRef.current = false;
+          await channel.track({
+            name: localPlayerRef.current.name,
+            color: localPlayerRef.current.color,
+            joinedAt: Date.now(),
+          });
         }
       });
-
-    // 15Hz (approx 66ms) movement transmission & stale player cleaner
-    let lastSentX = 0;
-    let lastSentY = 0;
-    let lastSentAction = '';
-    let lastSentDirection = '';
-    let heartbeatTick = 0;
-
-    const moveInterval = setInterval(() => {
-      const p = localPlayerRef.current;
-      heartbeatTick++;
-
-      const hasMoved = Math.abs(p.x - lastSentX) > 1 || Math.abs(p.y - lastSentY) > 1;
-      const hasActionChanged = p.action !== lastSentAction || p.direction !== lastSentDirection;
-      const isHeartbeat = heartbeatTick % 15 === 0; // Heartbeat ~1s to ensure position sync
-
-      if (hasMoved || hasActionChanged || isHeartbeat) {
-        lastSentX = p.x;
-        lastSentY = p.y;
-        lastSentAction = p.action;
-        lastSentDirection = p.direction;
-        sendMoveBroadcast();
-      }
-
-      // Cleanup inactive remote players (no update received for > 8s)
-      const now = Date.now();
-      remotePlayersRef.current.forEach((remote, key) => {
-        if (now - remote.lastUpdated > 8000) {
-          remotePlayersRef.current.delete(key);
-        }
-      });
-    }, 66);
 
     return () => {
-      isSubscribedRef.current = false;
-      clearInterval(moveInterval);
-      if (localBus) localBus.close();
+      if (localBusRef.current) {
+        localBusRef.current.close();
+        localBusRef.current = null;
+      }
       if (channelRef.current) {
         channelRef.current.unsubscribe();
         supabase.removeChannel(channelRef.current);
@@ -429,19 +363,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   }, [setOnlineCount, handleRemotePlayerMove]);
 
   // Remote hit handler
-  const handleRemoteHit = (entityId: string, damage: number, hitByName: string) => {
+  const handleRemoteHit = (entityId: string, damage: number, _hitByName: string) => {
     const entity = entitiesRef.current.find((e) => e.id === entityId);
     if (!entity) return;
 
     entity.hp -= damage;
     entity.shakeTime = Date.now() + 200;
 
-    // Particles and sound
     createHitParticles(entity.x, entity.y, entity.type);
     if (entity.type === 'tree') sound.playChop();
     else sound.playMine();
 
-    // Check destruction
     if (entity.hp <= 0) {
       sound.playBreak();
       removeAndRespawnEntity(entity);
@@ -450,7 +382,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Particles generator
   const createHitParticles = (x: number, y: number, type: string) => {
-    const color = type === 'tree' ? '#8bc34a' : type === 'gold_rock' ? '#ffd700' : '#b0bec5';
+    const color =
+      type === 'tree'
+        ? '#8bc34a'
+        : type === 'gold_rock'
+        ? '#ffd700'
+        : type === 'sheep'
+        ? '#f472b6'
+        : '#b0bec5';
     for (let i = 0; i < 8; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 1.5 + Math.random() * 3.5;
@@ -469,10 +408,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Remove and respawn entity
   const removeAndRespawnEntity = (entity: Entity) => {
-    // Remove entity
     entitiesRef.current = entitiesRef.current.filter((e) => e.id !== entity.id);
-
-    // Schedule respawn in 15 seconds
     setTimeout(() => {
       const currentIsland = islandsRef.current.find((isl) => isl.id === entity.islandId);
       if (currentIsland && currentIsland.unlocked) {
@@ -485,7 +421,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }, 15000);
   };
 
-  // Unlock Island Logic
+  // Unlock Territory Logic
   const unlockIslandLocally = (
     islandId: number,
     unlockedBy: string,
@@ -497,7 +433,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     target.unlocked = true;
 
-    // Save unlocked islands state to localStorage
+    // Save unlocked state to localStorage
     const currentUnlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
     storage.saveUnlockedIslands(currentUnlockedIds);
     if (onUnlockedCountChange) {
@@ -507,26 +443,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       onUnlockedIslandIdsChange(currentUnlockedIds);
     }
 
-    // Spawn entities for newly unlocked island
+    // Spawn entities and buildings for newly unlocked territory
     const newEntities = generateIslandEntities(target.id, target.gridX, target.gridY);
     entitiesRef.current.push(...newEntities);
 
+    const newBuildings = generateTerritoryBuildings(target.id, target.gridX, target.gridY);
+    buildingsRef.current.push(...newBuildings);
+
     if (showEffects) {
-      // Fanfare and Confetti
       sound.playUnlock();
       confetti({
-        particleCount: 80,
-        spread: 70,
+        particleCount: 90,
+        spread: 75,
         origin: { y: 0.6 },
       });
 
-      // Floating banner text
       const origin = getIslandOrigin(target.gridX, target.gridY);
       floatingTextsRef.current.push({
         id: 'unlock_' + Math.random(),
-        text: `🎉 ${unlockedBy}님이 ${target.name}을 해금했습니다!`,
-        x: origin.x + 256,
-        y: origin.y + 200,
+        text: `🎉 ${unlockedBy}님이 ${target.name}을 개척했습니다!`,
+        x: origin.x + 320,
+        y: origin.y + 240,
         color: '#ffd700',
         alpha: 1,
         vy: -1.2,
@@ -534,10 +471,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     if (isLocalTrigger) {
-      // 1. Supabase 서버 DB에 영구 저장 (전체 유저 공유)
       serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);
 
-      // 2. 같은 브라우저 다른 탭 즉시 동기화
       if (localBusRef.current) {
         localBusRef.current.postMessage({
           type: 'island_unlocked',
@@ -545,7 +480,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           payload: { islandId, unlockedBy },
         });
       }
-      // 3. 다른 온라인 접속자 실시간 브로드캐스트
       if (channelRef.current && isSubscribedRef.current) {
         channelRef.current.send({
           type: 'broadcast',
@@ -556,24 +490,90 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   };
 
-  // Perform Local Hit on Nearest Entity / Island Purchase
+  // Check collision with solid buildings, core, and world bounds
+  const checkCollision = (nextX: number, nextY: number): boolean => {
+    const footX = nextX;
+    const footY = nextY + 16;
+
+    // 1. Building solid collisions
+    for (const b of buildingsRef.current) {
+      const box = getBuildingCollisionBox(b);
+      if (
+        footX >= box.x &&
+        footX <= box.x + box.w &&
+        footY >= box.y &&
+        footY <= box.y + box.h
+      ) {
+        return true;
+      }
+    }
+
+    // 2. Core solid pedestal collision (Territory 0)
+    const distToCore = Math.hypot(nextX - CENTRAL_CORE.x, footY - CENTRAL_CORE.y);
+    if (distToCore < 26) {
+      return true;
+    }
+
+    // 3. World bounds: 5x5 grid (-2 to 2) -> -1280 to +1920
+    const minBound = -2 * TERRITORY_PX + 24;
+    const maxBound = 3 * TERRITORY_PX - 24;
+    if (nextX < minBound || nextX > maxBound || nextY < minBound || nextY > maxBound) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Perform Local Interaction (Core resonance / Claim territory / Harvest node / Pet sheep)
   const tryInteract = useCallback(() => {
     lastInteractTimeRef.current = Date.now();
     const player = localPlayerRef.current;
     const px = player.x;
     const py = player.y;
 
-    // 1. Check if near any locked island signpost
+    // 1. Check Territory Core resonance (in Territory 0)
+    const distToCore = Math.hypot(px - CENTRAL_CORE.x, py - CENTRAL_CORE.y);
+    if (distToCore < 90) {
+      lastCoreResonanceRef.current = Date.now();
+      sound.playUnlock();
+      floatingTextsRef.current.push({
+        id: 'core_' + Math.random(),
+        text: '✨ 영지 코어 공명 완료! 왕국 번영도 상승 (+100)',
+        x: CENTRAL_CORE.x,
+        y: CENTRAL_CORE.y - 60,
+        color: '#38bdf8',
+        alpha: 1,
+        vy: -1.2,
+      });
+
+      // Burst energy particles
+      for (let i = 0; i < 24; i++) {
+        const angle = (Math.PI * 2 * i) / 24;
+        const speed = 2 + Math.random() * 3.5;
+        particlesRef.current.push({
+          x: CENTRAL_CORE.x,
+          y: CENTRAL_CORE.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: i % 2 === 0 ? '#38bdf8' : '#fbbf24',
+          size: 4 + Math.random() * 3,
+          life: 1,
+          maxLife: 35,
+        });
+      }
+      return;
+    }
+
+    // 2. Check if near any locked territory expansion altar
     for (const island of islandsRef.current) {
       if (!island.unlocked) {
         const origin = getIslandOrigin(island.gridX, island.gridY);
-        const signX = origin.x + 256;
-        const signY = origin.y + 256;
+        const signX = origin.x + 320;
+        const signY = origin.y + 320;
         const dist = Math.hypot(px - signX, py - signY);
 
-        if (dist < 200) {
+        if (dist < 260) {
           const curInv = inventoryRef.current;
-          // Check costs
           if (
             curInv.wood >= island.costWood &&
             curInv.stone >= island.costStone &&
@@ -587,7 +587,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             unlockIslandLocally(island.id, player.name, true);
             return;
           } else {
-            // Not enough resources notice
             floatingTextsRef.current.push({
               id: 'cost_' + Math.random(),
               text: `자원이 부족합니다! (🪵${island.costWood} 🪨${island.costStone}${island.costGold > 0 ? ` 🪙${island.costGold}` : ''})`,
@@ -603,7 +602,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     }
 
-    // 2. Find nearest interactable entity within range
+    // 3. Find nearest interactable entity within range
     let nearestEntity: Entity | null = null;
     let minDist = 90;
 
@@ -615,36 +614,66 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     }
 
-    // Set Tool action
-    const toolAction: PlayerAction = nearestEntity?.type === 'tree' ? 'axe' : 'pickaxe';
-    player.action = toolAction;
-
-    if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
-    actionTimeoutRef.current = setTimeout(() => {
-      player.action = 'idle';
-    }, 280);
-
     if (nearestEntity) {
+      // Check if entity belongs to an unlocked territory
+      const entTerritory = islandsRef.current.find((isl) => isl.id === nearestEntity!.islandId);
+      if (entTerritory && !entTerritory.unlocked) {
+        floatingTextsRef.current.push({
+          id: 'lock_' + Math.random(),
+          text: '🔒 먼저 이 영지를 개척해야 자원을 채집할 수 있습니다!',
+          x: nearestEntity.x + 16,
+          y: nearestEntity.y - 20,
+          color: '#f59e0b',
+          alpha: 1,
+          vy: -0.8,
+        });
+        return;
+      }
+
+      // If entity is sheep: pet and bounce with heart!
+      if (nearestEntity.type === 'sheep') {
+        sound.playClick();
+        nearestEntity.shakeTime = Date.now() + 250;
+        floatingTextsRef.current.push({
+          id: 'sheep_' + Math.random(),
+          text: '🐑 음메에~ ❤️',
+          x: nearestEntity.x + 16,
+          y: nearestEntity.y - 20,
+          color: '#f472b6',
+          alpha: 1,
+          vy: -1.0,
+        });
+        createHitParticles(nearestEntity.x, nearestEntity.y, 'sheep');
+        return;
+      }
+
+      // Tool swing animation
+      const toolAction: PlayerAction = nearestEntity.type === 'tree' ? 'axe' : 'pickaxe';
+      player.action = toolAction;
+      if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
+      actionTimeoutRef.current = setTimeout(() => {
+        player.action = 'idle';
+      }, 280);
+
       const damage = 1;
       nearestEntity.hp -= damage;
       nearestEntity.shakeTime = Date.now() + 200;
 
-      // Local particles & sound
       createHitParticles(nearestEntity.x, nearestEntity.y, nearestEntity.type);
-      if (nearestEntity.type === 'tree') {
-        sound.playChop();
-      } else {
-        sound.playMine();
-      }
+      if (nearestEntity.type === 'tree') sound.playChop();
+      else sound.playMine();
 
-      // Add resource to inventory
-      const resType = nearestEntity.type === 'tree' ? 'wood' : nearestEntity.type === 'gold_rock' ? 'gold' : 'stone';
+      const resType =
+        nearestEntity.type === 'tree'
+          ? 'wood'
+          : nearestEntity.type === 'gold_rock'
+          ? 'gold'
+          : 'stone';
       onUpdateInventoryRef.current((prev) => ({
         ...prev,
         [resType]: prev[resType] + 1,
       }));
 
-      // Floating text
       const icon = resType === 'wood' ? '🪵 +1' : resType === 'gold' ? '🪙 +1' : '🪨 +1';
       const color = resType === 'wood' ? '#8bc34a' : resType === 'gold' ? '#ffd700' : '#cfd8dc';
       floatingTextsRef.current.push({
@@ -657,7 +686,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         vy: -1.2,
       });
 
-      // Broadcast hit to other online players
+      // Broadcast hit
       if (localBusRef.current) {
         localBusRef.current.postMessage({
           type: 'hit',
@@ -681,13 +710,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
       }
 
-      // Check destruction
       if (nearestEntity.hp <= 0) {
         sound.playBreak();
         removeAndRespawnEntity(nearestEntity);
       }
     } else {
-      // Swung tool in empty air
+      player.action = 'axe';
+      if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
+      actionTimeoutRef.current = setTimeout(() => {
+        player.action = 'idle';
+      }, 280);
     }
   }, []);
 
@@ -763,7 +795,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     handleResize();
     window.addEventListener('resize', handleResize);
 
-    // Wheel Zoom handler (smooth mouse wheel zoom on PC)
+    // Wheel Zoom handler
     const handleWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && target.closest('.overflow-y-auto, input, textarea, select')) {
@@ -779,7 +811,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     window.addEventListener('wheel', handleWheel, { passive: false });
 
-    // Touch Pinch-to-Zoom handlers on mobile (two-finger spread/pinch)
+    // Touch Pinch-to-Zoom handlers
     let touchStartDist: number | null = null;
     let touchStartZoom = 1.0;
 
@@ -839,6 +871,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
     window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
+    // Broadcast position throttler
+    let lastBroadcastTime = 0;
+
     const render = () => {
       const assets = assetsRef.current;
       if (!assets) return;
@@ -856,7 +891,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (keys['a'] || keys['arrowleft']) dx -= 1;
       if (keys['d'] || keys['arrowright']) dx += 1;
 
-      // Mobile Virtual Joystick movement
+      // Mobile Virtual Joystick
       if (joystickRef?.current) {
         const jx = joystickRef.current.x;
         const jy = joystickRef.current.y;
@@ -867,12 +902,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      // Cancel mouse target if keyboard is pressed
       if (dx !== 0 || dy !== 0) {
         mouseTargetRef.current.active = false;
       }
 
-      // Mouse click movement if active
+      // Mouse click movement
       if (mouseTargetRef.current.active) {
         const dist = Math.hypot(mouseTargetRef.current.worldX - player.x, mouseTargetRef.current.worldY - player.y);
         if (dist > 8) {
@@ -886,8 +920,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (dx !== 0 || dy !== 0) {
         const len = Math.hypot(dx, dy);
         const factor = Math.min(1, len);
-        player.x += (dx / len) * speed * factor;
-        player.y += (dy / len) * speed * factor;
+        const moveX = (dx / len) * speed * factor;
+        const moveY = (dy / len) * speed * factor;
+
+        const nextX = player.x + moveX;
+        const nextY = player.y + moveY;
+
+        // Collision check with buildings and world bounds
+        if (!checkCollision(nextX, nextY)) {
+          player.x = nextX;
+          player.y = nextY;
+        } else if (!checkCollision(nextX, player.y)) {
+          player.x = nextX;
+        } else if (!checkCollision(player.x, nextY)) {
+          player.y = nextY;
+        }
 
         if (dx < 0) player.direction = 'left';
         else if (dx > 0) player.direction = 'right';
@@ -901,22 +948,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      // Continuous keyboard action if Space or E is held down
+      // Continuous interaction when Space or E is held
       const currentNow = Date.now();
       if ((keysRef.current[' '] || keysRef.current['e']) && currentNow - lastInteractTimeRef.current >= 240) {
         lastInteractTimeRef.current = currentNow;
         tryInteractRef.current();
       }
 
-      // Track nearest locked island for mobile action button & contextual prompt
+      // Track nearest locked territory for mobile action prompt
       let nearLocked: Island | null = null;
       for (const isl of islandsRef.current) {
         if (!isl.unlocked) {
           const origin = getIslandOrigin(isl.gridX, isl.gridY);
-          const signX = origin.x + 256;
-          const signY = origin.y + 256;
+          const signX = origin.x + 320;
+          const signY = origin.y + 320;
           const dist = Math.hypot(player.x - signX, player.y - signY);
-          if (dist < 200) {
+          if (dist < 260) {
             nearLocked = isl;
             break;
           }
@@ -927,9 +974,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onNearIslandChangeRef.current?.(nearLocked);
       }
 
-      // Track current player island grid coordinate for minimap
-      const currentGridX = Math.round(player.x / (ISLAND_PX + ISLAND_GAP));
-      const currentGridY = Math.round(player.y / (ISLAND_PX + ISLAND_GAP));
+      // Track player grid coordinate for minimap
+      const currentGridX = Math.floor(player.x / TERRITORY_PX);
+      const currentGridY = Math.floor(player.y / TERRITORY_PX);
       if (
         currentGridX !== lastGridPosRef.current.gridX ||
         currentGridY !== lastGridPosRef.current.gridY
@@ -938,18 +985,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onPlayerPositionChangeRef.current?.({ gridX: currentGridX, gridY: currentGridY });
       }
 
-      // 2. Camera follow (smooth lerp)
+      // Camera follow (smooth lerp)
       cameraRef.current.x += (player.x - cameraRef.current.x) * 0.1;
       cameraRef.current.y += (player.y - cameraRef.current.y) * 0.1;
-
-      // 2-1. Smooth Zoom lerp
       zoomRef.current += (targetZoomRef.current - zoomRef.current) * 0.18;
 
       const camX = Math.round(cameraRef.current.x);
       const camY = Math.round(cameraRef.current.y);
 
-      // Clear & Draw Deep Ocean Background
-      ctx.fillStyle = '#1e3d59';
+      // Throttled multiplayer broadcast
+      if (currentNow - lastBroadcastTime > 60) {
+        lastBroadcastTime = currentNow;
+        if (localBusRef.current) {
+          localBusRef.current.postMessage({
+            type: 'player_move',
+            senderId: player.id,
+            payload: { ...player },
+          });
+        }
+        if (channelRef.current && isSubscribedRef.current) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'player_move',
+            payload: { ...player },
+          });
+        }
+      }
+
+      // Clear Canvas
+      ctx.fillStyle = '#223824';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.save();
@@ -957,185 +1021,454 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.scale(zoomRef.current, zoomRef.current);
       ctx.translate(-camX, -camY);
 
-      // 3. Draw Water Grid Foam effect
       const now = Date.now();
-      const foamFrame = Math.floor((now / 150) % 16);
-      const foamW = 192;
 
-      // 4. Draw Islands & Bridges
+      // Viewport bounds in world coordinates
+      const viewHalfW = (canvas.width / 2) / zoomRef.current + 120;
+      const viewHalfH = (canvas.height / 2) / zoomRef.current + 120;
+      const minX = camX - viewHalfW;
+      const maxX = camX + viewHalfW;
+      const minY = camY - viewHalfH;
+      const maxY = camY + viewHalfH;
+
+      // 2. Draw Plain Grassland Background (Seamless Grass Texture)
+      if (assets.grassSeamless && assets.grassSeamless.complete) {
+        if (!grassPatternRef.current) {
+          grassPatternRef.current = ctx.createPattern(assets.grassSeamless, 'repeat');
+        }
+        if (grassPatternRef.current) {
+          ctx.fillStyle = grassPatternRef.current;
+          ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+        } else {
+          ctx.fillStyle = '#65a30d';
+          ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+        }
+      } else {
+        ctx.fillStyle = '#65a30d';
+        ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
+      }
+
+      // 3. Draw Village Pathways & Territory Borders
+      // Central Village (Territory 0) Plaza and Roads
+      const origin0 = getIslandOrigin(0, 0);
+
+      // Cobblestone Plaza around Core
+      ctx.fillStyle = 'rgba(168, 162, 158, 0.45)';
+      ctx.beginPath();
+      ctx.arc(origin0.x + 320, origin0.y + 350, 64, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(120, 113, 108, 0.55)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Magic runic circle around Core
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.arc(origin0.x + 320, origin0.y + 350, 50, now / 2500, now / 2500 + Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Road connecting Castle entrance to Core Plaza
+      ctx.fillStyle = 'rgba(168, 162, 158, 0.38)';
+      ctx.fillRect(origin0.x + 320 - 24, origin0.y + 220, 48, 130);
+
+      // Crossroads branching outwards
+      ctx.fillRect(origin0.x, origin0.y + 350 - 20, 320, 40); // West
+      ctx.fillRect(origin0.x + 320, origin0.y + 350 - 20, 320, 40); // East
+      ctx.fillRect(origin0.x + 320 - 20, origin0.y + 350, 40, 290); // South
+      ctx.fillRect(origin0.x + 320 - 20, origin0.y, 40, 220); // North
+
+      // Draw road extensions to unlocked adjacent territories
+      for (const isl of islandsRef.current) {
+        if (!isl.unlocked || isl.id === 0) continue;
+        const origin = getIslandOrigin(isl.gridX, isl.gridY);
+        ctx.fillStyle = 'rgba(168, 162, 158, 0.32)';
+
+        // Connecting paths from borders to territory center
+        if (isl.gridX === 1) ctx.fillRect(origin.x, origin.y + 350 - 18, 320, 36);
+        if (isl.gridX === -1) ctx.fillRect(origin.x + 320, origin.y + 350 - 18, 320, 36);
+        if (isl.gridY === 1) ctx.fillRect(origin.x + 320 - 18, origin.y, 36, 320);
+        if (isl.gridY === -1) ctx.fillRect(origin.x + 320 - 18, origin.y + 320, 36, 320);
+      }
+
+      // 4. Draw Territory Borders & Locked Fog-of-War
       for (const island of islandsRef.current) {
         const origin = getIslandOrigin(island.gridX, island.gridY);
 
         if (island.unlocked) {
-          // Draw Island Ground Tiles
-          for (let tx = 0; tx < ISLAND_TILES; tx++) {
-            for (let ty = 0; ty < ISLAND_TILES; ty++) {
-              const tileX = origin.x + tx * TILE_SIZE;
-              const tileY = origin.y + ty * TILE_SIZE;
+          // Unlocked territory: Subtle stone boundary edgings
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(origin.x, origin.y, TERRITORY_PX, TERRITORY_PX);
 
-              // Center grass from tilemap (64x64 at srcX: 64, srcY: 64)
-              ctx.drawImage(
-                assets.tilemap,
-                64, 64, 64, 64,
-                tileX, tileY, TILE_SIZE, TILE_SIZE
-              );
-            }
-          }
-
-          // Draw coastal water foam around unlocked island edges
-          if (assets.waterFoam && assets.waterFoam.complete) {
-            ctx.drawImage(
-              assets.waterFoam,
-              foamFrame * foamW, 0, foamW, 192,
-              origin.x - 40, origin.y - 40, 592, 120
-            );
-          }
-
-          // Draw Connecting Bridges to adjacent unlocked islands
-          const rightNeighbor = islandsRef.current.find(
-            (other) => other.unlocked && other.gridX === island.gridX + 1 && other.gridY === island.gridY
-          );
-          if (rightNeighbor) {
-            // Draw wooden bridge connecting right
-            ctx.fillStyle = '#8d6e63';
-            ctx.fillRect(origin.x + ISLAND_PX, origin.y + 192, ISLAND_GAP, 128);
-            // Bridge planks
-            ctx.strokeStyle = '#5d4037';
-            ctx.lineWidth = 3;
-            for (let bx = origin.x + ISLAND_PX + 16; bx < origin.x + ISLAND_PX + ISLAND_GAP; bx += 20) {
-              ctx.beginPath();
-              ctx.moveTo(bx, origin.y + 192);
-              ctx.lineTo(bx, origin.y + 320);
-              ctx.stroke();
-            }
-          }
-
-          const bottomNeighbor = islandsRef.current.find(
-            (other) => other.unlocked && other.gridX === island.gridX && other.gridY === island.gridY + 1
-          );
-          if (bottomNeighbor) {
-            // Draw wooden bridge connecting down
-            ctx.fillStyle = '#8d6e63';
-            ctx.fillRect(origin.x + 192, origin.y + ISLAND_PX, 128, ISLAND_GAP);
-            ctx.strokeStyle = '#5d4037';
-            ctx.lineWidth = 3;
-            for (let by = origin.y + ISLAND_PX + 16; by < origin.y + ISLAND_PX + ISLAND_GAP; by += 20) {
-              ctx.beginPath();
-              ctx.moveTo(origin.x + 192, by);
-              ctx.lineTo(origin.x + 320, by);
-              ctx.stroke();
-            }
-          }
+          // Corner milestone stones
+          ctx.fillStyle = 'rgba(203, 213, 225, 0.45)';
+          ctx.beginPath();
+          ctx.arc(origin.x, origin.y, 6, 0, Math.PI * 2);
+          ctx.arc(origin.x + TERRITORY_PX, origin.y, 6, 0, Math.PI * 2);
+          ctx.arc(origin.x, origin.y + TERRITORY_PX, 6, 0, Math.PI * 2);
+          ctx.arc(origin.x + TERRITORY_PX, origin.y + TERRITORY_PX, 6, 0, Math.PI * 2);
+          ctx.fill();
         } else {
-          // Locked Island: Semi-transparent mysterious preview
+          // Locked territory: Mystical exploration fog overlay
           ctx.save();
-          ctx.globalAlpha = 0.35;
-          ctx.strokeStyle = '#64b5f6';
-          ctx.lineWidth = 4;
-          ctx.setLineDash([12, 10]);
-          ctx.strokeRect(origin.x, origin.y, ISLAND_PX, ISLAND_PX);
-          ctx.fillStyle = '#172a3a';
-          ctx.fillRect(origin.x, origin.y, ISLAND_PX, ISLAND_PX);
+          ctx.fillStyle = 'rgba(16, 32, 22, 0.62)';
+          ctx.fillRect(origin.x, origin.y, TERRITORY_PX, TERRITORY_PX);
+
+          const curInv = inventoryRef.current;
+          const canAfford =
+            curInv.wood >= island.costWood &&
+            curInv.stone >= island.costStone &&
+            curInv.gold >= island.costGold;
+
+          ctx.strokeStyle = canAfford ? 'rgba(74, 222, 128, 0.85)' : 'rgba(251, 191, 36, 0.65)';
+          ctx.lineWidth = canAfford ? 3.5 : 2;
+          ctx.setLineDash([16, 12]);
+          ctx.strokeRect(origin.x + 4, origin.y + 4, TERRITORY_PX - 8, TERRITORY_PX - 8);
+          ctx.setLineDash([]);
           ctx.restore();
 
-          // Signpost & Cost Badge
-          const signX = origin.x + 256;
-          const signY = origin.y + 256;
-          const currentInv = inventoryRef.current;
-          const canAfford =
-            currentInv.wood >= island.costWood &&
-            currentInv.stone >= island.costStone &&
-            currentInv.gold >= island.costGold;
+          // Central Expansion Altar & Banner
+          const signX = origin.x + 320;
+          const signY = origin.y + 320;
 
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+          // Altar base shadow
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
           ctx.beginPath();
-          ctx.roundRect(signX - 115, signY - 48, 230, 96, 12);
+          ctx.ellipse(signX, signY + 36, 80, 20, 0, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = canAfford ? '#4ade80' : '#ffd700';
+
+          // Banner Card
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+          ctx.beginPath();
+          ctx.roundRect(signX - 125, signY - 56, 250, 108, 14);
+          ctx.fill();
+          ctx.strokeStyle = canAfford ? '#4ade80' : '#fbbf24';
           ctx.lineWidth = canAfford ? 3 : 2;
           ctx.stroke();
 
+          // Territory Name
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 15px Pretendard, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(island.name, signX, signY - 20);
+          ctx.fillText(`🚩 ${island.name}`, signX, signY - 26);
 
+          // Resource Requirements
           ctx.font = 'bold 13px Pretendard, sans-serif';
-          ctx.fillStyle = canAfford ? '#86efac' : '#ffd54f';
-          const costStr = `필요: 🪵${island.costWood}  🪨${island.costStone}${island.costGold > 0 ? `  🪙${island.costGold}` : ''}`;
-          ctx.fillText(costStr, signX, signY + 8);
+          ctx.fillStyle = canAfford ? '#86efac' : '#fde047';
+          const costStr = `필요: 🪵${island.costWood}  🪨${island.costStone}${
+            island.costGold > 0 ? `  🪙${island.costGold}` : ''
+          }`;
+          ctx.fillText(costStr, signX, signY + 4);
 
+          // Action Prompt
           ctx.font = 'bold 12px Pretendard, sans-serif';
           const isMobile = canvas.width < 768;
           if (canAfford) {
             ctx.fillStyle = '#4ade80';
-            ctx.fillText(isMobile ? '✨ 해금 가능! [개척 버튼 터치]' : '✨ 해금 가능! [E 키 / 클릭]', signX, signY + 32);
+            ctx.fillText(
+              isMobile ? '✨ 개척 가능! [개척 버튼 터치]' : '✨ 개척 가능! [E 키 / 클릭]',
+              signX,
+              signY + 32
+            );
           } else {
             ctx.fillStyle = '#f87171';
-            ctx.fillText('자원 부족 (자원 채집 필요)', signX, signY + 32);
+            ctx.fillText('자원 부족 (주변 자원 채집 필요)', signX, signY + 32);
           }
         }
       }
 
-      // 5. Draw Entities (Trees, Rocks, Gold Rocks)
-      const sortedEntities = [...entitiesRef.current].sort((a, b) => a.y - b.y);
+      // 5. Y-Sorted Depth Rendering (Buildings, Core, Entities, Players)
+      interface Renderable {
+        depthY: number;
+        draw: () => void;
+      }
+      const renderables: Renderable[] = [];
 
-      for (const ent of sortedEntities) {
-        let shakeOffset = 0;
-        if (ent.shakeTime && ent.shakeTime > now) {
-          shakeOffset = Math.sin((now / 20) * Math.PI) * 5;
-        }
+      // Add Buildings
+      for (const b of buildingsRef.current) {
+        let bDepth = b.y + b.height - 20;
+        if (b.type === 'castle') bDepth = b.y + 240;
+        else if (b.type === 'tower') bDepth = b.y + 240;
+        else if (b.type === 'monastery') bDepth = b.y + 290;
+        else if (b.type === 'barracks' || b.type === 'archery') bDepth = b.y + 230;
 
-        const drawX = ent.x + shakeOffset;
-        const drawY = ent.y;
+        renderables.push({
+          depthY: bDepth,
+          draw: () => {
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+            ctx.beginPath();
+            ctx.ellipse(b.x + b.width / 2, b.y + b.height - 12, b.width / 2.3, 18, 0, 0, Math.PI * 2);
+            ctx.fill();
 
-        if (ent.type === 'tree') {
-          // Tree1.png: 1536x256 (8 frames of 192x256)
-          const treeFrame = Math.floor((now / 220) % 8);
-          ctx.drawImage(
-            assets.tree,
-            treeFrame * 192, 0, 192, 256,
-            drawX - 64, drawY - 160, 160, 200
-          );
-        } else if (ent.type === 'rock') {
-          // Rock1.png: 64x64
-          ctx.drawImage(assets.rock1, drawX, drawY - 16, 64, 64);
-        } else if (ent.type === 'gold_rock') {
-          // Gold tinted rock
-          ctx.save();
-          ctx.drawImage(assets.rock2, drawX, drawY - 16, 64, 64);
-          // Sparkle overlay
-          ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+            let bImg: HTMLImageElement | null = null;
+            switch (b.type) {
+              case 'castle': bImg = assets.castle; break;
+              case 'house1': bImg = assets.house1; break;
+              case 'house2': bImg = assets.house2; break;
+              case 'house3': bImg = assets.house3; break;
+              case 'tower': bImg = assets.tower; break;
+              case 'barracks': bImg = assets.barracks; break;
+              case 'archery': bImg = assets.archery; break;
+              case 'monastery': bImg = assets.monastery; break;
+            }
+
+            if (bImg && bImg.complete) {
+              ctx.drawImage(bImg, b.x, b.y, b.width, b.height);
+            }
+
+            // Overhead Banner for Castle
+            if (b.type === 'castle') {
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+              ctx.beginPath();
+              ctx.roundRect(b.x + b.width / 2 - 95, b.y - 30, 190, 26, 6);
+              ctx.fill();
+              ctx.strokeStyle = '#38bdf8';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              ctx.fillStyle = '#f8fafc';
+              ctx.font = 'bold 12px Pretendard, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText(b.name, b.x + b.width / 2, b.y - 13);
+            }
+          },
+        });
+      }
+
+      // Add Central Territory Core (Territory 0)
+      const coreX = CENTRAL_CORE.x;
+      const coreY = CENTRAL_CORE.y;
+
+      renderables.push({
+        depthY: coreY + 24,
+        draw: () => {
+          // Core Glowing Aura
+          const corePulse = Math.sin(now / 240) * 8;
+          const coreGrd = ctx.createRadialGradient(coreX, coreY, 8, coreX, coreY, 52 + corePulse);
+          coreGrd.addColorStop(0, 'rgba(56, 189, 248, 0.6)');
+          coreGrd.addColorStop(0.6, 'rgba(14, 165, 233, 0.25)');
+          coreGrd.addColorStop(1, 'rgba(14, 165, 233, 0)');
+          ctx.fillStyle = coreGrd;
           ctx.beginPath();
-          ctx.arc(drawX + 32, drawY + 16, 24, 0, Math.PI * 2);
+          ctx.arc(coreX, coreY, 52 + corePulse, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Floating Nexus Crystal
+          const crystalHover = Math.sin(now / 180) * 6;
+          const crystalY = coreY - 26 + crystalHover;
+
+          // Shadow
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+          ctx.beginPath();
+          ctx.ellipse(coreX, coreY + 14, 18, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Magical Diamond Crystal
+          ctx.save();
+          ctx.translate(coreX, crystalY);
+          ctx.fillStyle = '#38bdf8';
+          ctx.strokeStyle = '#e0f2fe';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(0, -22);
+          ctx.lineTo(14, 0);
+          ctx.lineTo(0, 22);
+          ctx.lineTo(-14, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Inner facet highlight
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+          ctx.beginPath();
+          ctx.moveTo(0, -22);
+          ctx.lineTo(14, 0);
+          ctx.lineTo(0, 2);
+          ctx.closePath();
           ctx.fill();
           ctx.restore();
+
+          // Resonance wave effect
+          if (now - lastCoreResonanceRef.current < 1500) {
+            const waveProgress = (now - lastCoreResonanceRef.current) / 1500;
+            const waveRadius = waveProgress * 280;
+            ctx.save();
+            ctx.strokeStyle = `rgba(56, 189, 248, ${1 - waveProgress})`;
+            ctx.lineWidth = 4 * (1 - waveProgress);
+            ctx.beginPath();
+            ctx.arc(coreX, coreY, waveRadius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Core title & interaction badge
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.beginPath();
+          ctx.roundRect(coreX - 70, coreY - 74, 140, 36, 8);
+          ctx.fill();
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 12px Pretendard, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('💎 영지 코어 Lv.1', coreX, coreY - 55);
+
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = 'bold 10px Pretendard, sans-serif';
+          ctx.fillText('[E] 코어 공명', coreX, coreY - 42);
+        },
+      });
+
+      // Add Entities (Trees, Rocks, Gold, Sheep)
+      for (const ent of entitiesRef.current) {
+        let entDepth = ent.y + 16;
+        if (ent.type === 'rock' || ent.type === 'gold_rock') entDepth = ent.y + 20;
+
+        renderables.push({
+          depthY: entDepth,
+          draw: () => {
+            let shakeOffset = 0;
+            if (ent.shakeTime && ent.shakeTime > now) {
+              shakeOffset = Math.sin((now / 20) * Math.PI) * 5;
+            }
+            const drawX = ent.x + shakeOffset;
+            const drawY = ent.y;
+
+            if (ent.type === 'tree') {
+              const treeFrame = Math.floor((now / 220) % 8);
+              const treeImg = ent.id.includes('2') || ent.id.includes('4') ? (assets.tree3 || assets.tree) : assets.tree;
+              const srcH = treeImg === assets.tree3 ? 192 : 256;
+              const drawH = treeImg === assets.tree3 ? 160 : 200;
+
+              // Tree shadow
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+              ctx.beginPath();
+              ctx.ellipse(drawX + 16, drawY + 28, 44, 14, 0, 0, Math.PI * 2);
+              ctx.fill();
+
+              ctx.drawImage(
+                treeImg,
+                treeFrame * 192, 0, 192, srcH,
+                drawX - 64, drawY - (drawH - 40), 160, drawH
+              );
+            } else if (ent.type === 'rock') {
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+              ctx.beginPath();
+              ctx.ellipse(drawX + 32, drawY + 36, 26, 12, 0, 0, Math.PI * 2);
+              ctx.fill();
+
+              const rockImg = ent.id.includes('2') ? assets.rock2 : assets.rock1;
+              ctx.drawImage(rockImg, drawX, drawY - 16, 64, 64);
+            } else if (ent.type === 'gold_rock') {
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+              ctx.beginPath();
+              ctx.ellipse(drawX + 32, drawY + 36, 28, 12, 0, 0, Math.PI * 2);
+              ctx.fill();
+
+              if (assets.goldResource && assets.goldResource.complete) {
+                ctx.drawImage(assets.goldResource, drawX, drawY - 24, 72, 72);
+              } else {
+                ctx.save();
+                ctx.drawImage(assets.rock2, drawX, drawY - 16, 64, 64);
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.35)';
+                ctx.beginPath();
+                ctx.arc(drawX + 32, drawY + 16, 24, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+              }
+            } else if (ent.type === 'sheep') {
+              const sheepFrame = Math.floor((now / 200 + (ent.id.charCodeAt(ent.id.length - 1) % 6)) % 6);
+              const sheepDrawX = drawX - 16;
+              const sheepDrawY = drawY - 24;
+
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+              ctx.beginPath();
+              ctx.ellipse(drawX + 32, drawY + 36, 28, 10, 0, 0, Math.PI * 2);
+              ctx.fill();
+
+              if (assets.sheep && assets.sheep.complete) {
+                ctx.drawImage(
+                  assets.sheep,
+                  sheepFrame * 128, 0, 128, 128,
+                  sheepDrawX, sheepDrawY, 96, 96
+                );
+              } else {
+                ctx.font = '28px sans-serif';
+                ctx.fillText('🐑', drawX + 16, drawY + 24);
+              }
+            }
+
+            // Health bar if damaged
+            if (ent.hp < ent.maxHp && ent.type !== 'sheep') {
+              const barW = 40;
+              const barH = 5;
+              const barX = ent.x + 16 - barW / 2;
+              const barY = ent.y - 12;
+
+              ctx.fillStyle = 'rgba(0,0,0,0.6)';
+              ctx.fillRect(barX, barY, barW, barH);
+              ctx.fillStyle = '#4caf50';
+              ctx.fillRect(barX, barY, (ent.hp / ent.maxHp) * barW, barH);
+            }
+          },
+        });
+      }
+
+      // Add Remote Players
+      remotePlayersRef.current.forEach((remote) => {
+        renderables.push({
+          depthY: remote.y + 24,
+          draw: () => drawCharacter(ctx, assets, remote, now, false),
+        });
+      });
+
+      // Add Local Player
+      renderables.push({
+        depthY: player.y + 24,
+        draw: () => drawCharacter(ctx, assets, localPlayerRef.current, now, true),
+      });
+
+      // Sort & Draw all renderables in Y order
+      renderables.sort((a, b) => a.depthY - b.depthY);
+      for (const r of renderables) {
+        r.draw();
+      }
+
+      // 6. Draw Ambient Floating Clouds & Shadows
+      for (const c of cloudsRef.current) {
+        c.x += c.speed;
+        if (c.x > 2200) {
+          c.x = -2200;
+          c.y = -800 + Math.random() * 2400;
         }
 
-        // Draw Health Bar if damaged
-        if (ent.hp < ent.maxHp) {
-          const barW = 40;
-          const barH = 5;
-          const barX = ent.x + 16 - barW / 2;
-          const barY = ent.y - 12;
+        const cloudImg = c.type === 1 ? assets.cloud1 : assets.cloud2;
+        if (cloudImg && cloudImg.complete) {
+          const cw = cloudImg.width * c.scale;
+          const ch = cloudImg.height * c.scale;
 
-          ctx.fillStyle = 'rgba(0,0,0,0.6)';
-          ctx.fillRect(barX, barY, barW, barH);
-          ctx.fillStyle = '#4caf50';
-          ctx.fillRect(barX, barY, (ent.hp / ent.maxHp) * barW, barH);
+          // Soft ground shadow
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+          ctx.beginPath();
+          ctx.ellipse(c.x + cw / 2, c.y + ch / 2 + 100, cw / 2.2, ch / 3, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Sky cloud
+          ctx.save();
+          ctx.globalAlpha = 0.65;
+          ctx.drawImage(cloudImg, c.x, c.y, cw, ch);
+          ctx.restore();
         }
       }
 
-      // 6. Draw Remote Players
-      remotePlayersRef.current.forEach((remote) => {
-        drawCharacter(ctx, assets, remote, now);
-      });
-
-      // 7. Draw Local Player
-      drawCharacter(ctx, assets, localPlayerRef.current, now, true);
-
-      // 8. Draw Particles
-      particlesRef.current.forEach((p, idx) => {
+      // 7. Draw Particles
+      particlesRef.current.forEach((p) => {
         p.x += p.vx;
         p.y += p.vy;
         p.life++;
@@ -1149,90 +1482,55 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       });
       particlesRef.current = particlesRef.current.filter((p) => p.life < p.maxLife);
 
-      // 9. Draw Floating Texts
-      floatingTextsRef.current.forEach((txt) => {
-        txt.y += txt.vy;
-        txt.alpha -= 0.015;
+      // 8. Draw Floating Texts
+      floatingTextsRef.current.forEach((ft) => {
+        ft.y += ft.vy;
+        ft.alpha -= 0.016;
 
         ctx.save();
-        ctx.font = 'bold 16px Pretendard, sans-serif';
-        ctx.fillStyle = txt.color;
-        ctx.globalAlpha = Math.max(0, txt.alpha);
+        ctx.globalAlpha = Math.max(0, ft.alpha);
+        ctx.font = 'bold 15px Pretendard, sans-serif';
         ctx.textAlign = 'center';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 3;
-        ctx.strokeText(txt.text, txt.x, txt.y);
-        ctx.fillText(txt.text, txt.x, txt.y);
+        ctx.strokeText(ft.text, ft.x, ft.y);
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
         ctx.restore();
       });
-      floatingTextsRef.current = floatingTextsRef.current.filter((txt) => txt.alpha > 0);
+      floatingTextsRef.current = floatingTextsRef.current.filter((ft) => ft.alpha > 0);
 
-      ctx.restore();
+      // 9. Minimap (Top-right HUD radar)
+      ctx.restore(); // Exit camera space
 
-      // 10. Draw Minimap (Screen-Space: in upper right corner, compact size)
-      const isMobile = canvas.width < 768;
-      const minimapSize = isMobile ? 84 : 108;
-      const margin = isMobile ? 12 : 16;
-      const mmX = canvas.width - minimapSize - margin;
-      const mmY = isMobile ? 54 : 66;
-
-      // Minimap background box
       ctx.save();
+      const isMobile = canvas.width < 768;
+      const mmSize = isMobile ? 128 : 160;
+      const mmPadding = isMobile ? 12 : 20;
+      const mmX = canvas.width - mmSize - mmPadding;
+      const mmY = mmPadding + (isMobile ? 56 : 72);
+
+      // Minimap Card Background
       ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(mmX, mmY, minimapSize, minimapSize, isMobile ? 10 : 12);
+      ctx.roundRect(mmX, mmY, mmSize, mmSize, isMobile ? 14 : 18);
       ctx.fill();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Minimap Header / Title
-      const unlockedTotal = islandsRef.current.filter((isl) => isl.unlocked).length;
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = isMobile ? 'bold 9px Pretendard, sans-serif' : 'bold 10px Pretendard, sans-serif';
+      // Minimap Header
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.font = 'bold 10px Pretendard, sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(
-        isMobile ? `🗺️ ${unlockedTotal}/${islandsRef.current.length}` : `🗺️ 지도 (${unlockedTotal}/${islandsRef.current.length})`,
-        mmX + (isMobile ? 6 : 8),
-        mmY + (isMobile ? 12 : 14)
-      );
+      ctx.fillText('🚩 왕국 영지 지도', mmX + 10, mmY + 16);
 
-      // Grid center inside minimap (5x5 grid: -2 to 2)
-      const mmCenterX = mmX + minimapSize / 2;
-      const mmCenterY = mmY + minimapSize / 2 + (isMobile ? 5 : 6);
-      const mmStep = isMobile ? 14 : 18;
-      const islandBoxSize = isMobile ? 9 : 12;
+      // 5x5 Territory Grid Radar
+      const mmCenterX = mmX + mmSize / 2;
+      const mmCenterY = mmY + mmSize / 2 + 6;
+      const mmStep = isMobile ? 18 : 22;
+      const boxSize = isMobile ? 14 : 17;
 
-      // Draw connecting bridges between adjacent unlocked islands
-      ctx.strokeStyle = '#8d6e63';
-      ctx.lineWidth = isMobile ? 2 : 2.5;
-      for (const isl of islandsRef.current) {
-        if (!isl.unlocked) continue;
-        const ix = mmCenterX + isl.gridX * mmStep;
-        const iy = mmCenterY + isl.gridY * mmStep;
-
-        const right = islandsRef.current.find(
-          (o) => o.unlocked && o.gridX === isl.gridX + 1 && o.gridY === isl.gridY
-        );
-        if (right) {
-          ctx.beginPath();
-          ctx.moveTo(ix, iy);
-          ctx.lineTo(ix + mmStep, iy);
-          ctx.stroke();
-        }
-
-        const bottom = islandsRef.current.find(
-          (o) => o.unlocked && o.gridX === isl.gridX && o.gridY === isl.gridY + 1
-        );
-        if (bottom) {
-          ctx.beginPath();
-          ctx.moveTo(ix, iy);
-          ctx.lineTo(ix, iy + mmStep);
-          ctx.stroke();
-        }
-      }
-
-      // Draw island nodes
       for (const isl of islandsRef.current) {
         const ix = mmCenterX + isl.gridX * mmStep;
         const iy = mmCenterY + isl.gridY * mmStep;
@@ -1240,7 +1538,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (isl.unlocked) {
           ctx.fillStyle = isl.id === 0 ? '#38bdf8' : '#22c55e';
           ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, isMobile ? 2.5 : 3);
+          ctx.roundRect(ix - boxSize / 2, iy - boxSize / 2, boxSize, boxSize, 3);
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 1;
@@ -1252,29 +1550,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             currentInv.stone >= isl.costStone &&
             currentInv.gold >= isl.costGold;
 
-          ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.4)' : 'rgba(51, 65, 85, 0.7)';
+          ctx.fillStyle = canAfford ? 'rgba(234, 179, 8, 0.45)' : 'rgba(51, 65, 85, 0.7)';
           ctx.beginPath();
-          ctx.roundRect(ix - islandBoxSize / 2, iy - islandBoxSize / 2, islandBoxSize, islandBoxSize, isMobile ? 2.5 : 3);
+          ctx.roundRect(ix - boxSize / 2, iy - boxSize / 2, boxSize, boxSize, 3);
           ctx.fill();
-          ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.6)';
+          ctx.strokeStyle = canAfford ? '#fbbf24' : 'rgba(100, 116, 139, 0.5)';
           ctx.lineWidth = canAfford ? 1.2 : 0.8;
           ctx.stroke();
         }
       }
 
-      // Draw remote players on minimap
+      // Remote players on minimap
       remotePlayersRef.current.forEach((rp) => {
-        const rNormX = mmCenterX + ((rp.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-        const rNormY = mmCenterY + ((rp.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+        const rNormX = mmCenterX + ((rp.x - 320) / TERRITORY_PX) * mmStep;
+        const rNormY = mmCenterY + ((rp.y - 320) / TERRITORY_PX) * mmStep;
         ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
         ctx.beginPath();
         ctx.arc(rNormX, rNormY, isMobile ? 2 : 2.5, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      // Draw local player marker on minimap (pulsing ring)
-      const pNormX = mmCenterX + ((player.x - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
-      const pNormY = mmCenterY + ((player.y - 256) / (ISLAND_PX + ISLAND_GAP)) * mmStep;
+      // Local player on minimap (pulsing marker)
+      const pNormX = mmCenterX + ((player.x - 320) / TERRITORY_PX) * mmStep;
+      const pNormY = mmCenterY + ((player.y - 320) / TERRITORY_PX) * mmStep;
       const pulseSize = (isMobile ? 2.5 : 3.5) + Math.sin(now / 180) * 1;
 
       ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';
@@ -1295,14 +1593,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', handleResize);
-
       canvas.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('wheel', handleWheel);
       canvas.removeEventListener('touchstart', handleTouchStart);
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
       canvas.removeEventListener('touchcancel', handleTouchEnd);
-
-      window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
@@ -1318,30 +1614,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     now: number,
     isLocal: boolean = false
   ) => {
-    const isBlue = p.color === 'blue';
-    let img = isBlue ? assets.bluePawnIdle : assets.redPawnIdle;
-    let totalFrames = 8;
-    let frameSpeed = 130;
+    let spriteSheet: HTMLImageElement;
+    let totalFrames = 6;
+    let fps = 150;
 
-    if (p.action === 'run') {
-      img = isBlue ? assets.bluePawnRun : assets.redPawnRun;
+    const isBlue = p.color === 'blue';
+
+    if (p.action === 'idle') {
+      spriteSheet = isBlue ? assets.bluePawnIdle : assets.redPawnIdle;
       totalFrames = 6;
-      frameSpeed = 100;
+      fps = 160;
+    } else if (p.action === 'run') {
+      spriteSheet = isBlue ? assets.bluePawnRun : assets.redPawnRun;
+      totalFrames = 6;
+      fps = 110;
     } else if (p.action === 'axe') {
-      img = isBlue ? assets.bluePawnAxe : assets.redPawnAxe;
+      spriteSheet = isBlue ? assets.bluePawnAxe : assets.redPawnAxe;
       totalFrames = 6;
-      frameSpeed = 50;
-    } else if (p.action === 'pickaxe') {
-      img = isBlue ? assets.bluePawnPickaxe : assets.redPawnPickaxe;
+      fps = 70;
+    } else {
+      spriteSheet = isBlue ? assets.bluePawnPickaxe : assets.redPawnPickaxe;
       totalFrames = 6;
-      frameSpeed = 50;
+      fps = 70;
     }
 
-    const frame = Math.floor((now / frameSpeed) % totalFrames);
+    const frame = Math.floor((now / fps) % totalFrames);
     const frameW = 192;
     const frameH = 192;
-    const destW = 128;
-    const destH = 128;
+
+    const renderW = 128;
+    const renderH = 128;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 24, 22, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.save();
     ctx.translate(p.x, p.y);
@@ -1350,42 +1658,37 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.scale(-1, 1);
     }
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-    ctx.beginPath();
-    ctx.ellipse(0, 16, 24, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Sprite drawing
     ctx.drawImage(
-      img,
-      frame * frameW, 0, frameW, frameH,
-      -destW / 2, -destH / 2 - 12, destW, destH
+      spriteSheet,
+      frame * frameW,
+      0,
+      frameW,
+      frameH,
+      -renderW / 2,
+      -renderH / 2,
+      renderW,
+      renderH
     );
 
     ctx.restore();
 
-    // Name tag & Status above head
-    ctx.save();
-    ctx.font = 'bold 13px Pretendard, sans-serif';
+    // Name label
+    ctx.fillStyle = isLocal ? '#38bdf8' : '#f87171';
+    ctx.font = 'bold 12px Pretendard, sans-serif';
     ctx.textAlign = 'center';
-
-    const tagY = p.y - 65;
-    ctx.fillStyle = isLocal ? '#4fc3f7' : '#ffb74d';
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 3;
-    ctx.strokeText(p.name, p.x, tagY);
-    ctx.fillText(p.name, p.x, tagY);
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(p.name, p.x, p.y - 42);
+    ctx.fillText(p.name, p.x, p.y - 42);
 
     if (isLocal) {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '10px Pretendard, sans-serif';
-      ctx.fillText('(나)', p.x, tagY - 14);
+      ctx.fillStyle = '#fde047';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText('▼', p.x, p.y - 54);
     }
-    ctx.restore();
   };
 
-  // Pointer interactions (mouse click or touch)
+  // Pointer Down on canvas
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1394,21 +1697,25 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Check if clicked inside minimap (in top-right corner)
+    // Minimap radar click detection
     const isMobile = canvas.width < 768;
-    const minimapSize = isMobile ? 84 : 108;
-    const margin = isMobile ? 12 : 16;
+    const minimapSize = isMobile ? 128 : 160;
+    const margin = isMobile ? 12 : 20;
     const mmX = canvas.width - minimapSize - margin;
-    const mmY = isMobile ? 54 : 66;
+    const mmY = margin + (isMobile ? 56 : 72);
 
-    if (screenX >= mmX && screenX <= mmX + minimapSize && screenY >= mmY && screenY <= mmY + minimapSize) {
+    if (
+      screenX >= mmX &&
+      screenX <= mmX + minimapSize &&
+      screenY >= mmY &&
+      screenY <= mmY + minimapSize
+    ) {
       sound.playClick();
       onOpenMinimap?.();
       return;
     }
 
     if (isMobile) {
-      // Ignore clicks in mobile joystick zone (bottom-left) and action button zone (bottom-right)
       if (screenX <= 140 && screenY >= canvas.height - 140) return;
       if (screenX >= canvas.width - 140 && screenY >= canvas.height - 140) return;
     }
@@ -1417,7 +1724,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       return;
     }
 
-    // World coordinate at time of click (adjusted for zoom scale & camera position)
     const currentZoom = zoomRef.current;
     const worldClickX = cameraRef.current.x + (screenX - canvas.width / 2) / currentZoom;
     const worldClickY = cameraRef.current.y + (screenY - canvas.height / 2) / currentZoom;
@@ -1425,7 +1731,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const player = localPlayerRef.current;
     const distToPlayer = Math.hypot(worldClickX - player.x, worldClickY - player.y);
 
-    // If click is near the player (within 65px): just interact/swing, do NOT move
     if (distToPlayer < 65) {
       mouseTargetRef.current.active = false;
     } else {
@@ -1444,7 +1749,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       {!assetsLoaded && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#101820] text-white">
           <div className="text-3xl font-bold mb-4 tracking-wider text-amber-400">
-            ⚔️ Tiny Isles 로딩 중...
+            ⚔️ Tiny Isles 평원 영지 로딩 중...
           </div>
           <div className="w-64 h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-600">
             <div
@@ -1453,7 +1758,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             />
           </div>
           <div className="mt-2 text-sm text-gray-400">
-            스프라이트 에셋 및 맵 로딩 {Math.round(loadProgress * 100)}%
+            영지 그리드 및 건물 에셋 로딩 {Math.round(loadProgress * 100)}%
           </div>
         </div>
       )}

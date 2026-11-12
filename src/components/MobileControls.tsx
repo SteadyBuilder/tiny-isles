@@ -216,7 +216,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 active:scale-95 text-white font-extrabold text-xs shadow-2xl border-2 border-emerald-300 animate-bounce"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-            <span>🏝️ #{nearIsland.id} 개척</span>
+            <span>🚩 #{nearIsland.id} 영지 개척</span>
           </button>
         )}
 

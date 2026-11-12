@@ -11,9 +11,27 @@ export interface GameAssets {
   waterBg: HTMLImageElement;
   waterFoam: HTMLImageElement;
   tree: HTMLImageElement;
+  tree3: HTMLImageElement;
   rock1: HTMLImageElement;
   rock2: HTMLImageElement;
+  rock3: HTMLImageElement;
+  rock4: HTMLImageElement;
   bush: HTMLImageElement;
+  bush2: HTMLImageElement;
+  castle: HTMLImageElement;
+  house1: HTMLImageElement;
+  house2: HTMLImageElement;
+  house3: HTMLImageElement;
+  tower: HTMLImageElement;
+  barracks: HTMLImageElement;
+  archery: HTMLImageElement;
+  monastery: HTMLImageElement;
+  sheep: HTMLImageElement;
+  goldResource: HTMLImageElement;
+  woodResource: HTMLImageElement;
+  grassSeamless: HTMLImageElement;
+  cloud1: HTMLImageElement;
+  cloud2: HTMLImageElement;
 }
 
 export async function loadGameAssets(onProgress?: (ratio: number) => void): Promise<GameAssets> {
@@ -30,9 +48,27 @@ export async function loadGameAssets(onProgress?: (ratio: number) => void): Prom
     waterBg: '/assets/terrain/Water_Background_color.png',
     waterFoam: '/assets/terrain/Water_Foam.png',
     tree: '/assets/decorations/Tree1.png',
+    tree3: '/assets/decorations/Tree3.png',
     rock1: '/assets/decorations/Rock1.png',
     rock2: '/assets/decorations/Rock2.png',
+    rock3: '/assets/decorations/Rock3.png',
+    rock4: '/assets/decorations/Rock4.png',
     bush: '/assets/decorations/Bushe1.png',
+    bush2: '/assets/decorations/Bushe2.png',
+    castle: '/assets/buildings/Castle.png',
+    house1: '/assets/buildings/House1.png',
+    house2: '/assets/buildings/House2.png',
+    house3: '/assets/buildings/House3.png',
+    tower: '/assets/buildings/Tower.png',
+    barracks: '/assets/buildings/Barracks.png',
+    archery: '/assets/buildings/Archery.png',
+    monastery: '/assets/buildings/Monastery.png',
+    sheep: '/assets/resources/Sheep_Idle.png',
+    goldResource: '/assets/resources/Gold_Resource.png',
+    woodResource: '/assets/resources/Wood Resource.png',
+    grassSeamless: '/assets/terrain/Grass_Seamless.png',
+    cloud1: '/assets/decorations/Clouds_01.png',
+    cloud2: '/assets/decorations/Clouds_02.png',
   };
 
   const keys = Object.keys(assetPaths) as (keyof GameAssets)[];

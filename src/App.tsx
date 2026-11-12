@@ -122,7 +122,7 @@ export function App() {
   };
 
   const handleResetGame = () => {
-    if (window.confirm('정말 게임 진행상황(자원 및 해금된 섬)을 초기화하시겠습니까?')) {
+    if (window.confirm('정말 게임 진행상황(자원 및 개척된 영지)을 초기화하시겠습니까?')) {
       storage.resetAll();
       window.location.reload();
     }
@@ -138,7 +138,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#1e3d59]">
+    <div className="relative w-screen h-screen overflow-hidden bg-[#1a331a]">
       <HUD
         inventory={inventory}
         onlineCount={onlineCount}

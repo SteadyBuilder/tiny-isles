@@ -20,7 +20,7 @@ export interface Player {
   lastUpdated: number;
 }
 
-export type EntityType = 'tree' | 'rock' | 'gold_rock';
+export type EntityType = 'tree' | 'rock' | 'gold_rock' | 'sheep';
 
 export interface Entity {
   id: string;
@@ -33,6 +33,35 @@ export interface Entity {
   shakeTime?: number;
 }
 
+export type BuildingType =
+  | 'castle'
+  | 'house1'
+  | 'house2'
+  | 'house3'
+  | 'tower'
+  | 'barracks'
+  | 'archery'
+  | 'monastery';
+
+export interface Building {
+  id: string;
+  type: BuildingType;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  islandId: number;
+}
+
+export interface TerritoryCore {
+  x: number;
+  y: number;
+  level: number;
+  name: string;
+  islandId: number;
+}
+
 export interface Island {
   id: number;
   gridX: number; // e.g. 0, 1, -1
@@ -43,6 +72,8 @@ export interface Island {
   unlocked: boolean;
   name: string;
 }
+
+export type Territory = Island;
 
 export interface FloatingText {
   id: string;
