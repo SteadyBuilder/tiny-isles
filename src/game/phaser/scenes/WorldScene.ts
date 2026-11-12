@@ -702,51 +702,87 @@ export class WorldScene extends Phaser.Scene {
     container.setDepth(cb.y + 30);
 
     if (cb.category === 'wall') {
-      // 나무 방책(wood_wall) 또는 석조 성벽(stone_wall) 바리케이드 시각화
       const isHorizontal = cb.slotIndex === 0 || cb.slotIndex === 1;
-      const wallGraphics = this.add.graphics();
       const isWood = cb.type === 'wood_wall';
-      const mainColor = isWood ? 0x854d0e : 0x64748b;
-      const borderColor = isWood ? 0xfbbf24 : 0xe2e8f0;
 
-      if (isHorizontal) {
-        // 좌우로 뻗은 방책/성벽 (중앙 통로 게이트 표현 + 양 날개 방책)
-        wallGraphics.fillStyle(mainColor, 0.92);
-        wallGraphics.lineStyle(2.5, borderColor, 0.95);
-        wallGraphics.fillRoundedRect(-220, -14, 170, 28, 6);
-        wallGraphics.strokeRoundedRect(-220, -14, 170, 28, 6);
-        wallGraphics.fillRoundedRect(50, -14, 170, 28, 6);
-        wallGraphics.strokeRoundedRect(50, -14, 170, 28, 6);
+      if (isWood) {
+        // Tiny Swords 나무 목책 (Palisade) 스프라이트 렌더링
+        if (isHorizontal) {
+          // 좌우 수평 방책 (좌측 날개 + 중앙 목책 관문 + 우측 날개)
+          const leftWing = this.add.image(-135, 0, 'woodPalisadeH');
+          leftWing.setDisplaySize(170, 56);
+          container.add(leftWing);
 
-        // 중앙 성문 바리케이드
-        wallGraphics.fillStyle(isWood ? 0x713f12 : 0x475569, 0.85);
-        wallGraphics.fillRoundedRect(-50, -10, 100, 20, 4);
-        wallGraphics.strokeRoundedRect(-50, -10, 100, 20, 4);
+          const rightWing = this.add.image(135, 0, 'woodPalisadeH');
+          rightWing.setDisplaySize(170, 56);
+          container.add(rightWing);
 
-        // 나무 말뚝 디테일
-        for (let px = -205; px <= 205; px += 24) {
-          wallGraphics.fillStyle(isWood ? 0xa16207 : 0x94a3b8, 1);
-          wallGraphics.fillCircle(px, 0, 5);
+          const gate = this.add.image(0, 0, 'woodPalisadeGate');
+          gate.setDisplaySize(100, 50);
+          container.add(gate);
+        } else if (cb.slotIndex === 2 || cb.slotIndex === 3) {
+          // 상하 수직 방책 (상단 날개 + 중앙 기둥 초소 + 하단 날개)
+          const topWing = this.add.image(0, -135, 'woodPalisadeV');
+          topWing.setDisplaySize(56, 170);
+          container.add(topWing);
+
+          const bottomWing = this.add.image(0, 135, 'woodPalisadeV');
+          bottomWing.setDisplaySize(56, 170);
+          container.add(bottomWing);
+
+          const centerPost = this.add.image(0, 0, 'woodPalisade');
+          centerPost.setDisplaySize(80, 80);
+          container.add(centerPost);
+        } else {
+          // 내부 슬롯에 지어진 단일 방책 요새
+          const palisade = this.add.image(0, -10, 'woodPalisade');
+          palisade.setDisplaySize(120, 120);
+          container.add(palisade);
         }
       } else {
-        // 상하로 뻗은 방책/성벽
-        wallGraphics.fillStyle(mainColor, 0.92);
-        wallGraphics.lineStyle(2.5, borderColor, 0.95);
-        wallGraphics.fillRoundedRect(-14, -220, 28, 170, 6);
-        wallGraphics.strokeRoundedRect(-14, -220, 28, 170, 6);
-        wallGraphics.fillRoundedRect(-14, 50, 28, 170, 6);
-        wallGraphics.strokeRoundedRect(-14, 50, 28, 170, 6);
+        // 석조 성벽(stone_wall) 바리케이드 그래픽스 시각화
+        const wallGraphics = this.add.graphics();
+        const mainColor = 0x64748b;
+        const borderColor = 0xe2e8f0;
 
-        wallGraphics.fillStyle(isWood ? 0x713f12 : 0x475569, 0.85);
-        wallGraphics.fillRoundedRect(-10, -50, 20, 100, 4);
-        wallGraphics.strokeRoundedRect(-10, -50, 20, 100, 4);
+        if (isHorizontal) {
+          // 좌우로 뻗은 성벽 (중앙 통로 게이트 표현 + 양 날개 방책)
+          wallGraphics.fillStyle(mainColor, 0.92);
+          wallGraphics.lineStyle(2.5, borderColor, 0.95);
+          wallGraphics.fillRoundedRect(-220, -14, 170, 28, 6);
+          wallGraphics.strokeRoundedRect(-220, -14, 170, 28, 6);
+          wallGraphics.fillRoundedRect(50, -14, 170, 28, 6);
+          wallGraphics.strokeRoundedRect(50, -14, 170, 28, 6);
 
-        for (let py = -205; py <= 205; py += 24) {
-          wallGraphics.fillStyle(isWood ? 0xa16207 : 0x94a3b8, 1);
-          wallGraphics.fillCircle(0, py, 5);
+          // 중앙 성문 바리케이드
+          wallGraphics.fillStyle(0x475569, 0.85);
+          wallGraphics.fillRoundedRect(-50, -10, 100, 20, 4);
+          wallGraphics.strokeRoundedRect(-50, -10, 100, 20, 4);
+
+          for (let px = -205; px <= 205; px += 24) {
+            wallGraphics.fillStyle(0x94a3b8, 1);
+            wallGraphics.fillCircle(px, 0, 5);
+          }
+        } else {
+          // 상하로 뻗은 성벽
+          wallGraphics.fillStyle(mainColor, 0.92);
+          wallGraphics.lineStyle(2.5, borderColor, 0.95);
+          wallGraphics.fillRoundedRect(-14, -220, 28, 170, 6);
+          wallGraphics.strokeRoundedRect(-14, -220, 28, 170, 6);
+          wallGraphics.fillRoundedRect(-14, 50, 28, 170, 6);
+          wallGraphics.strokeRoundedRect(-14, 50, 28, 170, 6);
+
+          wallGraphics.fillStyle(0x475569, 0.85);
+          wallGraphics.fillRoundedRect(-10, -50, 20, 100, 4);
+          wallGraphics.strokeRoundedRect(-10, -50, 20, 100, 4);
+
+          for (let py = -205; py <= 205; py += 24) {
+            wallGraphics.fillStyle(0x94a3b8, 1);
+            wallGraphics.fillCircle(0, py, 5);
+          }
         }
+        container.add(wallGraphics);
       }
-      container.add(wallGraphics);
     } else {
       // 방어 타워 / 기본건물 / 특수건물 스프라이트
       const img = this.add.image(0, -20, bp.spriteKey);

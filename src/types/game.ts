@@ -41,7 +41,8 @@ export type BuildingType =
   | 'tower'
   | 'barracks'
   | 'archery'
-  | 'monastery';
+  | 'monastery'
+  | 'woodPalisade';
 
 export interface Building {
   id: string;

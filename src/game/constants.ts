@@ -171,7 +171,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     categoryLabel: '성벽',
     name: '나무 방책',
     icon: '🪵',
-    spriteKey: 'house1',
+    spriteKey: 'woodPalisade',
     costWood: 10,
     costStone: 4,
     costGold: 0,

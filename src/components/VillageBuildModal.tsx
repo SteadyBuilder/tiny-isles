@@ -29,6 +29,18 @@ interface VillageBuildModalProps {
 
 const ALL_TIERS: VillageTier[] = [0, 1, 2, 3, 4, 5, 6];
 
+const BUILDING_SPRITE_SRC: Record<string, string> = {
+  woodPalisade: '/assets/buildings/Wood_Palisade.png',
+  castle: '/assets/buildings/Castle.png',
+  house1: '/assets/buildings/House1.png',
+  house2: '/assets/buildings/House2.png',
+  house3: '/assets/buildings/House3.png',
+  tower: '/assets/buildings/Tower.png',
+  barracks: '/assets/buildings/Barracks.png',
+  archery: '/assets/buildings/Archery.png',
+  monastery: '/assets/buildings/Monastery.png',
+};
+
 export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   isOpen,
   onClose,
@@ -305,7 +317,15 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                     key={b.id}
                     className="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-600/70 text-[11px] flex items-center gap-1.5"
                   >
-                    <span>{bp?.icon || '🏗️'}</span>
+                    {bp?.spriteKey && BUILDING_SPRITE_SRC[bp.spriteKey] ? (
+                      <img
+                        src={BUILDING_SPRITE_SRC[bp.spriteKey]}
+                        alt={b.name}
+                        className="w-4 h-4 object-contain"
+                      />
+                    ) : (
+                      <span>{bp?.icon || '🏗️'}</span>
+                    )}
                     <span className="font-bold text-white">{b.name}</span>
                     <span className="text-emerald-300 font-mono text-[10px]">
                       HP {b.hp}/{b.maxHp}
@@ -356,8 +376,21 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{bp.icon}</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-11 h-11 rounded-xl bg-slate-800/90 border border-slate-700 flex items-center justify-center p-1 overflow-hidden shrink-0 relative">
+                        {BUILDING_SPRITE_SRC[bp.spriteKey] ? (
+                          <img
+                            src={BUILDING_SPRITE_SRC[bp.spriteKey]}
+                            alt={bp.name}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-xl">{bp.icon}</span>
+                        )}
+                        <span className="absolute bottom-0 right-0 text-[10px] leading-none bg-black/60 rounded px-0.5">
+                          {bp.icon}
+                        </span>
+                      </div>
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="font-extrabold text-sm text-white">{bp.name}</span>
