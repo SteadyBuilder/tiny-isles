@@ -3,6 +3,8 @@ import confetti from 'canvas-confetti';
 import { EventBus } from '../EventBus';
 import {
   TERRITORY_PX,
+  TERRITORY_GAP,
+  TERRITORY_STEP,
   INITIAL_ISLANDS,
   REGULAR_WAVE_INTERVAL_SEC,
   BOSS_WAVE_INTERVAL_SEC,
@@ -193,17 +195,17 @@ export class WorldScene extends Phaser.Scene {
       };
     });
 
-    // Setup Physics World Bounds (-1300 to 1940)
-    const worldMin = -2 * TERRITORY_PX + 24;
-    const worldMax = 3 * TERRITORY_PX - 24;
+    // Setup Physics World Bounds for expanded territory map
+    const worldMin = -2 * TERRITORY_STEP - 200;
+    const worldMax = 2 * TERRITORY_STEP + TERRITORY_PX + 200;
     const worldWidth = worldMax - worldMin;
     this.physics.world.setBounds(worldMin, worldMin, worldWidth, worldWidth);
 
-    // 1. Seamless Grass Tile Background
-    const bgPadding = 600;
+    // 1. Seamless Grass Tile Background covering full expanded plains
+    const bgPadding = 800;
     const bgTile = this.add.tileSprite(
-      worldMin - bgPadding / 2 + worldWidth / 2,
-      worldMin - bgPadding / 2 + worldWidth / 2,
+      (worldMin + worldMax) / 2,
+      (worldMin + worldMax) / 2,
       worldWidth + bgPadding,
       worldWidth + bgPadding,
       'grassSeamless'
@@ -351,10 +353,10 @@ export class WorldScene extends Phaser.Scene {
         g.lineStyle(3, 0x78716c, 0.55);
         g.strokeCircle(origin.x + 320, origin.y + 350, plazaRadius);
 
-        // Crossroads branching outwards
+        // Crossroads branching outwards connecting across village gaps
         g.fillStyle(0xa8a29e, 0.34);
-        g.fillRect(origin.x, origin.y + 350 - 18, 640, 36); // West-East Road
-        g.fillRect(origin.x + 320 - 18, origin.y, 36, 640); // North-South Road
+        g.fillRect(origin.x - TERRITORY_GAP / 2, origin.y + 350 - 18, TERRITORY_STEP, 36); // West-East Road
+        g.fillRect(origin.x + 320 - 18, origin.y - TERRITORY_GAP / 2, 36, TERRITORY_STEP); // North-South Road
 
         // Rich resource zone subtle golden-green border glow
         if (isl.isAdjacentRich) {
@@ -948,12 +950,12 @@ export class WorldScene extends Phaser.Scene {
 
   private createClouds() {
     const cloudConfigs = [
-      { x: -400, y: -200, speed: 0.35, scale: 0.9, type: 'cloud1' },
-      { x: 150, y: 100, speed: 0.42, scale: 1.1, type: 'cloud2' },
-      { x: 800, y: -80, speed: 0.3, scale: 0.85, type: 'cloud1' },
-      { x: -100, y: 650, speed: 0.38, scale: 1.0, type: 'cloud2' },
-      { x: 600, y: 800, speed: 0.28, scale: 0.95, type: 'cloud1' },
-      { x: -700, y: 350, speed: 0.34, scale: 1.05, type: 'cloud2' },
+      { x: -1600, y: -800, speed: 0.35, scale: 0.9, type: 'cloud1' },
+      { x: 300, y: 200, speed: 0.42, scale: 1.1, type: 'cloud2' },
+      { x: 2200, y: -200, speed: 0.3, scale: 0.85, type: 'cloud1' },
+      { x: -500, y: 1800, speed: 0.38, scale: 1.0, type: 'cloud2' },
+      { x: 1800, y: 2200, speed: 0.28, scale: 0.95, type: 'cloud1' },
+      { x: -2200, y: 800, speed: 0.34, scale: 1.05, type: 'cloud2' },
     ];
 
     for (const c of cloudConfigs) {
@@ -1160,10 +1162,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private getCurrentPlayerTerritory(): Island {
-    const gx = Math.floor(this.playerSprite.x / TERRITORY_PX);
-    const gy = Math.floor(this.playerSprite.y / TERRITORY_PX);
+    const gx = Math.round(this.playerSprite.x / TERRITORY_STEP);
+    const gy = Math.round(this.playerSprite.y / TERRITORY_STEP);
     return (
       this.islands.find((i) => i.gridX === gx && i.gridY === gy && i.unlocked) ||
+      this.islands.find((i) => i.unlocked) ||
       this.islands[0]
     );
   }
@@ -2039,9 +2042,9 @@ export class WorldScene extends Phaser.Scene {
 
     for (const c of this.clouds) {
       c.sprite.x += c.speed;
-      if (c.sprite.x > 2200) {
-        c.sprite.x = -2200;
-        c.sprite.y = -800 + Math.random() * 2400;
+      if (c.sprite.x > 3800) {
+        c.sprite.x = -3800;
+        c.sprite.y = -1500 + Math.random() * 4500;
       }
     }
 
@@ -2394,8 +2397,8 @@ export class WorldScene extends Phaser.Scene {
       EventBus.emit('near-island-changed', nearLocked);
     }
 
-    const gridX = Math.floor(px / TERRITORY_PX);
-    const gridY = Math.floor(py / TERRITORY_PX);
+    const gridX = Math.round(px / TERRITORY_STEP);
+    const gridY = Math.round(py / TERRITORY_STEP);
     if (gridX !== this.lastGridPos.gridX || gridY !== this.lastGridPos.gridY) {
       this.lastGridPos = { gridX, gridY };
       EventBus.emit('player-grid-pos-changed', { gridX, gridY });

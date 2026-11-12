@@ -3,6 +3,8 @@ import confetti from 'canvas-confetti';
 import { GameAssets, loadGameAssets } from './AssetLoader';
 import {
   TERRITORY_PX,
+  TERRITORY_GAP,
+  TERRITORY_STEP,
   INITIAL_ISLANDS,
   CENTRAL_CORE,
   generateIslandEntities,
@@ -514,9 +516,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       return true;
     }
 
-    // 3. World bounds: 5x5 grid (-2 to 2) -> -1280 to +1920
-    const minBound = -2 * TERRITORY_PX + 24;
-    const maxBound = 3 * TERRITORY_PX - 24;
+    // 3. World bounds: 5x5 grid (-2 to 2) with expanded territory gaps
+    const minBound = -2 * TERRITORY_STEP - 200;
+    const maxBound = 2 * TERRITORY_STEP + TERRITORY_PX + 200;
     if (nextX < minBound || nextX > maxBound || nextY < minBound || nextY > maxBound) {
       return true;
     }
@@ -975,8 +977,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Track player grid coordinate for minimap
-      const currentGridX = Math.floor(player.x / TERRITORY_PX);
-      const currentGridY = Math.floor(player.y / TERRITORY_PX);
+      const currentGridX = Math.round(player.x / TERRITORY_STEP);
+      const currentGridY = Math.round(player.y / TERRITORY_STEP);
       if (
         currentGridX !== lastGridPosRef.current.gridX ||
         currentGridY !== lastGridPosRef.current.gridY
@@ -1080,17 +1082,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.fillRect(origin0.x + 320 - 20, origin0.y + 350, 40, 290); // South
       ctx.fillRect(origin0.x + 320 - 20, origin0.y, 40, 220); // North
 
-      // Draw road extensions to unlocked adjacent territories
+      // Draw road extensions connecting across village gaps
       for (const isl of islandsRef.current) {
-        if (!isl.unlocked || isl.id === 0) continue;
+        if (!isl.unlocked) continue;
         const origin = getIslandOrigin(isl.gridX, isl.gridY);
         ctx.fillStyle = 'rgba(168, 162, 158, 0.32)';
 
-        // Connecting paths from borders to territory center
-        if (isl.gridX === 1) ctx.fillRect(origin.x, origin.y + 350 - 18, 320, 36);
-        if (isl.gridX === -1) ctx.fillRect(origin.x + 320, origin.y + 350 - 18, 320, 36);
-        if (isl.gridY === 1) ctx.fillRect(origin.x + 320 - 18, origin.y, 36, 320);
-        if (isl.gridY === -1) ctx.fillRect(origin.x + 320 - 18, origin.y + 320, 36, 320);
+        ctx.fillRect(origin.x - TERRITORY_GAP / 2, origin.y + 350 - 18, TERRITORY_STEP, 36);
+        ctx.fillRect(origin.x + 320 - 18, origin.y - TERRITORY_GAP / 2, 36, TERRITORY_STEP);
       }
 
       // 4. Draw Territory Borders & Locked Fog-of-War
@@ -1562,8 +1561,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Remote players on minimap
       remotePlayersRef.current.forEach((rp) => {
-        const rNormX = mmCenterX + ((rp.x - 320) / TERRITORY_PX) * mmStep;
-        const rNormY = mmCenterY + ((rp.y - 320) / TERRITORY_PX) * mmStep;
+        const rNormX = mmCenterX + ((rp.x - 320) / TERRITORY_STEP) * mmStep;
+        const rNormY = mmCenterY + ((rp.y - 320) / TERRITORY_STEP) * mmStep;
         ctx.fillStyle = rp.color === 'blue' ? '#60a5fa' : '#f87171';
         ctx.beginPath();
         ctx.arc(rNormX, rNormY, isMobile ? 2 : 2.5, 0, Math.PI * 2);
@@ -1571,8 +1570,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       });
 
       // Local player on minimap (pulsing marker)
-      const pNormX = mmCenterX + ((player.x - 320) / TERRITORY_PX) * mmStep;
-      const pNormY = mmCenterY + ((player.y - 320) / TERRITORY_PX) * mmStep;
+      const pNormX = mmCenterX + ((player.x - 320) / TERRITORY_STEP) * mmStep;
+      const pNormY = mmCenterY + ((player.y - 320) / TERRITORY_STEP) * mmStep;
       const pulseSize = (isMobile ? 2.5 : 3.5) + Math.sin(now / 180) * 1;
 
       ctx.fillStyle = player.color === 'blue' ? '#00e5ff' : '#ff1744';

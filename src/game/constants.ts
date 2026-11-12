@@ -14,9 +14,10 @@ export const TILE_SIZE = 64;
 export const TERRITORY_TILES = 10; // 10x10 tiles per territory (640x640 px)
 export const ISLAND_TILES = TERRITORY_TILES;
 export const TERRITORY_PX = TILE_SIZE * TERRITORY_TILES; // 640px
-export const ISLAND_PX = TERRITORY_PX;
-export const TERRITORY_GAP = 0; // Contiguous village territory grid
+export const TERRITORY_GAP = TERRITORY_PX; // 640px gap between villages (doubles center-to-center distance to 1280px)
 export const ISLAND_GAP = TERRITORY_GAP;
+export const TERRITORY_STEP = TERRITORY_PX + TERRITORY_GAP; // 1280px (2x distance between villages)
+export const ISLAND_STEP = TERRITORY_STEP;
 
 // 현실 시간 기준 웨이브 주기
 export const REGULAR_WAVE_INTERVAL_SEC = 30 * 60; // 30분 (1,800초) 마다 좀비, 스켈레톤 등 마물 침공
