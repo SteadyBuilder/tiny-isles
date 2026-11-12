@@ -43,9 +43,9 @@ interface EntityVisual {
 export class WorldScene extends Phaser.Scene {
   // Player
   private playerSprite!: Phaser.Physics.Arcade.Sprite;
-  private playerContainer!: Phaser.GameObjects.Container;
-  private playerNameTag!: Phaser.GameObjects.Text;
   private playerShadow!: Phaser.GameObjects.Graphics;
+  private playerNameTag!: Phaser.GameObjects.Text;
+  private playerIndicator!: Phaser.GameObjects.Text;
   private playerColor: PlayerColor = 'blue';
   private playerName: string = '탐험가';
   private playerId: string = '';
@@ -402,7 +402,8 @@ export class WorldScene extends Phaser.Scene {
       // Shadow
       const shadow = this.add.graphics();
       shadow.fillStyle(0x000000, 0.22);
-      shadow.fillEllipse(b.width / 2, b.height - 12, b.width / 1.15, 36);
+      const shadowY = b.type === 'castle' ? b.height - 18 : b.height - 22;
+      shadow.fillEllipse(b.width / 2, shadowY, b.width / 1.15, 32);
       container.add(shadow);
 
       // Building Image
@@ -478,43 +479,53 @@ export class WorldScene extends Phaser.Scene {
       const animKey = isTree3 ? 'tree3_anim' : 'tree_anim';
       const drawH = isTree3 ? 160 : 200;
 
-      shadow.fillStyle(0x000000, 0.22);
-      shadow.fillEllipse(16, 28, 88, 28);
+      shadow.fillStyle(0x000000, 0.24);
+      shadow.fillEllipse(16, 26, 76, 22);
 
-      sprite = this.add.sprite(16, 28 - drawH / 2, key);
-      sprite.setDisplaySize(160, drawH);
+      const treeSprite = this.add.sprite(16, 26, key);
+      treeSprite.setDisplaySize(160, drawH);
+      treeSprite.setOrigin(0.5, 0.94);
       if (this.anims.exists(animKey)) {
-        (sprite as Phaser.GameObjects.Sprite).play(animKey);
+        treeSprite.play(animKey);
       }
+      sprite = treeSprite;
     } else if (ent.type === 'rock') {
-      shadow.fillStyle(0x000000, 0.2);
-      shadow.fillEllipse(32, 36, 52, 24);
+      shadow.fillStyle(0x000000, 0.22);
+      shadow.fillEllipse(32, 26, 48, 18);
 
       const rockKey = ent.id.includes('2') ? 'rock2' : 'rock1';
-      sprite = this.add.image(32, 16, rockKey);
-      sprite.setDisplaySize(64, 64);
+      const rockImg = this.add.image(32, 26, rockKey);
+      rockImg.setDisplaySize(64, 64);
+      rockImg.setOrigin(0.5, 0.80);
+      sprite = rockImg;
     } else if (ent.type === 'gold_rock') {
-      shadow.fillStyle(0x000000, 0.22);
-      shadow.fillEllipse(32, 36, 56, 24);
+      shadow.fillStyle(0x000000, 0.24);
+      shadow.fillEllipse(32, 26, 52, 20);
 
       if (this.textures.exists('goldResource')) {
-        sprite = this.add.image(32, 12, 'goldResource');
-        sprite.setDisplaySize(72, 72);
+        const goldImg = this.add.image(32, 26, 'goldResource');
+        goldImg.setDisplaySize(72, 72);
+        goldImg.setOrigin(0.5, 0.80);
+        sprite = goldImg;
       } else {
-        sprite = this.add.image(32, 16, 'rock2');
-        sprite.setDisplaySize(64, 64);
-        sprite.setTint(0xffd700);
+        const rockImg = this.add.image(32, 26, 'rock2');
+        rockImg.setDisplaySize(64, 64);
+        rockImg.setOrigin(0.5, 0.80);
+        rockImg.setTint(0xffd700);
+        sprite = rockImg;
       }
     } else {
       // Sheep
-      shadow.fillStyle(0x000000, 0.2);
-      shadow.fillEllipse(32, 36, 56, 20);
+      shadow.fillStyle(0x000000, 0.22);
+      shadow.fillEllipse(32, 28, 44, 16);
 
-      sprite = this.add.sprite(32, 24, 'sheep');
-      sprite.setDisplaySize(96, 96);
+      const sheepSprite = this.add.sprite(32, 28, 'sheep');
+      sheepSprite.setDisplaySize(96, 96);
+      sheepSprite.setOrigin(0.5, 0.78);
       if (this.anims.exists('sheep_anim')) {
-        (sprite as Phaser.GameObjects.Sprite).play('sheep_anim');
+        sheepSprite.play('sheep_anim');
       }
+      sprite = sheepSprite;
     }
 
     container.add(sprite);
@@ -554,23 +565,22 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createPlayer() {
-    // Player Container for depth sorting and shadow/name
-    this.playerContainer = this.add.container(320, 420);
+    const startX = 320;
+    const startY = 420;
 
-    // Shadow
+    // Ground Shadow
     this.playerShadow = this.add.graphics();
     this.playerShadow.fillStyle(0x000000, 0.25);
-    this.playerShadow.fillEllipse(0, 18, 38, 16);
-    this.playerContainer.add(this.playerShadow);
+    this.playerShadow.fillEllipse(0, 0, 44, 18);
+    this.playerShadow.setPosition(startX, startY + 24);
 
-    // Arcade Physics Sprite
-    this.playerSprite = this.physics.add.sprite(0, 0, `${this.playerColor}PawnIdle`);
+    // Arcade Physics Sprite directly in world!
+    this.playerSprite = this.physics.add.sprite(startX, startY, `${this.playerColor}PawnIdle`);
     this.playerSprite.setDisplaySize(128, 128);
     this.playerSprite.setCollideWorldBounds(true);
     // Foot hitbox for clean top-down movement
     this.playerSprite.setSize(36, 24);
-    this.playerSprite.setOffset(78, 100);
-    this.playerContainer.add(this.playerSprite);
+    this.playerSprite.setOffset(78, 96);
 
     // Collide with buildings
     if (this.buildingColliders) {
@@ -578,15 +588,24 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // Name Tag
-    this.playerNameTag = this.add.text(0, -32, this.playerName, {
+    this.playerNameTag = this.add.text(startX, startY - 42, this.playerName, {
       fontFamily: 'Pretendard, sans-serif',
       fontSize: '12px',
       fontStyle: 'bold',
-      color: '#ffffff',
+      color: '#38bdf8',
       stroke: '#000000',
-      strokeThickness: 3,
+      strokeThickness: 2.5,
     }).setOrigin(0.5);
-    this.playerContainer.add(this.playerNameTag);
+
+    // Local Player Indicator Marker '▼'
+    this.playerIndicator = this.add.text(startX, startY - 54, '▼', {
+      fontFamily: 'sans-serif',
+      fontSize: '10px',
+      fontStyle: 'bold',
+      color: '#fde047',
+      stroke: '#000000',
+      strokeThickness: 1.5,
+    }).setOrigin(0.5);
 
     this.playPlayerAnimation('idle');
   }
@@ -602,13 +621,15 @@ export class WorldScene extends Phaser.Scene {
     ];
 
     for (const c of cloudConfigs) {
+      // Ground shadow: depth -10 so it casts on the ground, below entities/players
       const shadow = this.add.graphics();
-      shadow.setDepth(1500);
+      shadow.setDepth(-10);
 
+      // Sky cloud: depth 2000 so it floats in the sky above everything
       const sprite = this.add.image(c.x, c.y, c.type);
       sprite.setScale(c.scale);
       sprite.setAlpha(0.65);
-      sprite.setDepth(1600);
+      sprite.setDepth(2000);
 
       this.clouds.push({ shadow, sprite, speed: c.speed });
     }
@@ -815,9 +836,13 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    // Synchronize Container position & Depth sorting
-    this.playerContainer.setPosition(this.playerSprite.x, this.playerSprite.y);
-    this.playerContainer.setDepth(this.playerSprite.y + 24);
+    // Synchronize Player Visuals & Depth sorting
+    const px = this.playerSprite.x;
+    const py = this.playerSprite.y;
+    this.playerSprite.setDepth(py + 24);
+    this.playerShadow.setPosition(px, py + 22).setDepth(py + 20);
+    this.playerNameTag.setPosition(px, py - 42).setDepth(py + 30);
+    this.playerIndicator.setPosition(px, py - 54).setDepth(py + 30);
 
     // Continuous interaction when Space or E held
     if ((this.spaceKey?.isDown || this.eKey?.isDown) && time - this.lastInteractTime >= 240) {
@@ -1130,20 +1155,20 @@ export class WorldScene extends Phaser.Scene {
 
       const shadow = this.add.graphics();
       shadow.fillStyle(0x000000, 0.25);
-      shadow.fillEllipse(0, 18, 38, 16);
+      shadow.fillEllipse(0, 24, 44, 18);
       container.add(shadow);
 
       const sprite = this.add.sprite(0, 0, `${data.color}PawnIdle`);
       sprite.setDisplaySize(128, 128);
       container.add(sprite);
 
-      const nameTag = this.add.text(0, -32, data.name, {
+      const nameTag = this.add.text(0, -42, data.name, {
         fontFamily: 'Pretendard, sans-serif',
         fontSize: '12px',
         fontStyle: 'bold',
-        color: '#ffffff',
+        color: '#f87171',
         stroke: '#000000',
-        strokeThickness: 3,
+        strokeThickness: 2.5,
       }).setOrigin(0.5);
       container.add(nameTag);
 
