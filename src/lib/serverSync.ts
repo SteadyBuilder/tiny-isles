@@ -1,5 +1,12 @@
 import { supabase } from './supabase';
-import { Inventory, ServerIslandRecord, ServerPlayerRecord } from '../types/game';
+import {
+  ConstructedBuilding,
+  Inventory,
+  Player,
+  ServerIslandRecord,
+  ServerPlayerRecord,
+  VillageTier,
+} from '../types/game';
 import { SavedProfile } from './storage';
 
 let tablesMissingNotified = false;
@@ -7,133 +14,130 @@ let tablesMissingNotified = false;
 function warnTableMissing(tableName: string, details?: string) {
   if (!tablesMissingNotified) {
     console.info(
-      `ℹ️ [Tiny Isles] Supabase DB 테이블(${tableName})을 찾을 수 없습니다. ` +
-      `supabase/schema.sql을 실행하면 서버 기반 전체 공유가 활성화됩니다. 현재는 로컬 저장 및 실시간 브로드캐스트로 동작합니다.`,
+      `ℹ️ [Tiny Isles] Supabase DB 테이블(${tableName}) 미존재. ` +
+      `supabase/schema.sql 실행 전까지는 로컬 스토리지 및 Realtime Broadcast로 동작합니다.`,
       details
     );
     tablesMissingNotified = true;
   }
 }
 
+// 레이스 컨디션 및 중복 브로드캐스트 필터링용 캐시
+const recentEvents = new Set<string>();
+const lastMoveTimestamps = new Map<string, number>();
+
 export const serverSync = {
-  /**
-   * 서버에서 해금된 섬 목록을 조회합니다.
-   */
+  // --- 1. Supabase DB 영구 저장 동기화 ---
   fetchUnlockedIslands: async (): Promise<ServerIslandRecord[] | null> => {
     try {
       const { data, error } = await supabase
         .from('unlocked_islands')
         .select('island_id, island_name, unlocked_by, unlocked_at')
         .order('island_id', { ascending: true });
-
       if (error) {
         if (error.code === '42P01' || error.message?.includes('Could not find the table')) {
           warnTableMissing('unlocked_islands', error.message);
-        } else {
-          console.warn('[serverSync] fetchUnlockedIslands error:', error.message);
         }
         return null;
       }
-
       return data as ServerIslandRecord[];
-    } catch (e) {
-      console.warn('[serverSync] fetchUnlockedIslands exception:', e);
+    } catch {
       return null;
     }
   },
 
-  /**
-   * 섬 해금 상태를 서버 DB에 영구 저장합니다.
-   */
-  saveUnlockedIsland: async (
-    islandId: number,
-    islandName: string,
-    unlockedBy: string
-  ): Promise<boolean> => {
+  saveUnlockedIsland: async (islandId: number, islandName: string, unlockedBy: string): Promise<boolean> => {
     try {
       const { error } = await supabase.from('unlocked_islands').upsert(
-        {
-          island_id: islandId,
-          island_name: islandName,
-          unlocked_by: unlockedBy || '익명의 모험가',
-          unlocked_at: new Date().toISOString(),
-        },
+        { island_id: islandId, island_name: islandName, unlocked_by: unlockedBy || '탐험가', unlocked_at: new Date().toISOString() },
         { onConflict: 'island_id', ignoreDuplicates: true }
       );
-
-      if (error) {
-        if (error.code === '42P01' || error.message?.includes('Could not find the table')) {
-          warnTableMissing('unlocked_islands', error.message);
-        } else {
-          console.warn('[serverSync] saveUnlockedIsland error:', error.message);
-        }
+      if (error && (error.code === '42P01' || error.message?.includes('Could not find the table'))) {
+        warnTableMissing('unlocked_islands', error.message);
         return false;
       }
-
-      return true;
-    } catch (e) {
-      console.warn('[serverSync] saveUnlockedIsland exception:', e);
+      return !error;
+    } catch {
       return false;
     }
   },
 
-  /**
-   * 플레이어 정보를 서버에서 조회합니다.
-   */
   fetchPlayer: async (playerId: string): Promise<ServerPlayerRecord | null> => {
     try {
-      const { data, error } = await supabase
-        .from('players')
-        .select('*')
-        .eq('id', playerId)
-        .maybeSingle();
-
-      if (error) {
-        if (error.code === '42P01' || error.message?.includes('Could not find the table')) {
-          warnTableMissing('players', error.message);
-        }
-        return null;
+      const { data, error } = await supabase.from('players').select('*').eq('id', playerId).maybeSingle();
+      if (error && (error.code === '42P01' || error.message?.includes('Could not find the table'))) {
+        warnTableMissing('players', error.message);
       }
-
       return data as ServerPlayerRecord | null;
-    } catch (e) {
-      console.warn('[serverSync] fetchPlayer exception:', e);
+    } catch {
       return null;
     }
   },
 
-  /**
-   * 플레이어 정보 및 자원을 서버 DB에 동기화합니다 (디바운스 지원).
-   */
   savePlayer: (playerId: string, profile: SavedProfile, inventory: Inventory, immediate = false) => {
     playerSyncManager.schedule(playerId, profile, inventory, immediate);
   },
 
-  /**
-   * 탭 종료 또는 즉각 저장이 필요할 때 대기 중인 동기화 데이터를 즉시 전송합니다.
-   */
   flushPlayerSync: () => {
     playerSyncManager.flush();
   },
+
+  // --- 2. Realtime Broadcast 멀티플레이어 동기화 ---
+  broadcast: (channel: any, event: string, payload: any, senderId: string) => {
+    if (!channel) return;
+    const eventId = `${event}_${senderId}_${Date.now()}`;
+    channel.send({
+      type: 'broadcast',
+      event,
+      payload: { ...payload, senderId, eventId, timestamp: Date.now() },
+    });
+  },
+
+  // 중복 이벤트 및 레이스 컨디션 검증 필터 (수신 측)
+  isValidIncomingEvent: (eventId?: string, senderId?: string, localPlayerId?: string): boolean => {
+    if (senderId && localPlayerId && senderId === localPlayerId) return false;
+    if (!eventId) return true;
+    if (recentEvents.has(eventId)) return false;
+    recentEvents.add(eventId);
+    if (recentEvents.size > 80) {
+      const oldest = recentEvents.values().next().value;
+      if (oldest) recentEvents.delete(oldest);
+    }
+    return true;
+  },
+
+  // 고스트 텔레포트 방지: 이전 타임스탬프 이동 패킷 필터링
+  isLatestMove: (playerId: string, timestamp: number): boolean => {
+    const last = lastMoveTimestamps.get(playerId) || 0;
+    if (timestamp < last) return false;
+    lastMoveTimestamps.set(playerId, timestamp);
+    return true;
+  },
+
+  // 고스트 급발진 방지: 보간(Lerp) vs 순간이동(Snap) 판정 (260px 이상 차이 시만 Snap)
+  shouldSnapTeleport: (curX: number, curY: number, targetX: number, targetY: number, snapThreshold = 260): boolean => {
+    const distSq = (curX - targetX) ** 2 + (curY - targetY) ** 2;
+    return distSq > snapThreshold * snapThreshold;
+  },
+
+  removePlayerCache: (playerId: string) => {
+    lastMoveTimestamps.delete(playerId);
+  },
 };
 
+// 플레이어 DB 저장 디바운스 매니저
 const playerSyncManager = (() => {
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let pendingData: {
-    playerId: string;
-    profile: SavedProfile;
-    inventory: Inventory;
-  } | null = null;
+  let pending: { playerId: string; profile: SavedProfile; inventory: Inventory } | null = null;
 
   const doSync = async () => {
     if (debounceTimer) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
     }
-    if (!pendingData) return;
-    const { playerId, profile, inventory } = pendingData;
-    pendingData = null;
-
+    if (!pending) return;
+    const { playerId, profile, inventory } = pending;
+    pending = null;
     try {
       const { error } = await supabase.from('players').upsert(
         {
@@ -147,33 +151,26 @@ const playerSyncManager = (() => {
         },
         { onConflict: 'id' }
       );
-
       if (error && (error.code === '42P01' || error.message?.includes('Could not find the table'))) {
         warnTableMissing('players', error.message);
       }
     } catch (e) {
-      console.warn('[serverSync] savePlayer exception:', e);
+      console.warn('[serverSync] savePlayer error:', e);
     }
   };
 
   return {
     schedule: (playerId: string, profile: SavedProfile, inventory: Inventory, immediate = false) => {
-      pendingData = { playerId, profile, inventory };
+      pending = { playerId, profile, inventory };
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
       }
-
-      if (immediate) {
-        doSync();
-      } else {
-        debounceTimer = setTimeout(doSync, 1500);
-      }
+      if (immediate) doSync();
+      else debounceTimer = setTimeout(doSync, 1500);
     },
     flush: () => {
-      if (pendingData) {
-        doSync();
-      }
+      if (pending) doSync();
     },
   };
 })();

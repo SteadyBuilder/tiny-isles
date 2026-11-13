@@ -1,5 +1,6 @@
 import { Island, MonsterType } from '../../types/game';
 import { getIslandOrigin, getTerritoryCorePos } from '../constants';
+import { REGULAR_MONSTER_TEMPLATES } from '../../data/waves';
 
 export interface PerimeterSpawnPoint {
   territory: Island;
@@ -95,32 +96,16 @@ export function findNextInwardTargetTerritory(
   }
   return bestId;
 }
-
 /**
  * 웨이브 차수 및 보스 여부에 따른 몬스터 기본 스탯 생성
+ * [AI Guideline]: 신규 몬스터 스펙 변경은 src/data/waves.ts를 참고하세요.
  */
 export function getRegularMonsterTemplates(waveNum: number): MonsterTemplate[] {
-  return [
-    {
-      type: 'zombie',
-      name: '🧟 부패한 좀비',
-      hp: 90 + waveNum * 15,
-      attack: 14 + waveNum * 2,
-      speed: 48,
-    },
-    {
-      type: 'skeleton',
-      name: '💀 저주받은 스켈레톤',
-      hp: 70 + waveNum * 12,
-      attack: 18 + waveNum * 2,
-      speed: 64,
-    },
-    {
-      type: 'goblin',
-      name: '👺 암흑 마물병',
-      hp: 80 + waveNum * 14,
-      attack: 16 + waveNum * 2,
-      speed: 58,
-    },
-  ];
+  return REGULAR_MONSTER_TEMPLATES.map((tmpl) => ({
+    type: tmpl.type,
+    name: tmpl.name,
+    hp: tmpl.baseHp + waveNum * tmpl.hpPerWave,
+    attack: tmpl.baseAttack + waveNum * tmpl.attackPerWave,
+    speed: tmpl.speed,
+  }));
 }

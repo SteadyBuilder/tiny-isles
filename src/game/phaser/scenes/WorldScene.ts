@@ -696,58 +696,57 @@ export class WorldScene extends Phaser.Scene {
         // Tiny Swords 나무 목책 (Palisade) 스프라이트 렌더링
         if (isHorizontal) {
           // [북쪽 / 남쪽 외곽 방책선] - 마을 외곽을 완벽하게 감싸도록 양 모서리(-268, +268)까지 연장
-          // 중앙 수평 게이트 (가로 통로용 문, 폭 100px)
+          // 중앙 수평 게이트 (가로 통로용 문, 128x64 비율 유지)
           const gate = this.add.image(0, 0, 'woodPalisadeGate');
-          gate.setDisplaySize(100, 56);
+          gate.setDisplaySize(128, 64);
+          gate.setDepth(2);
           container.add(gate);
 
-          // 좌측 수평 방책 날개 (x: -268 ~ -50 -> 중심: -159, 너비: 218)
-          const leftWing = this.add.image(-159, 0, 'woodPalisadeH');
-          leftWing.setDisplaySize(218, 56);
+          // 좌측 수평 방책 날개 (중심: -164, 너비: 208 -> 게이트 및 코너와 2px 오버랩 밀폐)
+          const leftWing = this.add.image(-164, 0, 'woodPalisadeH');
+          leftWing.setDisplaySize(208, 64);
+          leftWing.setDepth(1);
           container.add(leftWing);
 
-          // 우측 수평 방책 날개 (x: +50 ~ +268 -> 중심: +159, 너비: 218)
-          const rightWing = this.add.image(159, 0, 'woodPalisadeH');
-          rightWing.setDisplaySize(218, 56);
+          // 우측 수평 방책 날개 (중심: 164, 너비: 208 -> 게이트 및 코너와 2px 오버랩 밀폐)
+          const rightWing = this.add.image(164, 0, 'woodPalisadeH');
+          rightWing.setDisplaySize(208, 64);
+          rightWing.setDepth(1);
           container.add(rightWing);
 
-          // 좌/우 모서리 연결 코너 기둥 (모서리 빈틈 완벽 밀폐)
+          // 좌/우 모서리 연결 코너 기둥 (64x64 정밀 모서리 기둥)
           const leftCorner = this.add.image(-268, 0, 'woodPalisadeCorner');
-          leftCorner.setDisplaySize(56, 56);
+          leftCorner.setDisplaySize(64, 64);
+          leftCorner.setDepth(3);
           container.add(leftCorner);
 
           const rightCorner = this.add.image(268, 0, 'woodPalisadeCorner');
-          rightCorner.setDisplaySize(56, 56);
+          rightCorner.setDisplaySize(64, 64);
+          rightCorner.setDepth(3);
           container.add(rightCorner);
         } else if (cb.slotIndex === 2 || cb.slotIndex === 3) {
-          // [동쪽 / 서쪽 외곽 방책선] - 상단(-298)부터 하단(+238)까지 외곽을 완전히 둘러쌈
-          // 상단 수직 방책 날개 (y: -298 ~ -45 -> 중심: -172, 높이: 256)
-          const topWing = this.add.image(0, -172, 'woodPalisadeV');
-          topWing.setDisplaySize(56, 256);
-          container.add(topWing);
-
-          // 하단 수직 방책 날개 (y: +45 ~ +238 -> 중심: +142, 높이: 196)
-          const bottomWing = this.add.image(0, 142, 'woodPalisadeV');
-          bottomWing.setDisplaySize(56, 196);
-          container.add(bottomWing);
-
-          // 요구사항 (2): 왼쪽, 오른쪽의 문은 세로로 배치! (상하 날개와 틈새 없이 완벽 결합)
+          // [동쪽 / 서쪽 외곽 방책선] - 상단 코너(-298)부터 하단 코너(+238)까지 틈새 0px 결합
+          // 중앙 세로 게이트 (Wood_Palisade_Gate_V: 56x128 원본 -> 폭 64, 높이 128로 세로 방책과 폭 일치)
           const gate = this.add.image(0, 0, 'woodPalisadeGateV');
-          gate.setDisplaySize(56, 116);
+          gate.setDisplaySize(64, 128);
+          gate.setDepth(2);
           container.add(gate);
 
-          // 상/하 모서리 연결 코너 기둥 (모서리 빈틈 완벽 밀폐)
-          const topCorner = this.add.image(0, -298, 'woodPalisadeCorner');
-          topCorner.setDisplaySize(56, 56);
-          container.add(topCorner);
+          // 상단 수직 방책 날개 (y: -298 ~ -64 -> 중심: -178, 높이: 242로 상단 코너 및 게이트와 4px 오버랩)
+          const topWing = this.add.image(0, -178, 'woodPalisadeV');
+          topWing.setDisplaySize(64, 242);
+          topWing.setDepth(1);
+          container.add(topWing);
 
-          const bottomCorner = this.add.image(0, 238, 'woodPalisadeCorner');
-          bottomCorner.setDisplaySize(56, 56);
-          container.add(bottomCorner);
+          // 하단 수직 방책 날개 (y: +64 ~ +238 -> 중심: 148, 높이: 182로 게이트 및 하단 코너와 4px 오버랩)
+          const bottomWing = this.add.image(0, 148, 'woodPalisadeV');
+          bottomWing.setDisplaySize(64, 182);
+          bottomWing.setDepth(1);
+          container.add(bottomWing);
         } else {
           // 내부 슬롯에 지어진 단일 방책 요새
           const palisade = this.add.image(0, -10, 'woodPalisade');
-          palisade.setDisplaySize(120, 120);
+          palisade.setDisplaySize(128, 128);
           container.add(palisade);
         }
       } else {
@@ -1572,13 +1571,15 @@ export class WorldScene extends Phaser.Scene {
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
         this.removeRemotePlayer(key);
       })
-      .on('broadcast', { event: 'player_move' }, ({ payload }: { payload: Player }) => {
+      .on('broadcast', { event: 'player_move' }, ({ payload }: { payload: any }) => {
+        if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
         this.handleRemotePlayerMove(payload);
       })
       .on(
         'broadcast',
         { event: 'entity_hit' },
-        ({ payload }: { payload: { entityId: string; damage: number; hitBy: string } }) => {
+        ({ payload }: { payload: { entityId: string; damage: number; hitBy: string; eventId?: string; senderId?: string } }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
           const { entityId, damage, hitBy } = payload;
           this.handleRemoteHit(entityId, damage, hitBy);
         }
@@ -1586,9 +1587,48 @@ export class WorldScene extends Phaser.Scene {
       .on(
         'broadcast',
         { event: 'island_unlocked' },
-        ({ payload }: { payload: { islandId: number; unlockedBy: string } }) => {
+        ({ payload }: { payload: { islandId: number; unlockedBy: string; eventId?: string; senderId?: string } }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
           const { islandId, unlockedBy } = payload;
           this.unlockIslandLocally(islandId, unlockedBy, false);
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'village_upgraded' },
+        ({ payload }: { payload: { territoryId: number; tier: VillageTier; eventId?: string; senderId?: string } }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
+          this.handleUpgradeVillage(payload.territoryId, false);
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'building_constructed' },
+        ({ payload }: { payload: { building: ConstructedBuilding; eventId?: string; senderId?: string } }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
+          const cb: ConstructedBuilding = payload.building;
+          if (cb && !this.constructedBuildings.some((b) => b.id === cb.id)) {
+            this.constructedBuildings.push(cb);
+            this.spawnConstructedBuildingVisual(cb);
+            this.saveWorldState();
+            this.emitWorldStateToReact();
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'wave_spawned' },
+        ({ payload }: { payload: { isBossWave: boolean; eventId?: string; senderId?: string } }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
+          this.spawnMonsterWave(payload.isBossWave, false);
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'territory_lost' },
+        ({ payload }: { payload: { territoryId: number; reason?: string; eventId?: string; senderId?: string } }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
+          this.loseTerritoryByCoreDestruction(payload.territoryId, payload.reason || '마물 군단', false);
         }
       )
       .subscribe(async (status: string) => {
@@ -2082,6 +2122,7 @@ export class WorldScene extends Phaser.Scene {
 
   private handleRemotePlayerMove(data: Player) {
     if (data.id === this.playerId) return;
+    if (!serverSync.isLatestMove(data.id, data.lastUpdated || Date.now())) return;
 
     let visual = this.remotePlayers.get(data.id);
     if (!visual) {
@@ -2105,7 +2146,19 @@ export class WorldScene extends Phaser.Scene {
       this.remotePlayers.set(data.id, visual);
     }
 
-    visual.container.setPosition(data.x, data.y);
+    // 고스트 텔레포트 방지: 임계치(280px) 초과 시만 Snap 순간이동, 그 외에는 부드러운 Tween 선형 보간
+    if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
+      visual.container.setPosition(data.x, data.y);
+    } else {
+      this.tweens.add({
+        targets: visual.container,
+        x: data.x,
+        y: data.y,
+        duration: 120,
+        ease: 'Linear',
+      });
+    }
+
     visual.container.setDepth(data.y + 24);
     visual.sprite.setFlipX(data.direction === 'left');
     visual.nameTag.setText(data.name);
@@ -2117,6 +2170,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private removeRemotePlayer(id: string) {
+    serverSync.removePlayerCache(id);
     const visual = this.remotePlayers.get(id);
     if (visual) {
       visual.container.destroy();
@@ -2162,11 +2216,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     if (this.supabaseChannel && this.isSubscribed) {
-      this.supabaseChannel.send({
-        type: 'broadcast',
-        event: 'player_move',
-        payload,
-      });
+      serverSync.broadcast(this.supabaseChannel, 'player_move', payload, this.playerId);
     }
   }
 
@@ -2207,16 +2257,21 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private broadcastVillageUpgrade(territoryId: number, tier: VillageTier) {
+    const payload = { territoryId, tier };
     if (this.localBus) {
       this.localBus.postMessage({
         type: 'village_upgraded',
         senderId: this.playerId,
-        payload: { territoryId, tier },
+        payload,
       });
+    }
+    if (this.supabaseChannel && this.isSubscribed) {
+      serverSync.broadcast(this.supabaseChannel, 'village_upgraded', payload, this.playerId);
     }
   }
 
   private broadcastBuildingConstructed(building: ConstructedBuilding) {
+    const payload = { building };
     if (this.localBus) {
       this.localBus.postMessage({
         type: 'building_constructed',
@@ -2224,25 +2279,36 @@ export class WorldScene extends Phaser.Scene {
         payload: building,
       });
     }
+    if (this.supabaseChannel && this.isSubscribed) {
+      serverSync.broadcast(this.supabaseChannel, 'building_constructed', payload, this.playerId);
+    }
   }
 
   private broadcastWaveSpawn(isBossWave: boolean) {
+    const payload = { isBossWave };
     if (this.localBus) {
       this.localBus.postMessage({
         type: 'wave_spawned',
         senderId: this.playerId,
-        payload: { isBossWave },
+        payload,
       });
+    }
+    if (this.supabaseChannel && this.isSubscribed) {
+      serverSync.broadcast(this.supabaseChannel, 'wave_spawned', payload, this.playerId);
     }
   }
 
   private broadcastTerritoryLost(territoryId: number) {
+    const payload = { territoryId, reason: '마물 군단' };
     if (this.localBus) {
       this.localBus.postMessage({
         type: 'territory_lost',
         senderId: this.playerId,
-        payload: { territoryId },
+        payload,
       });
+    }
+    if (this.supabaseChannel && this.isSubscribed) {
+      serverSync.broadcast(this.supabaseChannel, 'territory_lost', payload, this.playerId);
     }
   }
 }
