@@ -41,8 +41,8 @@ export const VILLAGE_TIER_CONFIGS: Record<VillageTier, VillageTierConfig> = {
   },
   1: {
     tier: 1,
-    name: '마을',
-    badge: '🏡 마을',
+    name: '개척마을',
+    badge: '🏡 개척마을',
     coreMaxHp: 220,
     maxBuildings: 5,
     costWood: 15,
@@ -126,7 +126,7 @@ export const VILLAGE_TIER_CONFIGS: Record<VillageTier, VillageTierConfig> = {
 };
 
 export const VILLAGE_PROGRESSION_TEXT =
-  '점령지 → 마을 → 중소마을 → 큰마을 → 소도시 → 중소도시 → 대도시';
+  '점령지 → 개척마을 → 중소마을 → 큰마을 → 소도시 → 중소도시 → 대도시';
 
 // 건설 가능한 건물 도감 (방어 타워, 성벽, 기본건물, 특수건물)
 export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [

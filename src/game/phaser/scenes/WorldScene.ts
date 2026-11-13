@@ -18,6 +18,7 @@ import {
   getIslandOrigin,
   getBuildingCollisionBox,
 } from '../../constants';
+import { BuildingSystem } from '../../BuildingSystem';
 import {
   Building,
   ConstructableType,
@@ -194,7 +195,7 @@ export class WorldScene extends Phaser.Scene {
         coreHp: curHp,
         coreMaxHp: maxHp,
       };
-    });
+    }).map((isl: Island) => BuildingSystem.ensureCentralVillageState(isl));
 
     // Setup Physics World Bounds for expanded territory map
     const worldMin = -2 * TERRITORY_STEP - 200;
@@ -279,8 +280,8 @@ export class WorldScene extends Phaser.Scene {
           this.unlockIslandLocally(territoryId, this.playerName, true),
         upgradeVillage: (territoryId: number) =>
           this.handleUpgradeVillage(territoryId, true),
-        constructBuilding: (territoryId: number, type: ConstructableType) =>
-          this.handleConstructBuilding(territoryId, type, true),
+        constructBuilding: (territoryId: number, type: ConstructableType, slotIndex?: number) =>
+          this.handleConstructBuilding(territoryId, type, slotIndex, true),
         setInventory: (inv: Inventory) => {
           this.inventory = { ...inv };
           EventBus.emit('inventory-updated', this.inventory);
@@ -1281,8 +1282,15 @@ export class WorldScene extends Phaser.Scene {
     // 건물 건설 (방어 타워, 성벽, 기본건물, 특수건물)
     EventBus.on(
       'construct-building',
-      (data: { territoryId: number; type: ConstructableType }) => {
-        this.handleConstructBuilding(data.territoryId, data.type, true);
+      (data: { territoryId: number; type: ConstructableType; slotIndex?: number }) => {
+        this.handleConstructBuilding(data.territoryId, data.type, data.slotIndex, true);
+      }
+    );
+
+    EventBus.on(
+      'BUILDING_PLACED',
+      (data: { territoryId: number; type: ConstructableType; slotIndex?: number }) => {
+        this.handleConstructBuilding(data.territoryId, data.type, data.slotIndex, true);
       }
     );
 
@@ -1332,44 +1340,27 @@ export class WorldScene extends Phaser.Scene {
 
   /**
    * 마을 발전 처리:
-   * 점령지(0) -> 마을(1) -> 중소마을(2) -> 큰마을(3) -> 소도시(4) -> 중소도시(5) -> 대도시(6)
+   * 점령지(0) -> 개척마을(1) -> 중소마을(2) -> 큰마을(3) -> 소도시(4) -> 중소도시(5) -> 대도시(6)
    */
   public handleUpgradeVillage(territoryId: number, isLocalTrigger = true): boolean {
     const isl = this.islands.find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return false;
-    if (isl.villageTier >= 6) {
-      this.showFloatingText(
-        getTerritoryCorePos(isl.gridX, isl.gridY).x,
-        getTerritoryCorePos(isl.gridX, isl.gridY).y - 60,
-        '👑 이미 최고 단계(대도시)에 도달했습니다!',
-        '#fde047'
-      );
+
+    const check = BuildingSystem.checkUpgrade(isl, this.inventory);
+    if (!check.canUpgrade) {
+      const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+      this.showFloatingText(cPos.x, cPos.y - 60, check.reason || '마을 승급 불가', '#f87171');
       return false;
     }
 
-    const nextTier = (isl.villageTier + 1) as VillageTier;
+    const nextTier = check.nextTier!;
     const nextCfg = VILLAGE_TIER_CONFIGS[nextTier];
 
     if (isLocalTrigger) {
-      if (
-        this.inventory.wood < nextCfg.costWood ||
-        this.inventory.stone < nextCfg.costStone ||
-        this.inventory.gold < nextCfg.costGold
-      ) {
-        const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-        this.showFloatingText(
-          cPos.x,
-          cPos.y - 60,
-          `자원 부족! (필요: 🪵${nextCfg.costWood} 🪨${nextCfg.costStone} 🪙${nextCfg.costGold})`,
-          '#f87171'
-        );
-        return false;
-      }
-
       this.inventory = {
-        wood: this.inventory.wood - nextCfg.costWood,
-        stone: this.inventory.stone - nextCfg.costStone,
-        gold: this.inventory.gold - nextCfg.costGold,
+        wood: this.inventory.wood - check.costWood,
+        stone: this.inventory.stone - check.costStone,
+        gold: this.inventory.gold - check.costGold,
       };
       EventBus.emit('inventory-updated', this.inventory);
     }
@@ -1390,8 +1381,8 @@ export class WorldScene extends Phaser.Scene {
     const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
     const msg =
       nextTier === 1
-        ? `🏡 [${isl.name}]에 새로운 '마을'을 세웠습니다!`
-        : `🎉 [${isl.name}]이(가) '${nextCfg.name}'(으)로 발전했습니다! (코어 HP ${isl.coreMaxHp})`;
+        ? `🏡 [${isl.name}]에 새로운 '개척마을'을 세웠습니다!`
+        : `🎉 [${isl.name}]이(가) '${nextCfg.name}'(으)로 발전했습니다! (코어 HP ${isl.coreMaxHp}, 슬롯 ${nextCfg.maxBuildings}개)`;
     this.showFloatingText(cPos.x, cPos.y - 75, msg, '#4ade80');
     EventBus.emit('game-alert', msg);
 
@@ -1407,76 +1398,33 @@ export class WorldScene extends Phaser.Scene {
   public handleConstructBuilding(
     territoryId: number,
     type: ConstructableType,
+    preferredSlotIndex?: number | boolean,
     isLocalTrigger = true
   ): boolean {
     const isl = this.islands.find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return false;
 
-    const bp = getBlueprint(type);
-    const tierCfg = VILLAGE_TIER_CONFIGS[isl.villageTier];
-    const existingInTerritory = this.constructedBuildings.filter(
-      (b) => b.territoryId === territoryId
+    const slotIdx = typeof preferredSlotIndex === 'number' ? preferredSlotIndex : undefined;
+    const isLocal = typeof preferredSlotIndex === 'boolean' ? preferredSlotIndex : isLocalTrigger;
+
+    const check = BuildingSystem.checkBuild(
+      isl,
+      type,
+      this.inventory,
+      this.constructedBuildings,
+      slotIdx
     );
 
-    if (existingInTerritory.length >= tierCfg.maxBuildings + 4) {
+    if (!check.canBuild || check.slotIndex === undefined) {
       const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-      this.showFloatingText(
-        cPos.x,
-        cPos.y - 60,
-        '⚠️ 이 마을의 최대 건설 한도에 도달했습니다! 마을을 발전시키세요.',
-        '#f59e0b'
-      );
+      this.showFloatingText(cPos.x, cPos.y - 60, check.reason || '건설 불가', '#f87171');
       return false;
     }
 
-    if (isLocalTrigger) {
-      if (
-        this.inventory.wood < bp.costWood ||
-        this.inventory.stone < bp.costStone ||
-        this.inventory.gold < bp.costGold
-      ) {
-        const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-        this.showFloatingText(
-          cPos.x,
-          cPos.y - 60,
-          `건설 자원 부족! (🪵${bp.costWood} 🪨${bp.costStone} 🪙${bp.costGold})`,
-          '#f87171'
-        );
-        return false;
-      }
-    }
+    const bp = check.blueprint;
+    const finalSlotIndex = check.slotIndex;
 
-    // 빈 슬롯 탐색 (성벽은 0~3 슬롯 우선, 타워/건물은 4~15 슬롯 우선)
-    const usedSlots = new Set(existingInTerritory.map((b) => b.slotIndex));
-    let chosenSlotIndex = -1;
-
-    if (bp.category === 'wall') {
-      for (let i = 0; i < TERRITORY_BUILD_SLOTS.length; i++) {
-        if (!usedSlots.has(i)) {
-          chosenSlotIndex = i;
-          break;
-        }
-      }
-    } else {
-      for (let i = 4; i < TERRITORY_BUILD_SLOTS.length; i++) {
-        if (!usedSlots.has(i)) {
-          chosenSlotIndex = i;
-          break;
-        }
-      }
-      if (chosenSlotIndex === -1) {
-        for (let i = 0; i < 4; i++) {
-          if (!usedSlots.has(i)) {
-            chosenSlotIndex = i;
-            break;
-          }
-        }
-      }
-    }
-
-    if (chosenSlotIndex === -1) return false;
-
-    if (isLocalTrigger) {
+    if (isLocal) {
       this.inventory = {
         wood: this.inventory.wood - bp.costWood,
         stone: this.inventory.stone - bp.costStone,
@@ -1485,21 +1433,7 @@ export class WorldScene extends Phaser.Scene {
       EventBus.emit('inventory-updated', this.inventory);
     }
 
-    const origin = getIslandOrigin(isl.gridX, isl.gridY);
-    const slot = TERRITORY_BUILD_SLOTS[chosenSlotIndex];
-    const newBuilding: ConstructedBuilding = {
-      id: `cb_${territoryId}_${chosenSlotIndex}_${Date.now().toString(36)}`,
-      territoryId,
-      type,
-      category: bp.category,
-      name: bp.name,
-      x: origin.x + slot.relX,
-      y: origin.y + slot.relY,
-      hp: bp.maxHp,
-      maxHp: bp.maxHp,
-      slotIndex: chosenSlotIndex,
-    };
-
+    const newBuilding = BuildingSystem.createConstructedBuilding(isl, type, finalSlotIndex);
     this.constructedBuildings.push(newBuilding);
     this.spawnConstructedBuildingVisual(newBuilding);
     this.saveWorldState();
@@ -1509,11 +1443,11 @@ export class WorldScene extends Phaser.Scene {
     this.showFloatingText(
       newBuilding.x,
       newBuilding.y - 45,
-      `🏗️ [${bp.categoryLabel}] ${bp.name} 건설 완료!`,
+      `🏗️ [${bp.categoryLabel}] ${bp.name} 건설 완료! (#${finalSlotIndex} 슬롯)`,
       '#38bdf8'
     );
 
-    if (isLocalTrigger) {
+    if (isLocal) {
       this.broadcastBuildingConstructed(newBuilding);
     }
     return true;

@@ -325,8 +325,8 @@ export function App() {
         constructedBuildings={constructedBuildings}
         inventory={inventory}
         onUpgradeVillage={(territoryId) => EventBus.emit('upgrade-village', territoryId)}
-        onConstructBuilding={(territoryId, type: ConstructableType) =>
-          EventBus.emit('construct-building', { territoryId, type })
+        onConstructBuilding={(territoryId, type: ConstructableType, slotIndex?: number) =>
+          EventBus.emit('construct-building', { territoryId, type, slotIndex })
         }
         onRepairCore={(territoryId) => EventBus.emit('repair-territory-core', territoryId)}
         onTestDestroyCore={(territoryId) =>
