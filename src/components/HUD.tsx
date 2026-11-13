@@ -3,6 +3,7 @@ import { Inventory, Island, PlayerColor, WaveState } from '../types/game';
 import { sound, SoundSettings } from '../lib/sound';
 import { SoundModal } from './SoundModal';
 import { VILLAGE_TIER_CONFIGS } from '../game/constants';
+import { EventBus } from '../game/phaser/EventBus';
 import {
   Users,
   Share2,
@@ -73,10 +74,11 @@ export const HUD: React.FC<HUDProps> = ({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    return sound.subscribe((updated) => {
+    const unsub = sound.subscribe((updated) => {
       setSoundSettings(updated);
       setIsMuted(updated.muted);
     });
+    return () => unsub();
   }, []);
 
   const toggleSound = () => {
@@ -234,16 +236,16 @@ export const HUD: React.FC<HUDProps> = ({
             </button>
 
             <button
+              id="open-minimap-top-btn"
               onClick={onOpenMinimap}
-              className="relative w-10 h-10 active:scale-90 transition-transform flex items-center justify-center group"
-              title="전체 마을 영지 지도"
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/90 border border-teal-400/60 rounded-2xl shadow-xl hover:bg-slate-800 active:scale-95 transition"
+              title="5×5 전체 영지 전략 미니맵 열기"
             >
-              <img
-                src="/assets/ui/Buttons/SmallBlueRoundButton_Regular.png"
-                alt="Map button"
-                className="w-full h-full pixel-art select-none"
-              />
-              <Compass className="absolute w-4 h-4 text-amber-100" />
+              <Compass className="w-4 h-4 text-teal-300" />
+              <div className="flex flex-col text-left leading-none">
+                <span className="text-[10px] text-teal-300 font-black">5×5 미니맵</span>
+                <span className="text-xs text-white font-bold">{unlockedCount}/{totalIslands}</span>
+              </div>
             </button>
 
             <button
@@ -410,19 +412,26 @@ export const HUD: React.FC<HUDProps> = ({
             >
               🏘️ 마을/건설
             </button>
-
-            <button
-              onClick={onOpenMinimap}
-              className="px-2 py-1 bg-slate-900 text-teal-200 rounded-xl text-[11px] font-black border border-teal-400/50"
-            >
-              🗺️ {unlockedCount}/{totalIslands}
-            </button>
           </div>
 
-          <div className="flex items-center gap-1 pointer-events-auto">
+          <div className="flex items-center gap-1.5 pointer-events-auto">
             <button
-              onClick={() => setShowSettingsModal(true)}
+              id="open-minimap-mobile-btn"
+              onClick={onOpenMinimap}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-900/95 text-teal-200 rounded-xl text-[10px] font-black border border-teal-400/60 shadow active:scale-95"
+              title="5×5 전체 영지 미니맵 열기"
+            >
+              <Compass className="w-3.5 h-3.5 text-teal-300" />
+              <span>{unlockedCount}/{totalIslands}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                sound.playClick();
+                setShowSettingsModal(true);
+              }}
               className="relative w-8 h-8 active:scale-90 flex items-center justify-center"
+              title="게임 & 사운드 통합 설정"
             >
               <img
                 src="/assets/ui/Buttons/SmallBlueRoundButton_Regular.png"
@@ -519,12 +528,12 @@ export const HUD: React.FC<HUDProps> = ({
             </div>
 
             {/* Audio Controls */}
-            <div className="bg-black/40 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2">
-              <div className="text-xs font-semibold text-slate-300">사운드 & 배경음악</div>
-              <div className="flex items-center gap-2">
+            <div className="bg-black/40 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-300">사운드 & 배경음악</span>
                 <button
                   onClick={toggleSound}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition active:scale-95 ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-bold transition active:scale-95 ${
                     isMuted
                       ? 'bg-red-500/20 border-red-500/40 text-red-300'
                       : 'bg-green-500/20 border-green-500/40 text-green-300'
@@ -533,23 +542,66 @@ export const HUD: React.FC<HUDProps> = ({
                   <img
                     src="/assets/ui/Icons/Icon_12.png"
                     alt="sound"
-                    className={`w-4 h-4 pixel-art ${isMuted ? 'grayscale opacity-50' : ''}`}
+                    className={`w-3.5 h-3.5 pixel-art ${isMuted ? 'grayscale opacity-50' : ''}`}
                   />
-                  <span>{isMuted ? '음소거 됨' : '사운드 켜짐'}</span>
+                  <span>{isMuted ? '음소거' : '켜짐'}</span>
                 </button>
+              </div>
 
-                <button
-                  onClick={() => {
-                    setShowSettingsModal(false);
-                    setShowSoundModal(true);
-                  }}
-                  className="flex-1 flex items-center justify-between py-2 px-3 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-xl text-amber-200 text-xs font-bold transition"
-                >
-                  <span>BGM & 음향 상세</span>
-                  <span className="text-[10px] text-slate-300 font-mono">
-                    {soundSettings.bgmEnabled && !soundSettings.muted ? 'ON' : 'OFF'}
-                  </span>
-                </button>
+              {/* Quick Sliders */}
+              <div className="flex flex-col gap-2 text-[11px] text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span>BGM: {Math.round(soundSettings.bgmVolume * 100)}%</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={soundSettings.bgmVolume}
+                    onChange={(e) => sound.setBgmVolume(parseFloat(e.target.value))}
+                    className="w-32 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>SFX: {Math.round(soundSettings.sfxVolume * 100)}%</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={soundSettings.sfxVolume}
+                    onChange={(e) => sound.setSfxVolume(parseFloat(e.target.value))}
+                    className="w-32 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowSoundModal(true);
+                }}
+                className="w-full flex items-center justify-center py-2 px-3 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-xl text-amber-200 text-xs font-bold transition"
+              >
+                <span>BGM 트랙 변경 및 효과음 테스트</span>
+              </button>
+            </div>
+
+            {/* Screen / Zoom Presets */}
+            <div className="bg-black/40 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2">
+              <div className="text-xs font-semibold text-slate-300">화면 & 카메라 줌 프리셋</div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[0.75, 1.0, 1.25, 1.5].map((z) => (
+                  <button
+                    key={z}
+                    onClick={() => {
+                      EventBus.emit('set-zoom', z);
+                    }}
+                    className="py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-200 active:scale-95 transition"
+                  >
+                    {z}x
+                  </button>
+                ))}
               </div>
             </div>
 

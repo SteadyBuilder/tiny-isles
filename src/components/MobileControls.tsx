@@ -1,90 +1,187 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Island } from '../types/game';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Swords } from 'lucide-react';
+import { EventBus } from '../game/phaser/EventBus';
 
 interface MobileControlsProps {
   onAction: () => void;
   joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
   nearIsland?: Island | null;
+  onZoomChange?: (zoom: number) => void;
+  currentZoom?: number;
 }
 
-export const MobileControls: React.FC<MobileControlsProps> = ({
-  onAction,
-  nearIsland,
-}) => {
-  const [showGuide, setShowGuide] = useState(() => {
-    return !sessionStorage.getItem('touch_guide_seen');
-  });
+const JOYSTICK_RADIUS = 46;
 
+export const MobileControls: React.FC<MobileControlsProps> = ({
+  onAction, joystickRef, nearIsland, onZoomChange, currentZoom = 1.0,
+}) => {
+  const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
+  const [isActionActive, setIsActionActive] = useState(false);
+  const joystickTouchIdRef = useRef<number | null>(null);
+  const joystickCenterRef = useRef({ x: 0, y: 0 });
+  const actionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const zoomRef = useRef(currentZoom);
+  zoomRef.current = currentZoom;
+  const pinchDistRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef(1.0);
+
+  const stopActionHold = useCallback(() => {
+    setIsActionActive(false);
+    if (actionIntervalRef.current) { clearInterval(actionIntervalRef.current); actionIntervalRef.current = null; }
+    EventBus.emit('player-action-stop');
+  }, []);
+
+  const startActionHold = useCallback((e: React.PointerEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
+    setIsActionActive(true);
+    onAction();
+    EventBus.emit('player-action-start');
+    if (actionIntervalRef.current) clearInterval(actionIntervalRef.current);
+    actionIntervalRef.current = setInterval(() => onAction(), 220);
+  }, [onAction]);
+
+  const resetJoystick = useCallback(() => {
+    joystickTouchIdRef.current = null;
+    setKnobPos({ x: 0, y: 0 });
+    if (joystickRef) joystickRef.current = { x: 0, y: 0 };
+  }, [joystickRef]);
+
+  // Prevent input stuck on release or blur
   useEffect(() => {
-    if (showGuide) {
-      const timer = setTimeout(() => {
-        setShowGuide(false);
-        sessionStorage.setItem('touch_guide_seen', '1');
-      }, 5000);
-      return () => clearTimeout(timer);
+    const handleGlobalRelease = () => { resetJoystick(); stopActionHold(); };
+    window.addEventListener('blur', handleGlobalRelease);
+    window.addEventListener('pointerup', handleGlobalRelease);
+    window.addEventListener('touchend', handleGlobalRelease);
+    window.addEventListener('touchcancel', handleGlobalRelease);
+    return () => {
+      window.removeEventListener('blur', handleGlobalRelease);
+      window.removeEventListener('pointerup', handleGlobalRelease);
+      window.removeEventListener('touchend', handleGlobalRelease);
+      window.removeEventListener('touchcancel', handleGlobalRelease);
+      stopActionHold();
+    };
+  }, [resetJoystick, stopActionHold]);
+
+  // 2-Finger Pinch Zoom on Window
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchDistRef.current = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        pinchStartZoomRef.current = zoomRef.current;
+      }
+    };
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchDistRef.current && pinchDistRef.current > 0) {
+        e.preventDefault();
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const nextZoom = Math.min(2.0, Math.max(0.5, Number((pinchStartZoomRef.current * (dist / pinchDistRef.current)).toFixed(2))));
+        EventBus.emit('set-zoom', nextZoom);
+        onZoomChange?.(nextZoom);
+      }
+    };
+    const handleTouchEnd = (e: TouchEvent) => { if (e.touches.length < 2) pinchDistRef.current = null; };
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [onZoomChange]);
+
+  const handleJoystickTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touch = e.changedTouches[0];
+    joystickTouchIdRef.current = touch.identifier;
+    const rect = e.currentTarget.getBoundingClientRect();
+    joystickCenterRef.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    handleJoystickMove(touch.clientX, touch.clientY);
+  };
+
+  const handleJoystickTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === joystickTouchIdRef.current) {
+        handleJoystickMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+        break;
+      }
     }
-  }, [showGuide]);
+  };
+
+  const handleJoystickMove = (clientX: number, clientY: number) => {
+    const dx = clientX - joystickCenterRef.current.x;
+    const dy = clientY - joystickCenterRef.current.y;
+    const dist = Math.hypot(dx, dy);
+    const clampedDist = Math.min(dist, JOYSTICK_RADIUS);
+    const angle = Math.atan2(dy, dx);
+    const kx = Math.cos(angle) * clampedDist;
+    const ky = Math.sin(angle) * clampedDist;
+    setKnobPos({ x: kx, y: ky });
+    if (joystickRef) {
+      joystickRef.current = {
+        x: Number((kx / JOYSTICK_RADIUS).toFixed(3)),
+        y: Number((ky / JOYSTICK_RADIUS).toFixed(3)),
+      };
+    }
+  };
 
   return (
     <div className="md:hidden pointer-events-none select-none fixed inset-0 z-40">
-      {/* 1. Contextual Island Unlock Prompt Banner (Tiny Swords Styled) */}
+      {/* 1. Contextual Island Unlock Prompt Banner */}
       {nearIsland && (
-        <div
-          className="absolute left-1/2 -translate-x-1/2 pointer-events-auto touch-manipulation animate-bounce"
-          style={{
-            bottom: 'max(1.8rem, env(safe-area-inset-bottom, 1.8rem))',
-          }}
-        >
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-28 pointer-events-auto animate-bounce">
           <button
-            onClick={() => {
-              if (typeof navigator !== 'undefined' && navigator.vibrate) {
-                navigator.vibrate(20);
-              }
-              onAction();
-            }}
-            className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 border-2 border-amber-300 shadow-2xl active:scale-95 text-white transition-transform"
+            onClick={onAction}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-600 to-amber-800 border-2 border-amber-300 shadow-2xl active:scale-95 text-white"
           >
             <Sparkles className="w-4 h-4 text-amber-200 fill-amber-200" />
-            <div className="flex flex-col text-left leading-tight">
-              <span className="text-xs font-black text-amber-100">
-                🚩 #{nearIsland.id} 영지 개척 (터치)
-              </span>
-              <div className="flex items-center gap-2 text-[10px] text-amber-200/90 font-bold mt-0.5">
-                <span className="flex items-center gap-0.5">
-                  <img src="/assets/ui/Icons/Icon_02.png" alt="wood" className="w-3 h-3 pixel-art inline" />
-                  {nearIsland.costWood}
-                </span>
-                <span className="flex items-center gap-0.5">
-                  <img src="/assets/ui/Icons/Icon_01.png" alt="stone" className="w-3 h-3 pixel-art inline" />
-                  {nearIsland.costStone}
-                </span>
-                {nearIsland.costGold > 0 && (
-                  <span className="flex items-center gap-0.5">
-                    <img src="/assets/ui/Icons/Icon_03.png" alt="gold" className="w-3 h-3 pixel-art inline" />
-                    {nearIsland.costGold}
-                  </span>
-                )}
-              </div>
+            <div className="flex flex-col text-left text-xs font-black text-amber-100">
+              <span>🚩 #{nearIsland.id} 영지 개척</span>
+              <span className="text-[10px] text-amber-200/90 font-bold">🪵{nearIsland.costWood} 🪨{nearIsland.costStone}{nearIsland.costGold > 0 ? ` 🪙${nearIsland.costGold}` : ''}</span>
             </div>
           </button>
         </div>
       )}
 
-      {/* 2. Touch Navigation Floating Toast (Disappears after 5s) */}
-      {showGuide && (
-        <div
-          className="absolute left-1/2 -translate-x-1/2 pointer-events-none transition-opacity duration-500"
-          style={{
-            bottom: 'max(4.5rem, env(safe-area-inset-bottom, 4.5rem))',
-          }}
-        >
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white/90 text-[11px] font-medium shadow-lg animate-fadeIn">
-            <img src="/assets/ui/Cursors/Cursor_02.png" alt="touch" className="w-4 h-4 pixel-art" />
-            <span>화면을 터치하여 이동 및 자원 채집!</span>
-          </div>
+      {/* 2. Virtual Joystick (Bottom Left) */}
+      <div
+        className="absolute bottom-6 left-6 pointer-events-auto touch-none"
+        onTouchStart={handleJoystickTouchStart}
+        onTouchMove={handleJoystickTouchMove}
+        onTouchEnd={resetJoystick}
+        onTouchCancel={resetJoystick}
+      >
+        <div className="relative w-28 h-28 rounded-full bg-slate-950/60 backdrop-blur-sm border-2 border-amber-400/50 shadow-2xl flex items-center justify-center">
+          <div className="absolute w-12 h-12 rounded-full border border-white/20 bg-white/5 pointer-events-none" />
+          <div
+            className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-xl border-2 border-white/80 transition-transform duration-75 flex items-center justify-center text-[10px] font-black text-amber-950"
+            style={{ transform: `translate(${knobPos.x}px, ${knobPos.y}px)` }}
+          >🕹️</div>
         </div>
-      )}
+      </div>
+
+      {/* 3. Large Action Button with Hold Support (Bottom Right) */}
+      <div className="absolute bottom-6 right-6 pointer-events-auto touch-none">
+        <button
+          onPointerDown={startActionHold}
+          onPointerUp={stopActionHold}
+          onPointerLeave={stopActionHold}
+          onPointerCancel={stopActionHold}
+          className={`relative w-20 h-20 rounded-full border-4 shadow-2xl flex flex-col items-center justify-center transition-transform active:scale-90 ${
+            isActionActive
+              ? 'bg-gradient-to-br from-red-600 to-amber-600 border-amber-200 scale-95 shadow-amber-500/50'
+              : 'bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 border-amber-300'
+          }`}
+          aria-label="채집 및 공격 액션 버튼"
+        >
+          <Swords className={`w-8 h-8 text-white drop-shadow ${isActionActive ? 'animate-pulse' : ''}`} />
+          <span className="text-[10px] font-black text-amber-100 tracking-wider mt-0.5">ACTION</span>
+        </button>
+      </div>
     </div>
   );
 };

@@ -140,6 +140,7 @@ export class WorldScene extends Phaser.Scene {
   private touchTargetObj: { x: number; y: number } | null = null;
   private pinchStartDist: number | null = null;
   private pinchStartZoom: number = 1.0;
+  private isActionHolding = false;
 
   // Multiplayer Channels
   private localBus: BroadcastChannel | null = null;
@@ -1215,9 +1216,24 @@ export class WorldScene extends Phaser.Scene {
     const handlePlayerAction = () => {
       this.tryInteract();
     };
+    const handleActionStart = () => {
+      this.isActionHolding = true;
+    };
+    const handleActionStop = () => {
+      this.isActionHolding = false;
+    };
     window.addEventListener('player-action', handlePlayerAction);
+    window.addEventListener('player-action-start', handleActionStart);
+    window.addEventListener('player-action-stop', handleActionStop);
+    EventBus.on('player-action-start', handleActionStart);
+    EventBus.on('player-action-stop', handleActionStop);
+
     this.events.once('shutdown', () => {
       window.removeEventListener('player-action', handlePlayerAction);
+      window.removeEventListener('player-action-start', handleActionStart);
+      window.removeEventListener('player-action-stop', handleActionStop);
+      EventBus.off('player-action-start', handleActionStart);
+      EventBus.off('player-action-stop', handleActionStop);
     });
   }
 
@@ -2068,28 +2084,11 @@ export class WorldScene extends Phaser.Scene {
     this.playerNameTag.setPosition(px, py - 42).setDepth(py + 30);
     this.playerIndicator.setPosition(px, py - 54).setDepth(py + 30);
 
-    // Continuous interaction when Space, E or Touch is held
+    // Continuous interaction when Space, E or Mobile Action Button is held
     const isHoldInput =
-      this.spaceKey?.isDown || this.eKey?.isDown || this.input.activePointer?.isDown;
-    if (isHoldInput && time - this.lastInteractTime >= 250) {
-      let isNearTarget = false;
-      for (const mv of this.monsters.values()) {
-        if (Math.hypot(px - mv.monster.x, py - mv.monster.y) < 115) {
-          isNearTarget = true;
-          break;
-        }
-      }
-      if (!isNearTarget) {
-        for (const ev of this.entityVisuals.values()) {
-          if (Math.hypot(px - (ev.entity.x + 16), py - (ev.entity.y + 16)) < 90) {
-            isNearTarget = true;
-            break;
-          }
-        }
-      }
-      if (isNearTarget) {
-        this.tryInteract();
-      }
+      this.spaceKey?.isDown || this.eKey?.isDown || this.isActionHolding;
+    if (isHoldInput && time - this.lastInteractTime >= 240) {
+      this.tryInteract();
     }
 
     // Smooth Camera Zoom
@@ -2345,6 +2344,8 @@ export class WorldScene extends Phaser.Scene {
   ) {
     const targetMv = this.monsters.get(targetMonsterId);
     if (!targetMv) return;
+
+    sound.playTowerShoot();
 
     const proj = this.add.image(source.x, source.y - 30, 'arrowProj');
     proj.setDepth(3200);

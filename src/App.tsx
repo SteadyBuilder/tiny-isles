@@ -190,6 +190,18 @@ export function App() {
     setShowVillageModal(true);
   }, [territories, playerGridPos]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'b' || e.key === 'B' || e.code === 'KeyB') {
+        e.preventDefault();
+        handleOpenVillageModalForCurrent();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleOpenVillageModalForCurrent]);
+
   const handleOpenVillageModalById = useCallback((territoryId: number) => {
     setSelectedTerritoryId(territoryId);
     setShowVillageModal(true);
@@ -288,6 +300,8 @@ export function App() {
         onAction={handleMobileAction}
         joystickRef={joystickRef}
         nearIsland={nearIsland}
+        onZoomChange={handleZoomChange}
+        currentZoom={zoom}
       />
 
       <MinimapModal
