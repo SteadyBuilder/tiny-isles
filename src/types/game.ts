@@ -30,6 +30,7 @@ export interface Entity {
   hp: number;
   maxHp: number;
   islandId: number;
+  zoneTag?: 'wilderness' | 'gold_mine';
   shakeTime?: number;
 }
 

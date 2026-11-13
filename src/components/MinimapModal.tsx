@@ -147,13 +147,27 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     title={island.name}
                   >
                     <span className="text-xs font-black">
-                      {island.id === 0 ? '🏰' : unlocked ? '🏘️' : affordable ? '✨' : '🔒'}
+                      {island.id === 0
+                        ? '🏰'
+                        : unlocked
+                        ? '🏘️'
+                        : island.id === 11
+                        ? '⛏️'
+                        : affordable
+                        ? '✨'
+                        : '🔒'}
                     </span>
                     <span className="text-[9px] font-bold leading-none mt-0.5">
                       {unlocked ? tCfg.name : `#${island.id}`}
                     </span>
                     {!unlocked && (
-                      <span className="text-[8px] text-amber-300/80 font-bold">건설터</span>
+                      <span
+                        className={`text-[8px] font-bold ${
+                          island.id === 11 ? 'text-yellow-300' : 'text-amber-300/80'
+                        }`}
+                      >
+                        {island.id === 11 ? '황금광산' : '건설터'}
+                      </span>
                     )}
 
                     {isPlayerHere && (

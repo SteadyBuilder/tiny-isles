@@ -453,6 +453,16 @@ export const HUD: React.FC<HUDProps> = ({
             </div>
           </div>
         )}
+
+        {/* Mobile Alert Toast Banner */}
+        {alertMessage && (
+          <div
+            id="game-alert-banner-mobile"
+            className="mx-auto px-3.5 py-1.5 rounded-xl bg-slate-900/95 border border-amber-400/80 text-amber-200 text-xs font-extrabold shadow-2xl pointer-events-auto text-center"
+          >
+            {alertMessage}
+          </div>
+        )}
       </div>
 
       {/* ======================================================== */}

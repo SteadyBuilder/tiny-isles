@@ -3,7 +3,7 @@ import { EntityType } from '../types/game';
 /**
  * Necesse-inspired Overworld Biome Identifiers.
  */
-export type BiomeId = 'plains' | 'forest' | 'highland' | 'mystic' | 'water';
+export type BiomeId = 'plains' | 'forest' | 'highland' | 'mystic' | 'gold_mine' | 'water';
 
 export type LandBiomeId = Exclude<BiomeId, 'water'>;
 
@@ -39,10 +39,10 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     baseColorCss: '#6ca94b',
     walkable: true,
     resourceWeights: {
-      tree: 0.38,
-      rock: 0.25,
-      gold_rock: 0.14,
-      sheep: 0.23,
+      tree: 0.44,
+      rock: 0.34,
+      gold_rock: 0.08,
+      sheep: 0.14,
     },
     decorationChance: 0.08,
   },
@@ -56,10 +56,10 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     baseColorCss: '#4f9145',
     walkable: true,
     resourceWeights: {
-      tree: 0.62,
-      rock: 0.16,
-      gold_rock: 0.1,
-      sheep: 0.12,
+      tree: 0.68,
+      rock: 0.2,
+      gold_rock: 0.05,
+      sheep: 0.07,
     },
     decorationChance: 0.14,
   },
@@ -73,10 +73,10 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     baseColorCss: '#7c8f4b',
     walkable: true,
     resourceWeights: {
-      tree: 0.15,
-      rock: 0.5,
-      gold_rock: 0.3,
-      sheep: 0.05,
+      tree: 0.22,
+      rock: 0.62,
+      gold_rock: 0.12,
+      sheep: 0.04,
     },
     decorationChance: 0.1,
   },
@@ -90,10 +90,27 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     baseColorCss: '#458b7e',
     walkable: true,
     resourceWeights: {
-      tree: 0.35,
-      rock: 0.25,
-      gold_rock: 0.32,
-      sheep: 0.08,
+      tree: 0.42,
+      rock: 0.36,
+      gold_rock: 0.16,
+      sheep: 0.06,
+    },
+    decorationChance: 0.12,
+  },
+  gold_mine: {
+    id: 'gold_mine',
+    name: '황금 광산 지대',
+    tilemapKey: 'tilemap3',
+    interiorTileCol: 1,
+    interiorTileRow: 1,
+    baseColorHex: 0xc29238,
+    baseColorCss: '#c29238',
+    walkable: true,
+    resourceWeights: {
+      tree: 0,
+      rock: 0.12,
+      gold_rock: 0.88,
+      sheep: 0,
     },
     decorationChance: 0.12,
   },
@@ -114,6 +131,33 @@ export const BIOME_CONFIGS: Record<BiomeId, BiomeConfig> = {
     },
     decorationChance: 0.06,
   },
+};
+
+export interface GoldMineBiomeConfig {
+  /** Mid-game outer territory ID whose occupation unseals the gold mine */
+  unlockTerritoryId: number;
+  /** World center X of the clustered gold mine biome */
+  centerX: number;
+  /** World center Y of the clustered gold mine biome */
+  centerY: number;
+  /** Organic radius (px) around center inside the wilderness pocket */
+  radiusPx: number;
+  /** Number of gold_rock nodes clustered inside the unlocked gold mine */
+  clusterNodeCount: number;
+  /** Tight spacing (px) between clustered gold veins */
+  clusterMinSpacingPx: number;
+  /** Global announcement text broadcast on discovery */
+  announcementText: string;
+}
+
+export const GOLD_MINE_BIOME_CONFIG: GoldMineBiomeConfig = {
+  unlockTerritoryId: 11, // #11 극서 태양금광 변경 마을터 (-2, 0) 인접 야외 광맥 지대
+  centerX: -1600,
+  centerY: -320,
+  radiusPx: 300,
+  clusterNodeCount: 16,
+  clusterMinSpacingPx: 56,
+  announcementText: '황금광산 발견!!',
 };
 
 export interface TerrainGenerationConfig {
@@ -147,8 +191,10 @@ export const TERRAIN_GENERATION_CONFIG: TerrainGenerationConfig = {
 export interface ResourceDistributionConfig {
   /** Sector size (px) for uniform map-wide resource density balancing */
   sectorSizePx: number;
-  /** Target resources spawned per outdoor-capable sector */
+  /** Target resources spawned per outdoor-capable sector (dense wood & stone) */
   targetResourcesPerSector: number;
+  /** Target cap for general-world gold_rock nodes outside the gold mine biome */
+  generalGoldTargetCount: number;
   /** Minimum center-to-center spacing (px) between resource nodes */
   minEntitySpacingPx: number;
   /** Respawn delay (ms) after harvesting a node */
@@ -163,8 +209,9 @@ export interface ResourceDistributionConfig {
 
 export const RESOURCE_DISTRIBUTION_CONFIG: ResourceDistributionConfig = {
   sectorSizePx: 640,
-  targetResourcesPerSector: 4,
-  minEntitySpacingPx: 92,
+  targetResourcesPerSector: 10,
+  generalGoldTargetCount: 70,
+  minEntitySpacingPx: 64,
   respawnDelayMs: 10000,
   villageExclusionMarginPx: 44,
   roadExclusionHalfWidthPx: 52,

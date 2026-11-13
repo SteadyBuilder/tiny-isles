@@ -9,6 +9,7 @@ export interface GameAssets {
   redPawnPickaxe: HTMLImageElement;
   tilemap: HTMLImageElement;
   tilemap2: HTMLImageElement;
+  tilemap3: HTMLImageElement;
   tilemap4: HTMLImageElement;
   tilemap5: HTMLImageElement;
   waterBg: HTMLImageElement;
@@ -51,6 +52,7 @@ export async function loadGameAssets(onProgress?: (ratio: number) => void): Prom
     redPawnPickaxe: '/assets/units/red/Pawn_Interact_Pickaxe.png',
     tilemap: '/assets/terrain/Tilemap_color1.png',
     tilemap2: '/assets/terrain/Tilemap_color2.png',
+    tilemap3: '/assets/terrain/Tilemap_color3.png',
     tilemap4: '/assets/terrain/Tilemap_color4.png',
     tilemap5: '/assets/terrain/Tilemap_color5.png',
     waterBg: '/assets/terrain/Water_Background_color.png',

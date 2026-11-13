@@ -35,12 +35,19 @@ import { WaveSystem, MonsterVisual } from '../../systems/WaveSystem';
 import { TowerDefenseSystem, ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
 import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
 import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
-import { RESOURCE_DISTRIBUTION_CONFIG } from '../../../data/biomes';
+import {
+  GOLD_MINE_BIOME_CONFIG,
+  RESOURCE_DISTRIBUTION_CONFIG,
+} from '../../../data/biomes';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { DEPTH, ySortDepth } from '../../depthLayers';
 import { getWallCollisionBoxes } from '../../wallCollisionGeometry';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
-import { generateWorldResourceEntities, pickRespawnSpot } from '../../world/ResourceDistributionSystem';
+import {
+  generateGoldMineClusterEntities,
+  generateWorldResourceEntities,
+  pickRespawnSpot,
+} from '../../world/ResourceDistributionSystem';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 
 interface RemotePlayerVisual {
@@ -768,6 +775,12 @@ export class WorldScene extends Phaser.Scene {
     cv.hpBar.fillRect(barX, barY, Math.max(2, barW * ratio), barH);
   }
 
+  private isGoldMineUnlocked(): boolean {
+    return this.islands.some(
+      (i) => i.id === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId && i.unlocked
+    );
+  }
+
   private spawnAllEntities() {
     this.entityVisuals.forEach((ev) => ev.container.destroy());
     this.entityVisuals.clear();
@@ -776,7 +789,8 @@ export class WorldScene extends Phaser.Scene {
       this.terrainMap,
       this.islands,
       WORLD_BOUNDS,
-      this.constructedBuildings
+      this.constructedBuildings,
+      this.isGoldMineUnlocked()
     );
 
     for (const ent of allEntities) {
@@ -1956,7 +1970,11 @@ export class WorldScene extends Phaser.Scene {
         this.terrainMap,
         this.islands,
         WORLD_BOUNDS,
-        this.constructedBuildings
+        this.constructedBuildings,
+        {
+          goldMineUnlocked: this.isGoldMineUnlocked(),
+          zoneTag: ent.zoneTag,
+        }
       );
       if (nextSpot) {
         ent.x = nextSpot.x;
@@ -1964,9 +1982,32 @@ export class WorldScene extends Phaser.Scene {
         ent.type = nextSpot.type;
         ent.hp = nextSpot.maxHp;
         ent.maxHp = nextSpot.maxHp;
+        ent.zoneTag = nextSpot.zoneTag;
         this.spawnEntity(ent);
       }
     });
+  }
+
+  private spawnGoldMineClusterAndAnnounce() {
+    const activeEntities = Array.from(this.entityVisuals.values()).map((ev) => ev.entity);
+    const hasCluster = activeEntities.some((e) => e.zoneTag === 'gold_mine');
+    if (!hasCluster) {
+      const mineNodes = generateGoldMineClusterEntities(
+        this.terrainMap,
+        this.islands,
+        WORLD_BOUNDS,
+        activeEntities,
+        this.constructedBuildings
+      );
+      for (const node of mineNodes) {
+        this.spawnEntity(node);
+      }
+    }
+
+    const gm = GOLD_MINE_BIOME_CONFIG;
+    confetti({ particleCount: 130, spread: 95, origin: { y: 0.55 } });
+    this.showFloatingText(gm.centerX, gm.centerY - 40, `⛏️ ${gm.announcementText}`, '#fde047');
+    EventBus.emit('game-alert', gm.announcementText);
   }
 
   public unlockIslandLocally(islandId: number, unlockedBy: string, isLocalTrigger: boolean) {
@@ -1993,7 +2034,12 @@ export class WorldScene extends Phaser.Scene {
     const origin = getIslandOrigin(target.gridX, target.gridY);
     const msg = `🚩 ${unlockedBy}님이 '${target.name}' 영지를 점령했습니다! 건물을 세우고 마을로 발전시키세요!`;
     this.showFloatingText(origin.x + 320, origin.y + 240, msg, '#ffd700');
-    EventBus.emit('game-alert', msg);
+
+    if (islandId === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId) {
+      this.spawnGoldMineClusterAndAnnounce();
+    } else {
+      EventBus.emit('game-alert', msg);
+    }
 
     if (isLocalTrigger) {
       serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);

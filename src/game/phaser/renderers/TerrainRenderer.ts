@@ -105,6 +105,7 @@ export class TerrainRenderer {
   private terrain: WorldTerrainMap;
   private chunkImages: Phaser.GameObjects.Image[] = [];
   private overlayGraphics: Phaser.GameObjects.Graphics;
+  private goldMineSealText: Phaser.GameObjects.Text | null = null;
   private waterColliders: Phaser.Physics.Arcade.StaticGroup;
 
   constructor(scene: Phaser.Scene, terrain: WorldTerrainMap) {
@@ -313,6 +314,44 @@ export class TerrainRenderer {
 
         g.lineStyle(canAfford ? 3 : 2, canAfford ? 0x4ade80 : 0xfbbf24, canAfford ? 0.85 : 0.6);
         g.strokeRect(origin.x + 4, origin.y + 4, TERRITORY_PX - 8, TERRITORY_PX - 8);
+      }
+    }
+
+    // Gold Mine biome seal/unlocked perimeter overlay
+    const gmZone = this.terrain.goldMineZone;
+    const gmUnlocked = islands.some((i) => i.id === gmZone.unlockTerritoryId && i.unlocked);
+    const radius = gmZone.radiusPx - 18;
+    if (gmUnlocked) {
+      g.lineStyle(2.5, 0xfde047, 0.45);
+      g.strokeCircle(gmZone.centerX, gmZone.centerY, radius);
+      if (this.goldMineSealText) {
+        this.goldMineSealText.destroy();
+        this.goldMineSealText = null;
+      }
+    } else {
+      g.fillStyle(0x1c1917, 0.56);
+      g.fillCircle(gmZone.centerX, gmZone.centerY, radius);
+      g.lineStyle(3, 0xfbbf24, 0.8);
+      g.strokeCircle(gmZone.centerX, gmZone.centerY, radius);
+
+      if (!this.goldMineSealText) {
+        this.goldMineSealText = this.scene.add
+          .text(
+            gmZone.centerX,
+            gmZone.centerY,
+            '🔒 봉인된 황금광산\n(#11 극서 태양금광 변경 마을터 점령 시 해금)',
+            {
+              fontFamily: 'Pretendard, sans-serif',
+              fontSize: '13px',
+              fontStyle: 'bold',
+              color: '#fde047',
+              backgroundColor: 'rgba(15, 23, 42, 0.9)',
+              padding: { x: 12, y: 8 },
+              align: 'center',
+            }
+          )
+          .setOrigin(0.5)
+          .setDepth(DEPTH.ALTAR_CARDS);
       }
     }
   }

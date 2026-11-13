@@ -577,7 +577,7 @@ export const INITIAL_ISLANDS: Island[] = [
     unlocked: false,
     name: '극서 태양금광 변경 마을터',
     isAdjacentRich: false,
-    resourceRichLabel: '🏰 외곽 확장 마을터 (전방 방어선 및 건물 건설 거점)',
+    resourceRichLabel: '⛏️ 황금광산 해금 거점 (점령 시 인접 황금광산 봉인 해제!)',
     villageTier: 0,
     coreHp: VILLAGE_TIER_CONFIGS[0].coreMaxHp,
     coreMaxHp: VILLAGE_TIER_CONFIGS[0].coreMaxHp,

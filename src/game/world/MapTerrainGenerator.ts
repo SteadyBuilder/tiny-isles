@@ -1,4 +1,10 @@
-import { BIOME_CONFIGS, BiomeId, LandBiomeId, TERRAIN_GENERATION_CONFIG } from '../../data/biomes';
+import {
+  BIOME_CONFIGS,
+  BiomeId,
+  GOLD_MINE_BIOME_CONFIG,
+  LandBiomeId,
+  TERRAIN_GENERATION_CONFIG,
+} from '../../data/biomes';
 import { INITIAL_ISLANDS, TERRITORY_PX, TERRITORY_STEP } from '../constants';
 import { WORLD_BOUNDS, WorldBounds } from '../worldBounds';
 import { fbm2D, hash2D } from './TerrainNoise';
@@ -35,6 +41,13 @@ export interface BridgeSegment {
   orientation: 'h' | 'v';
 }
 
+export interface GoldMineZoneMeta {
+  unlockTerritoryId: number;
+  centerX: number;
+  centerY: number;
+  radiusPx: number;
+}
+
 export interface WorldTerrainMap {
   tileSize: number;
   minGx: number;
@@ -46,6 +59,7 @@ export interface WorldTerrainMap {
   cells: TerrainCell[];
   waterBodies: WaterRect[];
   bridges: BridgeSegment[];
+  goldMineZone: GoldMineZoneMeta;
 }
 
 export type TerritoryGridRef = Pick<Island, 'gridX' | 'gridY'>;
@@ -103,6 +117,20 @@ function getRoadOrientationAt(
   return null;
 }
 
+function isGoldMineBiomeCell(
+  cx: number,
+  cy: number,
+  gx: number,
+  gy: number,
+  seed: number
+): boolean {
+  const gm = GOLD_MINE_BIOME_CONFIG;
+  const dist = Math.hypot(cx - gm.centerX, cy - gm.centerY);
+  const edgeNoise = fbm2D(gx * 0.22, gy * 0.22, seed + 511, 2);
+  const organicRadius = gm.radiusPx * (0.84 + 0.32 * edgeNoise);
+  return dist <= organicRadius;
+}
+
 function resolveLandBiome(elevation: number, moisture: number): LandBiomeId {
   if (elevation > 0.6) return 'highland';
   if (moisture > 0.62) return elevation < 0.44 ? 'mystic' : 'forest';
@@ -113,13 +141,14 @@ function resolveLandBiome(elevation: number, moisture: number): LandBiomeId {
 /**
  * Generates a deterministic Necesse-style overworld terrain grid across the entire world bounds.
  * Village plots stay flat and clear for building construction; the surrounding wilderness features
- * lakes/streams, automatic road bridges, and multi-biome patches. Pure function.
+ * lakes/streams, automatic road bridges, multi-biome patches, and the clustered gold mine biome. Pure function.
  */
 export function generateWorldTerrain(
   bounds: WorldBounds = WORLD_BOUNDS,
   territories: ReadonlyArray<TerritoryGridRef> = INITIAL_ISLANDS
 ): WorldTerrainMap {
   const cfg = TERRAIN_GENERATION_CONFIG;
+  const gm = GOLD_MINE_BIOME_CONFIG;
   const tileSize = cfg.tileSize;
   const minGx = Math.floor(bounds.min / tileSize);
   const maxGx = Math.ceil(bounds.max / tileSize);
@@ -132,7 +161,7 @@ export function generateWorldTerrain(
   const rawWater = new Uint8Array(cols * rows);
   const roadOrientations: Array<'h' | 'v' | null> = new Array(cols * rows);
 
-  // Pass 1: Sample noise for biomes, roads, village clearings, and raw lakes
+  // Pass 1: Sample noise for biomes, roads, village clearings, gold mine biome, and raw lakes
   for (let ry = 0; ry < rows; ry++) {
     const gy = minGy + ry;
     const worldY = gy * tileSize;
@@ -150,14 +179,23 @@ export function generateWorldTerrain(
       const isRoad = roadDir !== null;
       roadOrientations[idx] = roadDir;
 
+      const inGoldMine =
+        !isVillageDryZone &&
+        !isRoad &&
+        isGoldMineBiomeCell(cx, cy, gx, gy, cfg.seed);
+
       const elev = fbm2D(gx * cfg.elevationScale, gy * cfg.elevationScale, cfg.seed + 101, 3);
       const moist = fbm2D(gx * cfg.moistureScale, gy * cfg.moistureScale, cfg.seed + 307, 3);
       const lakeVal = fbm2D(gx * cfg.waterScale, gy * cfg.waterScale, cfg.seed + 709, 3);
 
-      const wantsWater = !isVillageDryZone && lakeVal > cfg.waterThreshold;
+      const wantsWater = !isVillageDryZone && !inGoldMine && lakeVal > cfg.waterThreshold;
       rawWater[idx] = wantsWater ? 1 : 0;
 
-      const landBiome: LandBiomeId = isVillagePlot ? 'plains' : resolveLandBiome(elev, moist);
+      const landBiome: LandBiomeId = isVillagePlot
+        ? 'plains'
+        : inGoldMine
+        ? 'gold_mine'
+        : resolveLandBiome(elev, moist);
 
       cells[idx] = {
         gx,
@@ -223,9 +261,12 @@ export function generateWorldTerrain(
         if (roll < decoChance) {
           if (cell.biome === 'water') {
             cell.decoration = 'water_rock';
-          } else if (cell.biome === 'highland' && roll < decoChance * 0.6) {
+          } else if (
+            (cell.biome === 'highland' || cell.biome === 'gold_mine') &&
+            roll < decoChance * 0.65
+          ) {
             cell.decoration = 'pebble';
-          } else {
+          } else if (cell.biome !== 'gold_mine') {
             cell.decoration = roll < decoChance * 0.5 ? 'bush1' : 'bush2';
           }
         }
@@ -265,6 +306,12 @@ export function generateWorldTerrain(
     cells,
     waterBodies,
     bridges,
+    goldMineZone: {
+      unlockTerritoryId: gm.unlockTerritoryId,
+      centerX: gm.centerX,
+      centerY: gm.centerY,
+      radiusPx: gm.radiusPx,
+    },
   };
 }
 

@@ -15,6 +15,8 @@ function getBiomeImage(assets: GameAssets, tilemapKey: string): HTMLImageElement
   switch (tilemapKey) {
     case 'tilemap2':
       return assets.tilemap2;
+    case 'tilemap3':
+      return assets.tilemap3;
     case 'tilemap4':
       return assets.tilemap4;
     case 'tilemap5':
@@ -169,4 +171,50 @@ export function drawVisibleTerrain2D(
       }
     }
   }
+}
+
+/**
+ * Draws the sealed/unlocked indicator overlay over the gold_mine biome pocket in Canvas 2D mode.
+ */
+export function drawGoldMineZoneOverlay2D(
+  ctx: CanvasRenderingContext2D,
+  terrain: WorldTerrainMap,
+  goldMineUnlocked: boolean
+): void {
+  const gm = terrain.goldMineZone;
+  const r = gm.radiusPx - 18;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(gm.centerX, gm.centerY, r, 0, Math.PI * 2);
+
+  if (goldMineUnlocked) {
+    ctx.strokeStyle = 'rgba(253, 224, 71, 0.48)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = 'rgba(28, 25, 23, 0.56)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.78)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([12, 8]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    ctx.beginPath();
+    ctx.roundRect(gm.centerX - 135, gm.centerY - 30, 270, 56, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 13px Pretendard, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔒 봉인된 황금광산 지대', gm.centerX, gm.centerY - 6);
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 11px Pretendard, sans-serif';
+    ctx.fillText('#11 극서 태양금광 변경 마을터 점령 시 해금', gm.centerX, gm.centerY + 14);
+  }
+  ctx.restore();
 }

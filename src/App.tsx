@@ -287,6 +287,7 @@ export function App() {
           setOnlineCount={setOnlineCount}
           onUnlockedCountChange={handleUnlockedCountChange}
           onUnlockedIslandIdsChange={handleUnlockedIslandIdsChange}
+          onGameAlert={handleShowAlert}
           joystickRef={joystickRef}
           onNearIslandChange={setNearIsland}
           onPlayerPositionChange={setPlayerGridPos}

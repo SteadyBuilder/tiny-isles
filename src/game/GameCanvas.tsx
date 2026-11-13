@@ -11,15 +11,16 @@ import {
   getIslandOrigin,
   getBuildingCollisionBox,
 } from './constants';
-import { RESOURCE_DISTRIBUTION_CONFIG } from '../data/biomes';
+import { GOLD_MINE_BIOME_CONFIG, RESOURCE_DISTRIBUTION_CONFIG } from '../data/biomes';
 import { WORLD_BOUNDS } from './worldBounds';
-import { drawVisibleTerrain2D } from './world/Canvas2DTerrainPainter';
+import { drawGoldMineZoneOverlay2D, drawVisibleTerrain2D } from './world/Canvas2DTerrainPainter';
 import {
   generateWorldTerrain,
   isWaterAtWorld,
   WorldTerrainMap,
 } from './world/MapTerrainGenerator';
 import {
+  generateGoldMineClusterEntities,
   generateWorldResourceEntities,
   pickRespawnSpot,
 } from './world/ResourceDistributionSystem';
@@ -54,6 +55,7 @@ interface GameCanvasProps {
   onOpenMinimap?: () => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  onGameAlert?: (msg: string) => void;
 }
 
 interface Cloud {
@@ -78,6 +80,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onOpenMinimap,
   zoom = 1.0,
   onZoomChange,
+  onGameAlert,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastNearIslandRef = useRef<Island | null>(null);
@@ -104,6 +107,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   const onZoomChangeRef = useRef(onZoomChange);
   onZoomChangeRef.current = onZoomChange;
+
+  const onGameAlertRef = useRef(onGameAlert);
+  onGameAlertRef.current = onGameAlert;
 
   const isSubscribedRef = useRef<boolean>(false);
   const targetZoomRef = useRef<number>(zoom);
@@ -162,7 +168,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   );
 
   const entitiesRef = useRef<Entity[]>(
-    generateWorldResourceEntities(terrainMapRef.current, INITIAL_ISLANDS, WORLD_BOUNDS)
+    generateWorldResourceEntities(
+      terrainMapRef.current,
+      INITIAL_ISLANDS,
+      WORLD_BOUNDS,
+      buildingsRef.current,
+      storage.loadUnlockedIslands().includes(GOLD_MINE_BIOME_CONFIG.unlockTerritoryId)
+    )
   );
 
   // Core Resonance timestamp
@@ -234,6 +246,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
       if (hasNewUnlocks) {
+        const goldMineUnlocked = islandsRef.current.some(
+          (isl) => isl.id === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId && isl.unlocked
+        );
+        if (goldMineUnlocked && !entitiesRef.current.some((e) => e.zoneTag === 'gold_mine')) {
+          const mineNodes = generateGoldMineClusterEntities(
+            terrainMapRef.current,
+            islandsRef.current,
+            WORLD_BOUNDS,
+            entitiesRef.current
+          );
+          entitiesRef.current.push(...mineNodes);
+        }
         const currentUnlockedIds = islandsRef.current.filter((isl) => isl.unlocked).map((isl) => isl.id);
         storage.saveUnlockedIslands(currentUnlockedIds);
         onUnlockedIslandIdsChangeRef.current?.(currentUnlockedIds);
@@ -411,12 +435,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const removeAndRespawnEntity = (entity: Entity) => {
     entitiesRef.current = entitiesRef.current.filter((e) => e.id !== entity.id);
     setTimeout(() => {
+      const goldMineUnlocked = islandsRef.current.some(
+        (i) => i.id === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId && i.unlocked
+      );
       const nextSpot = pickRespawnSpot(
         entity.type,
         entitiesRef.current,
         terrainMapRef.current,
         islandsRef.current,
-        WORLD_BOUNDS
+        WORLD_BOUNDS,
+        [],
+        {
+          goldMineUnlocked,
+          zoneTag: entity.zoneTag,
+        }
       );
       if (nextSpot) {
         entitiesRef.current.push({
@@ -427,6 +459,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           hp: nextSpot.maxHp,
           maxHp: nextSpot.maxHp,
           islandId: -1,
+          zoneTag: nextSpot.zoneTag,
           shakeTime: undefined,
         });
       }
@@ -458,6 +491,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Construct village buildings for newly unlocked territory (resources spawn map-wide)
     const newBuildings = generateTerritoryBuildings(target.id, target.gridX, target.gridY);
     buildingsRef.current.push(...newBuildings);
+
+    if (islandId === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId) {
+      const hasCluster = entitiesRef.current.some((e) => e.zoneTag === 'gold_mine');
+      if (!hasCluster) {
+        const mineNodes = generateGoldMineClusterEntities(
+          terrainMapRef.current,
+          islandsRef.current,
+          WORLD_BOUNDS,
+          entitiesRef.current
+        );
+        entitiesRef.current.push(...mineNodes);
+      }
+      const gm = GOLD_MINE_BIOME_CONFIG;
+      onGameAlertRef.current?.(gm.announcementText);
+      floatingTextsRef.current.push({
+        id: 'gm_' + Math.random(),
+        text: `⛏️ ${gm.announcementText}`,
+        x: gm.centerX,
+        y: gm.centerY - 40,
+        color: '#fde047',
+        alpha: 1,
+        vy: -1.0,
+      });
+      if (showEffects) {
+        confetti({ particleCount: 130, spread: 95, origin: { y: 0.55 } });
+      }
+    }
 
     if (showEffects) {
       sound.playUnlock();
@@ -1035,6 +1095,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // 2. Draw Necesse-style Procedural Biomes, Lakes, Roads & Wooden Bridges
       drawVisibleTerrain2D(ctx, terrainMapRef.current, assets, minX, minY, maxX, maxY);
+      const gmUnlocked = islandsRef.current.some(
+        (i) => i.id === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId && i.unlocked
+      );
+      drawGoldMineZoneOverlay2D(ctx, terrainMapRef.current, gmUnlocked);
 
       // 3. Draw Village Pathways & Territory Borders
       // Central Village (Territory 0) Plaza and Roads
