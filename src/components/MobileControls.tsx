@@ -7,6 +7,7 @@ import {
   attachGestureBlock,
   getPinchEligibleTouches,
   getTouchDistance,
+  hasTouchId,
 } from '../lib/touchGestureGuard';
 
 interface MobileControlsProps {
@@ -27,6 +28,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   const joystickTouchIdRef = useRef<number | null>(null);
   const joystickCenterRef = useRef({ x: 0, y: 0 });
   const actionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const actionPointerIdRef = useRef<number | null>(null);
 
   const zoomRef = useRef(currentZoom);
   zoomRef.current = currentZoom;
@@ -44,6 +46,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   }, []);
 
   const stopActionHold = useCallback(() => {
+    actionPointerIdRef.current = null;
     setIsActionActive(false);
     if (actionIntervalRef.current) { clearInterval(actionIntervalRef.current); actionIntervalRef.current = null; }
     EventBus.emit('player-action-stop');
@@ -51,6 +54,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
 
   const startActionHold = useCallback((e: React.PointerEvent | React.TouchEvent) => {
     e.preventDefault();
+    actionPointerIdRef.current = 'pointerId' in e ? e.pointerId : null;
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
     setIsActionActive(true);
     onAction();
@@ -65,18 +69,29 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     if (joystickRef) joystickRef.current = { x: 0, y: 0 };
   }, [joystickRef]);
 
-  // Prevent input stuck on release or blur
+  // Prevent input stuck on release or blur.
+  // Each control is reset only when ITS OWN touch/pointer ends, so lifting the ACTION finger
+  // doesn't kill joystick movement (and vice versa). Window blur still resets everything.
   useEffect(() => {
-    const handleGlobalRelease = () => { resetJoystick(); stopActionHold(); };
-    window.addEventListener('blur', handleGlobalRelease);
-    window.addEventListener('pointerup', handleGlobalRelease);
-    window.addEventListener('touchend', handleGlobalRelease);
-    window.addEventListener('touchcancel', handleGlobalRelease);
+    const handleBlur = () => { resetJoystick(); stopActionHold(); };
+    const handleTouchRelease = (e: TouchEvent) => {
+      const joystickId = joystickTouchIdRef.current;
+      if (joystickId !== null && hasTouchId(e.changedTouches, joystickId)) resetJoystick();
+    };
+    const handlePointerRelease = (e: PointerEvent) => {
+      if (actionPointerIdRef.current !== null && e.pointerId === actionPointerIdRef.current) stopActionHold();
+    };
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('pointerup', handlePointerRelease);
+    window.addEventListener('pointercancel', handlePointerRelease);
+    window.addEventListener('touchend', handleTouchRelease);
+    window.addEventListener('touchcancel', handleTouchRelease);
     return () => {
-      window.removeEventListener('blur', handleGlobalRelease);
-      window.removeEventListener('pointerup', handleGlobalRelease);
-      window.removeEventListener('touchend', handleGlobalRelease);
-      window.removeEventListener('touchcancel', handleGlobalRelease);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('pointerup', handlePointerRelease);
+      window.removeEventListener('pointercancel', handlePointerRelease);
+      window.removeEventListener('touchend', handleTouchRelease);
+      window.removeEventListener('touchcancel', handleTouchRelease);
       stopActionHold();
     };
   }, [resetJoystick, stopActionHold]);

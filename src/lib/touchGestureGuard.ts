@@ -34,6 +34,11 @@ export function getTouchDistance(a: Touch, b: Touch): number {
   return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 }
 
+/** True if the given touch identifier is present in the list. Pure. */
+export function hasTouchId(touches: TouchList, id: number): boolean {
+  return Array.from(touches).some((t) => t.identifier === id);
+}
+
 /**
  * Attach native non-passive listeners that mark control touches as handled so Phaser
  * (and browser default gestures) ignore them. React/pointer handlers still receive the events.
