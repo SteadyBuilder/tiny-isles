@@ -8,8 +8,13 @@ export interface GameAssets {
   redPawnAxe: HTMLImageElement;
   redPawnPickaxe: HTMLImageElement;
   tilemap: HTMLImageElement;
+  tilemap2: HTMLImageElement;
+  tilemap4: HTMLImageElement;
+  tilemap5: HTMLImageElement;
   waterBg: HTMLImageElement;
   waterFoam: HTMLImageElement;
+  waterRock1: HTMLImageElement;
+  waterRock2: HTMLImageElement;
   tree: HTMLImageElement;
   tree3: HTMLImageElement;
   rock1: HTMLImageElement;
@@ -45,8 +50,13 @@ export async function loadGameAssets(onProgress?: (ratio: number) => void): Prom
     redPawnAxe: '/assets/units/red/Pawn_Interact_Axe.png',
     redPawnPickaxe: '/assets/units/red/Pawn_Interact_Pickaxe.png',
     tilemap: '/assets/terrain/Tilemap_color1.png',
+    tilemap2: '/assets/terrain/Tilemap_color2.png',
+    tilemap4: '/assets/terrain/Tilemap_color4.png',
+    tilemap5: '/assets/terrain/Tilemap_color5.png',
     waterBg: '/assets/terrain/Water_Background_color.png',
     waterFoam: '/assets/terrain/Water_Foam.png',
+    waterRock1: '/assets/terrain/Water_Rocks_01.png',
+    waterRock2: '/assets/terrain/Water_Rocks_02.png',
     tree: '/assets/decorations/Tree1.png',
     tree3: '/assets/decorations/Tree3.png',
     rock1: '/assets/decorations/Rock1.png',

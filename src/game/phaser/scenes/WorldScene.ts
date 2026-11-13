@@ -2,17 +2,11 @@ import Phaser from 'phaser';
 import confetti from 'canvas-confetti';
 import { EventBus } from '../EventBus';
 import {
-  TERRITORY_PX,
-  TERRITORY_GAP,
   TERRITORY_STEP,
   INITIAL_ISLANDS,
-  REGULAR_WAVE_INTERVAL_SEC,
-  BOSS_WAVE_INTERVAL_SEC,
   VILLAGE_TIER_CONFIGS,
-  TERRITORY_BUILD_SLOTS,
   getBlueprint,
   getTerritoryCorePos,
-  generateIslandEntities,
   generateTerritoryBuildings,
   getIslandOrigin,
   getBuildingCollisionBox,
@@ -41,10 +35,13 @@ import { WaveSystem, MonsterVisual } from '../../systems/WaveSystem';
 import { TowerDefenseSystem, ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
 import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
 import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
+import { RESOURCE_DISTRIBUTION_CONFIG } from '../../../data/biomes';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { DEPTH, ySortDepth } from '../../depthLayers';
-import { ensureOutdoorEntityCoords } from '../../resourceSpawnRules';
 import { getWallCollisionBoxes } from '../../wallCollisionGeometry';
+import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
+import { generateWorldResourceEntities, pickRespawnSpot } from '../../world/ResourceDistributionSystem';
+import { TerrainRenderer } from '../renderers/TerrainRenderer';
 
 interface RemotePlayerVisual {
   container: Phaser.GameObjects.Container;
@@ -93,8 +90,9 @@ export class WorldScene extends Phaser.Scene {
 
   private passiveTickAccum = 0;
 
-  // Graphics Layers
-  private terrainGraphics!: Phaser.GameObjects.Graphics;
+  // Procedural Terrain & Graphics Layers
+  private terrainMap!: WorldTerrainMap;
+  private terrainRenderer!: TerrainRenderer;
   private invasionGraphics!: Phaser.GameObjects.Graphics;
   private altarCardsContainer!: Phaser.GameObjects.Container;
   private clouds: { sprite: Phaser.GameObjects.Image; speed: number }[] = [];
@@ -168,23 +166,16 @@ export class WorldScene extends Phaser.Scene {
     }).map((isl: Island) => BuildingSystem.ensureCentralVillageState(isl));
 
     // Setup Physics World Bounds for expanded territory map
-    const { min: worldMin, max: worldMax, width: worldWidth } = WORLD_BOUNDS;
+    const { min: worldMin, width: worldWidth } = WORLD_BOUNDS;
     this.physics.world.setBounds(worldMin, worldMin, worldWidth, worldWidth);
 
-    // 1. Seamless Grass Tile Background covering full expanded plains
-    const bgPadding = 800;
-    const bgTile = this.add.tileSprite(
-      (worldMin + worldMax) / 2,
-      (worldMin + worldMax) / 2,
-      worldWidth + bgPadding,
-      worldWidth + bgPadding,
-      'grassSeamless'
-    );
-    bgTile.setDepth(DEPTH.BACKGROUND);
+    // 1. Necesse-style Procedural Biomes, Lakes, Bridges & Roads
+    this.terrainMap = generateWorldTerrain(WORLD_BOUNDS, this.islands);
+    this.terrainRenderer = new TerrainRenderer(this, this.terrainMap);
+    this.terrainRenderer.bakeTerrainChunks();
+    this.terrainRenderer.buildWaterColliders();
 
-    // 2. Terrain Graphics (Roads, Plazas, Border lines)
-    this.terrainGraphics = this.add.graphics();
-    this.terrainGraphics.setDepth(DEPTH.TERRAIN);
+    // 2. Invasion & Territory Overlay Graphics
     this.invasionGraphics = this.add.graphics();
     this.invasionGraphics.setDepth(DEPTH.INVASION_OVERLAY);
     this.drawTerrainDecorations();
@@ -299,6 +290,13 @@ export class WorldScene extends Phaser.Scene {
       (window as unknown as Record<string, unknown>).__GAME_DEBUG__ = {
         getIslands: () => this.islands,
         getConstructedBuildings: () => this.constructedBuildings,
+        getEntities: () => Array.from(this.entityVisuals.values()).map((ev) => ev.entity),
+        getTerrainSummary: () => ({
+          cols: this.terrainMap.cols,
+          rows: this.terrainMap.rows,
+          waterBodies: this.terrainMap.waterBodies.length,
+          bridges: this.terrainMap.bridges.length,
+        }),
         getMonsters: () => this.waveSystem.getMonsters(),
         getWaveState: () => this.waveSystem.getWaveState(),
         getInventory: () => this.inventory,
@@ -351,62 +349,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawTerrainDecorations() {
-    const g = this.terrainGraphics;
-    g.clear();
-
-    // Territory Plazas, Roads & Borders
-    for (const isl of this.islands) {
-      const origin = getIslandOrigin(isl.gridX, isl.gridY);
-      if (isl.unlocked) {
-        // Cobblestone Plaza around each occupied territory's Core Gem
-        const plazaRadius = 56 + isl.villageTier * 8;
-        g.fillStyle(0xa8a29e, 0.45);
-        g.fillCircle(origin.x + 320, origin.y + 350, plazaRadius);
-        g.lineStyle(3, 0x78716c, 0.55);
-        g.strokeCircle(origin.x + 320, origin.y + 350, plazaRadius);
-
-        // Crossroads branching outwards connecting across village gaps
-        g.fillStyle(0xa8a29e, 0.34);
-        g.fillRect(origin.x - TERRITORY_GAP / 2, origin.y + 350 - 18, TERRITORY_STEP, 36); // West-East Road
-        g.fillRect(origin.x + 320 - 18, origin.y - TERRITORY_GAP / 2, 36, TERRITORY_STEP); // North-South Road
-
-        // Rich resource zone subtle golden-green border glow
-        if (isl.isAdjacentRich) {
-          g.lineStyle(3, 0x34d399, 0.35);
-          g.strokeRect(origin.x + 6, origin.y + 6, TERRITORY_PX - 12, TERRITORY_PX - 12);
-        } else {
-          g.lineStyle(2, 0xffffff, 0.16);
-          g.strokeRect(origin.x, origin.y, TERRITORY_PX, TERRITORY_PX);
-        }
-
-        // Build slot markers (subtle circles showing where towers/buildings/walls stand)
-        for (let idx = 0; idx < TERRITORY_BUILD_SLOTS.length; idx++) {
-          const slot = TERRITORY_BUILD_SLOTS[idx];
-          const sx = origin.x + slot.relX;
-          const sy = origin.y + slot.relY;
-          if (slot.role === 'wall') {
-            g.lineStyle(1.5, 0xfbbf24, 0.22);
-            g.strokeCircle(sx, sy, 18);
-          } else if (idx < 4 + VILLAGE_TIER_CONFIGS[isl.villageTier].maxBuildings) {
-            g.lineStyle(1, 0x94a3b8, 0.2);
-            g.strokeCircle(sx, sy, 16);
-          }
-        }
-      } else {
-        // Fog overlay for unoccupied territories
-        g.fillStyle(0x102016, 0.62);
-        g.fillRect(origin.x, origin.y, TERRITORY_PX, TERRITORY_PX);
-
-        const canAfford =
-          this.inventory.wood >= isl.costWood &&
-          this.inventory.stone >= isl.costStone &&
-          this.inventory.gold >= isl.costGold;
-
-        g.lineStyle(canAfford ? 3 : 2, canAfford ? 0x4ade80 : 0xfbbf24, canAfford ? 0.85 : 0.65);
-        g.strokeRect(origin.x + 4, origin.y + 4, TERRITORY_PX - 8, TERRITORY_PX - 8);
-      }
-    }
-
+    this.terrainRenderer.renderTerritoryOverlays(this.islands, this.inventory);
     this.drawOuterPerimeterWarning();
   }
 
@@ -455,13 +398,13 @@ export class WorldScene extends Phaser.Scene {
       bg.strokeRoundedRect(-84, -34, 168, 62, 12);
       card.add(bg);
 
-      // Row 1: Territory Flag #ID + Rich Bonus Badge
-      const headerStr = `🚩 #${isl.id}${isl.isAdjacentRich ? '  🌟×2' : ''}`;
+      // Row 1: Territory Flag #ID
+      const headerStr = `🚩 #${isl.id} 건설 부지`;
       const nameText = this.add.text(0, -16, headerStr, {
         fontFamily: 'Pretendard, sans-serif',
         fontSize: '13px',
         fontStyle: 'bold',
-        color: isl.isAdjacentRich ? '#6ee7b7' : '#ffffff',
+        color: '#ffffff',
       }).setOrigin(0.5);
       card.add(nameText);
 
@@ -829,12 +772,12 @@ export class WorldScene extends Phaser.Scene {
     this.entityVisuals.forEach((ev) => ev.container.destroy());
     this.entityVisuals.clear();
 
-    const allEntities: Entity[] = [];
-    for (const isl of this.islands) {
-      if (isl.unlocked) {
-        allEntities.push(...generateIslandEntities(isl.id, isl.gridX, isl.gridY));
-      }
-    }
+    const allEntities = generateWorldResourceEntities(
+      this.terrainMap,
+      this.islands,
+      WORLD_BOUNDS,
+      this.constructedBuildings
+    );
 
     for (const ent of allEntities) {
       this.spawnEntity(ent);
@@ -842,16 +785,6 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spawnEntity(ent: Entity) {
-    // 마을 영역(TERRITORY_PX) 내부에는 자원이 스폰/리스폰되지 않도록 야외 평원 좌표 보장
-    const ownerIsl = this.islands.find((i) => i.id === ent.islandId);
-    if (ownerIsl) {
-      const origin = getIslandOrigin(ownerIsl.gridX, ownerIsl.gridY);
-      const hint = ent.id.charCodeAt(ent.id.length - 1) || 0;
-      const outdoorPos = ensureOutdoorEntityCoords(ent, origin, hint);
-      ent.x = outdoorPos.x;
-      ent.y = outdoorPos.y;
-    }
-
     const container = this.add.container(ent.x, ent.y);
     let entDepthBias = 16;
     if (ent.type === 'rock' || ent.type === 'gold_rock') entDepthBias = 20;
@@ -872,7 +805,7 @@ export class WorldScene extends Phaser.Scene {
       }
       sprite = treeSprite;
     } else if (ent.type === 'rock') {
-      const isRock2 = ent.id.includes('2');
+      const isRock2 = ent.id.includes('2') || ent.id.includes('5');
       const rockKey = isRock2 ? 'rock2' : 'rock1';
 
       const rockImg = this.add.image(32, 16, rockKey);
@@ -953,6 +886,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.wallColliders) {
       this.physics.add.collider(this.playerSprite, this.wallColliders);
     }
+    this.physics.add.collider(this.playerSprite, this.terrainRenderer.getWaterColliders());
 
     this.playerNameTag = this.add.text(startX, startY - 42, this.playerName, {
       fontFamily: 'Pretendard, sans-serif',
@@ -1922,7 +1856,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    // 3. 자원 엔티티 채집 (중심 마을 인접 땅은 자원이 풍부하여 채집량 2배!)
+    // 3. 자원 엔티티 채집 (맵 전역 야외 필드에서 점령 여부와 무관하게 채집 가능)
     let nearestVisual: EntityVisual | null = null;
     let minDist = 95;
 
@@ -1936,11 +1870,6 @@ export class WorldScene extends Phaser.Scene {
 
     if (nearestVisual) {
       const ent = (nearestVisual as EntityVisual).entity;
-      const isl = this.islands.find((i) => i.id === ent.islandId);
-      if (isl && !isl.unlocked) {
-        this.showFloatingText(ent.x + 16, ent.y - 20, '🔒 먼저 이 땅을 점령해야 합니다!', '#f59e0b');
-        return;
-      }
 
       if (ent.type === 'sheep') {
         sound.playClick();
@@ -1966,8 +1895,7 @@ export class WorldScene extends Phaser.Scene {
       else sound.playMine();
 
       const resKey = ent.type === 'tree' ? 'wood' : ent.type === 'gold_rock' ? 'gold' : 'stone';
-      // 중심 마을과 인접한 땅(isAdjacentRich)은 자원이 풍부하여 채집 시 +2 획득!
-      const harvestAmount = isl?.isAdjacentRich ? 2 : 1;
+      const harvestAmount = 1;
       this.inventory[resKey] += harvestAmount;
       EventBus.emit('inventory-updated', this.inventory);
 
@@ -1977,9 +1905,8 @@ export class WorldScene extends Phaser.Scene {
           : resKey === 'gold'
           ? `🪙 +${harvestAmount}`
           : `🪨 +${harvestAmount}`;
-      const richTag = isl?.isAdjacentRich ? ' (풍요지 보너스!)' : '';
       const color = resKey === 'wood' ? '#8bc34a' : resKey === 'gold' ? '#ffd700' : '#cfd8dc';
-      this.showFloatingText(ent.x + 16, ent.y, `${icon}${richTag}`, color);
+      this.showFloatingText(ent.x + 16, ent.y, icon, color);
 
       this.broadcastHit(ent.id, damage);
 
@@ -2021,10 +1948,22 @@ export class WorldScene extends Phaser.Scene {
       this.entityVisuals.delete(ent.id);
     }
 
-    this.time.delayedCall(12000, () => {
-      const isl = this.islands.find((i) => i.id === ent.islandId);
-      if (isl && isl.unlocked) {
-        ent.hp = ent.maxHp;
+    this.time.delayedCall(RESOURCE_DISTRIBUTION_CONFIG.respawnDelayMs, () => {
+      const activeEntities = Array.from(this.entityVisuals.values()).map((ev) => ev.entity);
+      const nextSpot = pickRespawnSpot(
+        ent.type,
+        activeEntities,
+        this.terrainMap,
+        this.islands,
+        WORLD_BOUNDS,
+        this.constructedBuildings
+      );
+      if (nextSpot) {
+        ent.x = nextSpot.x;
+        ent.y = nextSpot.y;
+        ent.type = nextSpot.type;
+        ent.hp = nextSpot.maxHp;
+        ent.maxHp = nextSpot.maxHp;
         this.spawnEntity(ent);
       }
     });
@@ -2043,14 +1982,8 @@ export class WorldScene extends Phaser.Scene {
     this.drawTerrainDecorations();
     this.drawExpansionAltars();
 
-    // 새 점령지에 코어 보석 생성!
+    // 새 점령지에 코어 보석 생성 (마을 점령은 건물 건설 및 방어 거점 구축용)
     this.createTerritoryCoreForIsland(target);
-
-    // 새 점령지에 자원 엔티티 및 건물 생성
-    const newEntities = generateIslandEntities(target.id, target.gridX, target.gridY);
-    for (const ent of newEntities) {
-      this.spawnEntity(ent);
-    }
     this.spawnAllBuildings();
     this.emitWorldStateToReact();
 
@@ -2058,7 +1991,7 @@ export class WorldScene extends Phaser.Scene {
     confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
 
     const origin = getIslandOrigin(target.gridX, target.gridY);
-    const msg = `🚩 ${unlockedBy}님이 '${target.name}' 땅을 점령했습니다! 코어 보석을 지키고 마을을 세우세요!`;
+    const msg = `🚩 ${unlockedBy}님이 '${target.name}' 영지를 점령했습니다! 건물을 세우고 마을로 발전시키세요!`;
     this.showFloatingText(origin.x + 320, origin.y + 240, msg, '#ffd700');
     EventBus.emit('game-alert', msg);
 

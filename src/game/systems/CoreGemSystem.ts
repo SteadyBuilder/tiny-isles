@@ -124,9 +124,6 @@ export class CoreGemSystem {
         this.ctx.removeConstructedBuilding(b.id);
       }
 
-      // 해당 영지의 자원 엔티티 비활성화
-      this.ctx.removeEntityVisualsForIsland(territoryId);
-
       this.ctx.saveWorldState();
       this.ctx.refreshTerritoryDecorations();
       this.ctx.emitWorldState();

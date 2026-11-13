@@ -152,8 +152,8 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     <span className="text-[9px] font-bold leading-none mt-0.5">
                       {unlocked ? tCfg.name : `#${island.id}`}
                     </span>
-                    {island.isAdjacentRich && !unlocked && (
-                      <span className="text-[8px] text-emerald-300 font-bold">풍요지</span>
+                    {!unlocked && (
+                      <span className="text-[8px] text-amber-300/80 font-bold">건설터</span>
                     )}
 
                     {isPlayerHere && (

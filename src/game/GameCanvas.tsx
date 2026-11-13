@@ -7,11 +7,22 @@ import {
   TERRITORY_STEP,
   INITIAL_ISLANDS,
   CENTRAL_CORE,
-  generateIslandEntities,
   generateTerritoryBuildings,
   getIslandOrigin,
   getBuildingCollisionBox,
 } from './constants';
+import { RESOURCE_DISTRIBUTION_CONFIG } from '../data/biomes';
+import { WORLD_BOUNDS } from './worldBounds';
+import { drawVisibleTerrain2D } from './world/Canvas2DTerrainPainter';
+import {
+  generateWorldTerrain,
+  isWaterAtWorld,
+  WorldTerrainMap,
+} from './world/MapTerrainGenerator';
+import {
+  generateWorldResourceEntities,
+  pickRespawnSpot,
+} from './world/ResourceDistributionSystem';
 import {
   Building,
   Entity,
@@ -124,7 +135,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Remote Players State
   const remotePlayersRef = useRef<Map<string, Player>>(new Map());
 
-  // Territories, Buildings, Entities State
+  // Territories, Terrain, Buildings, Entities State
+  const terrainMapRef = useRef<WorldTerrainMap>(generateWorldTerrain(WORLD_BOUNDS, INITIAL_ISLANDS));
+
   const islandsRef = useRef<Island[]>(
     (() => {
       const savedUnlocked = storage.loadUnlockedIslands();
@@ -149,16 +162,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   );
 
   const entitiesRef = useRef<Entity[]>(
-    (() => {
-      const savedUnlocked = storage.loadUnlockedIslands();
-      const allEntities: Entity[] = [];
-      for (const isl of INITIAL_ISLANDS) {
-        if (savedUnlocked.includes(isl.id) || isl.id === 0) {
-          allEntities.push(...generateIslandEntities(isl.id, isl.gridX, isl.gridY));
-        }
-      }
-      return allEntities;
-    })()
+    generateWorldResourceEntities(terrainMapRef.current, INITIAL_ISLANDS, WORLD_BOUNDS)
   );
 
   // Core Resonance timestamp
@@ -173,9 +177,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     { x: 600, y: 800, speed: 0.28, scale: 0.95, type: 1 },
     { x: -700, y: 350, speed: 0.34, scale: 1.05, type: 2 },
   ]);
-
-  // Seamless Grass Canvas Pattern cache
-  const grassPatternRef = useRef<CanvasPattern | null>(null);
 
   // Visual Effects
   const particlesRef = useRef<Particle[]>([]);
@@ -227,8 +228,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const isl = islandsRef.current.find((i) => i.id === rec.island_id);
         if (isl && !isl.unlocked) {
           isl.unlocked = true;
-          const newEntities = generateIslandEntities(isl.id, isl.gridX, isl.gridY);
-          entitiesRef.current.push(...newEntities);
           const newBuildings = generateTerritoryBuildings(isl.id, isl.gridX, isl.gridY);
           buildingsRef.current.push(...newBuildings);
           hasNewUnlocks = true;
@@ -408,19 +407,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   };
 
-  // Remove and respawn entity
+  // Remove and respawn entity evenly across outdoor wilderness sectors
   const removeAndRespawnEntity = (entity: Entity) => {
     entitiesRef.current = entitiesRef.current.filter((e) => e.id !== entity.id);
     setTimeout(() => {
-      const currentIsland = islandsRef.current.find((isl) => isl.id === entity.islandId);
-      if (currentIsland && currentIsland.unlocked) {
+      const nextSpot = pickRespawnSpot(
+        entity.type,
+        entitiesRef.current,
+        terrainMapRef.current,
+        islandsRef.current,
+        WORLD_BOUNDS
+      );
+      if (nextSpot) {
         entitiesRef.current.push({
           ...entity,
-          hp: entity.maxHp,
+          x: nextSpot.x,
+          y: nextSpot.y,
+          type: nextSpot.type,
+          hp: nextSpot.maxHp,
+          maxHp: nextSpot.maxHp,
+          islandId: -1,
           shakeTime: undefined,
         });
       }
-    }, 15000);
+    }, RESOURCE_DISTRIBUTION_CONFIG.respawnDelayMs);
   };
 
   // Unlock Territory Logic
@@ -445,10 +455,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       onUnlockedIslandIdsChange(currentUnlockedIds);
     }
 
-    // Spawn entities and buildings for newly unlocked territory
-    const newEntities = generateIslandEntities(target.id, target.gridX, target.gridY);
-    entitiesRef.current.push(...newEntities);
-
+    // Construct village buildings for newly unlocked territory (resources spawn map-wide)
     const newBuildings = generateTerritoryBuildings(target.id, target.gridX, target.gridY);
     buildingsRef.current.push(...newBuildings);
 
@@ -492,7 +499,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   };
 
-  // Check collision with solid buildings, core, and world bounds
+  // Check collision with solid buildings, core, water, and world bounds
   const checkCollision = (nextX: number, nextY: number): boolean => {
     const footX = nextX;
     const footY = nextY + 16;
@@ -516,10 +523,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       return true;
     }
 
-    // 3. World bounds: 5x5 grid (-2 to 2) with expanded territory gaps
-    const minBound = -2 * TERRITORY_STEP - 200;
-    const maxBound = 2 * TERRITORY_STEP + TERRITORY_PX + 200;
-    if (nextX < minBound || nextX > maxBound || nextY < minBound || nextY > maxBound) {
+    // 3. Impassable water bodies (bridges are walkable because cell.biome !== 'water')
+    if (isWaterAtWorld(terrainMapRef.current, footX, footY)) {
+      return true;
+    }
+
+    // 4. World bounds across expanded wilderness
+    if (
+      nextX < WORLD_BOUNDS.min + 24 ||
+      nextX > WORLD_BOUNDS.max - 24 ||
+      nextY < WORLD_BOUNDS.min + 24 ||
+      nextY > WORLD_BOUNDS.max - 24
+    ) {
       return true;
     }
 
@@ -617,21 +632,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     if (nearestEntity) {
-      // Check if entity belongs to an unlocked territory
-      const entTerritory = islandsRef.current.find((isl) => isl.id === nearestEntity!.islandId);
-      if (entTerritory && !entTerritory.unlocked) {
-        floatingTextsRef.current.push({
-          id: 'lock_' + Math.random(),
-          text: '🔒 먼저 이 영지를 개척해야 자원을 채집할 수 있습니다!',
-          x: nearestEntity.x + 16,
-          y: nearestEntity.y - 20,
-          color: '#f59e0b',
-          alpha: 1,
-          vy: -0.8,
-        });
-        return;
-      }
-
       // If entity is sheep: pet and bounce with heart!
       if (nearestEntity.type === 'sheep') {
         sound.playClick();
@@ -1033,22 +1033,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const minY = camY - viewHalfH;
       const maxY = camY + viewHalfH;
 
-      // 2. Draw Plain Grassland Background (Seamless Grass Texture)
-      if (assets.grassSeamless && assets.grassSeamless.complete) {
-        if (!grassPatternRef.current) {
-          grassPatternRef.current = ctx.createPattern(assets.grassSeamless, 'repeat');
-        }
-        if (grassPatternRef.current) {
-          ctx.fillStyle = grassPatternRef.current;
-          ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
-        } else {
-          ctx.fillStyle = '#65a30d';
-          ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
-        }
-      } else {
-        ctx.fillStyle = '#65a30d';
-        ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
-      }
+      // 2. Draw Necesse-style Procedural Biomes, Lakes, Roads & Wooden Bridges
+      drawVisibleTerrain2D(ctx, terrainMapRef.current, assets, minX, minY, maxX, maxY);
 
       // 3. Draw Village Pathways & Territory Borders
       // Central Village (Territory 0) Plaza and Roads
