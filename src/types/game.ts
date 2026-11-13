@@ -187,6 +187,57 @@ export interface WaveState {
   } | null;
   lastWaveMessage: string | null;
   timeScale: number;
+  onlineScaleLabel?: string;
+  activeGarrisonCount?: number;
+  isGlobalClockSynced?: boolean;
+}
+
+export interface DynamicScalingProfile {
+  minPlayers: number;
+  maxPlayers: number;
+  countMultiplier: number;
+  hpMultiplier: number;
+  attackMultiplier: number;
+  label: string;
+}
+
+export interface GarrisonUnit {
+  playerId: string;
+  name: string;
+  color: PlayerColor;
+  territoryId: number;
+  x: number;
+  y: number;
+  power: number;
+  updatedAt: string;
+}
+
+export interface WorldSyncState {
+  worldId: string;
+  lastActiveAt: string;
+  waveCount: number;
+  bossWaveCount: number;
+  unlockedIslandIds: number[];
+  villageTiers: Record<number, VillageTier>;
+  coreHps: Record<number, number>;
+  constructedBuildings: ConstructedBuilding[];
+}
+
+export interface OfflineResolutionReport {
+  elapsedSec: number;
+  simulatedRegularWaves: number;
+  simulatedBossWaves: number;
+  defensePower: number;
+  threatPower: number;
+  victory: boolean;
+  passiveGain: Inventory;
+  damagedBuildingsCount: number;
+  lostOuterIslandIds: number[];
+  lostOuterIslandNames: string[];
+  homeCoreHpAfter: number;
+  homeCoreMaxHp: number;
+  activeGarrisonsHelped: number;
+  summaryMessage: string;
 }
 
 export interface FloatingText {

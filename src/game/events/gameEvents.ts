@@ -1,4 +1,11 @@
-import { ConstructableType, ConstructedBuilding, Island, VillageTier } from '../../types/game';
+import {
+  ConstructableType,
+  ConstructedBuilding,
+  GarrisonUnit,
+  OfflineResolutionReport,
+  VillageTier,
+  WorldSyncState,
+} from '../../types/game';
 import { EventBus } from '../phaser/EventBus';
 
 /**
@@ -22,9 +29,16 @@ export interface GameEventPayloads {
   // 웨이브 및 방어 시스템
   'trigger-regular-wave': void;
   'trigger-boss-wave': void;
+  'summon-early-wave': { isBossWave: boolean };
+  'reduce-wave-cooldown': number; // seconds
   'set-wave-timescale': number;
   'wave-spawned': { isBossWave: boolean; waveNumber: number };
   'monster-killed': { monsterId: string; monsterType: string; killer: string };
+
+  // 리빙 아일즈: 글로벌 동기화, 오프라인 정산, 수비대
+  'offline-report-ready': OfflineResolutionReport;
+  'garrisons-updated': GarrisonUnit[];
+  'world-state-synced': WorldSyncState;
 
   // 자원 및 인벤토리
   'add-test-resources': void;

@@ -6,6 +6,7 @@ import {
   ConstructedBuilding,
   Inventory,
   Island,
+  OfflineResolutionReport,
   PlayerColor,
   WaveState,
 } from '../types/game';
@@ -22,6 +23,7 @@ interface PhaserGameProps {
   onTerritoriesChange?: (territories: Island[]) => void;
   onConstructedBuildingsChange?: (buildings: ConstructedBuilding[]) => void;
   onWaveStateChange?: (waveState: WaveState) => void;
+  onOfflineReport?: (report: OfflineResolutionReport) => void;
   onOpenVillageModal?: (territoryId: number) => void;
   onGameAlert?: (msg: string) => void;
   joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
@@ -43,6 +45,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   onTerritoriesChange,
   onConstructedBuildingsChange,
   onWaveStateChange,
+  onOfflineReport,
   onOpenVillageModal,
   onGameAlert,
   joystickRef,
@@ -73,6 +76,9 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
   const onWaveStateChangeRef = useRef(onWaveStateChange);
   onWaveStateChangeRef.current = onWaveStateChange;
+
+  const onOfflineReportRef = useRef(onOfflineReport);
+  onOfflineReportRef.current = onOfflineReport;
 
   const onOpenVillageModalRef = useRef(onOpenVillageModal);
   onOpenVillageModalRef.current = onOpenVillageModal;
@@ -128,6 +134,10 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       onWaveStateChangeRef.current?.(waveState);
     };
 
+    const handleOfflineReportReady = (report: OfflineResolutionReport) => {
+      onOfflineReportRef.current?.(report);
+    };
+
     const handleOpenVillageModal = (territoryId: number) => {
       onOpenVillageModalRef.current?.(territoryId);
     };
@@ -159,6 +169,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     EventBus.on('territories-updated', handleTerritoriesUpdated);
     EventBus.on('constructed-buildings-updated', handleConstructedBuildingsUpdated);
     EventBus.on('wave-state-updated', handleWaveStateUpdated);
+    EventBus.on('offline-report-ready', handleOfflineReportReady);
     EventBus.on('open-village-modal', handleOpenVillageModal);
     EventBus.on('game-alert', handleGameAlert);
     EventBus.on('near-island-changed', handleNearIsland);
@@ -174,6 +185,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       EventBus.off('territories-updated', handleTerritoriesUpdated);
       EventBus.off('constructed-buildings-updated', handleConstructedBuildingsUpdated);
       EventBus.off('wave-state-updated', handleWaveStateUpdated);
+      EventBus.off('offline-report-ready', handleOfflineReportReady);
       EventBus.off('open-village-modal', handleOpenVillageModal);
       EventBus.off('game-alert', handleGameAlert);
       EventBus.off('near-island-changed', handleNearIsland);

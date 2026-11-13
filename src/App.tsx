@@ -5,11 +5,13 @@ import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
 import { VillageBuildModal } from './components/VillageBuildModal';
+import { OfflineReportModal } from './components/OfflineReportModal';
 import {
   ConstructableType,
   ConstructedBuilding,
   Inventory,
   Island,
+  OfflineResolutionReport,
   PlayerColor,
   WaveState,
 } from './types/game';
@@ -53,6 +55,7 @@ export function App() {
     lastWaveMessage: null,
     timeScale: 1,
   });
+  const [offlineReport, setOfflineReport] = useState<OfflineResolutionReport | null>(null);
 
   const [showVillageModal, setShowVillageModal] = useState<boolean>(false);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<number>(0);
@@ -249,6 +252,7 @@ export function App() {
         onOpenVillageModal={handleOpenVillageModalForCurrent}
         onTriggerRegularWave={() => EventBus.emit('trigger-regular-wave')}
         onTriggerBossWave={() => EventBus.emit('trigger-boss-wave')}
+        onSummonEarlyWave={() => EventBus.emit('summon-early-wave', { isBossWave: false })}
         onChangeTimeScale={(scale) => EventBus.emit('set-wave-timescale', scale)}
         onAddTestResources={() => EventBus.emit('add-test-resources')}
       />
@@ -267,6 +271,7 @@ export function App() {
           onTerritoriesChange={setTerritories}
           onConstructedBuildingsChange={setConstructedBuildings}
           onWaveStateChange={setWaveState}
+          onOfflineReport={setOfflineReport}
           onOpenVillageModal={handleOpenVillageModalById}
           onGameAlert={handleShowAlert}
           joystickRef={joystickRef}
@@ -333,6 +338,11 @@ export function App() {
         onTestDestroyCore={(territoryId) =>
           EventBus.emit('damage-territory-core', { territoryId, damage: 9999 })
         }
+      />
+
+      <OfflineReportModal
+        report={offlineReport}
+        onClose={() => setOfflineReport(null)}
       />
     </div>
   );

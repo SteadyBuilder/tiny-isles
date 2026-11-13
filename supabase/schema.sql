@@ -92,3 +92,86 @@ begin
   end if;
 end;
 $$;
+
+-- ========================================================
+-- 5. 리빙 아일즈(Living Isles): 월드 영구 상태 & 오프라인 수비대
+-- ========================================================
+create table if not exists public.world_state (
+  world_id text primary key,
+  last_active_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  wave_count integer not null default 0,
+  boss_wave_count integer not null default 0,
+  unlocked_island_ids jsonb not null default '[0]'::jsonb,
+  village_tiers jsonb not null default '{"0": 2}'::jsonb,
+  core_hps jsonb not null default '{"0": 350}'::jsonb,
+  constructed_buildings jsonb not null default '[]'::jsonb,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.world_state enable row level security;
+
+create policy "모든 사용자 월드 상태 조회 허용"
+  on public.world_state for select
+  using (true);
+
+create policy "모든 사용자 월드 상태 등록 허용"
+  on public.world_state for insert
+  with check (true);
+
+create policy "모든 사용자 월드 상태 갱신 허용"
+  on public.world_state for update
+  using (true)
+  with check (true);
+
+create table if not exists public.player_garrisons (
+  player_id text primary key,
+  name text not null,
+  color text not null default 'blue',
+  territory_id integer not null default 0,
+  x double precision not null default 320,
+  y double precision not null default 350,
+  power integer not null default 110,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.player_garrisons enable row level security;
+
+create policy "모든 사용자 수비대 조회 허용"
+  on public.player_garrisons for select
+  using (true);
+
+create policy "모든 사용자 수비대 등록 허용"
+  on public.player_garrisons for insert
+  with check (true);
+
+create policy "모든 사용자 수비대 갱신 허용"
+  on public.player_garrisons for update
+  using (true)
+  with check (true);
+
+create policy "모든 사용자 수비대 삭제 허용"
+  on public.player_garrisons for delete
+  using (true);
+
+insert into public.world_state (world_id, wave_count, boss_wave_count)
+values ('main_world', 0, 0)
+on conflict (world_id) do nothing;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'world_state'
+  ) then
+    alter publication supabase_realtime add table public.world_state;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'player_garrisons'
+  ) then
+    alter publication supabase_realtime add table public.player_garrisons;
+  end if;
+end;
+$$;
+

@@ -9,6 +9,7 @@ import {
   getTerritoryCorePos,
   REGULAR_WAVE_INTERVAL_SEC,
 } from '../constants';
+import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../data/worldRules';
 import { EventBus } from '../phaser/EventBus';
 import { ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
@@ -17,6 +18,10 @@ import {
   getOuterPerimeterSpawns,
   getRegularMonsterTemplates,
 } from '../utils/waveUtils';
+import {
+  getDynamicScalingProfile,
+  getGlobalClockRemainingSec,
+} from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { distanceToCollisionBox, getWallCollisionBoxes } from '../wallCollisionGeometry';
@@ -38,25 +43,30 @@ export interface IWaveSystemContext {
 }
 
 /**
- * 현실 시간 30분 마물 침공 및 60분 보스 타이머, 최외곽 둘레 스폰, 몬스터 3단계 AI 전담 시스템
+ * 글로벌 시계 기반 30분/60분 침공 타이머, 접속자 수 동적 스케일링, 조기 소환 및 몬스터 AI 시스템
  */
 export class WaveSystem {
   private ctx: IWaveSystemContext;
   private coreGemSystem: CoreGemSystem;
   private monsters = new Map<string, MonsterVisual>();
   private waveTimerAccum = 0;
+  private onlineCount = 1;
+  private activeBonusMultiplier = 1.0;
 
   private waveState: WaveState = {
     regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC,
     bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,
-    regularWaveRemainingSec: REGULAR_WAVE_INTERVAL_SEC,
-    bossWaveRemainingSec: BOSS_WAVE_INTERVAL_SEC,
+    regularWaveRemainingSec: getGlobalClockRemainingSec(Date.now(), REGULAR_WAVE_INTERVAL_SEC),
+    bossWaveRemainingSec: getGlobalClockRemainingSec(Date.now(), BOSS_WAVE_INTERVAL_SEC),
     waveCount: 0,
     bossWaveCount: 0,
     activeMonstersCount: 0,
     activeBoss: null,
     lastWaveMessage: null,
     timeScale: 1.0,
+    onlineScaleLabel: getDynamicScalingProfile(1).label,
+    activeGarrisonCount: 0,
+    isGlobalClockSynced: true,
   };
 
   constructor(ctx: IWaveSystemContext, coreGemSystem: CoreGemSystem) {
@@ -88,12 +98,63 @@ export class WaveSystem {
     this.emitWaveState();
   }
 
+  public setOnlineCount(count: number) {
+    this.onlineCount = Math.max(1, count);
+    this.waveState.onlineScaleLabel = getDynamicScalingProfile(this.onlineCount).label;
+    this.emitWaveState();
+  }
+
+  public setActiveGarrisonCount(count: number) {
+    this.waveState.activeGarrisonCount = Math.max(0, count);
+    this.emitWaveState();
+  }
+
+  public syncCountsFromWorldState(waveCount: number, bossWaveCount: number) {
+    this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
+    this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
+    this.waveState.regularWaveRemainingSec = getGlobalClockRemainingSec(
+      Date.now(),
+      REGULAR_WAVE_INTERVAL_SEC
+    );
+    this.waveState.bossWaveRemainingSec = getGlobalClockRemainingSec(
+      Date.now(),
+      BOSS_WAVE_INTERVAL_SEC
+    );
+    this.emitWaveState();
+  }
+
+  /**
+   * 자원 채집 또는 건설 시 다음 웨이브 대기 시간을 단축 (능동적 가속)
+   */
+  public reduceCooldown(seconds: number) {
+    if (seconds <= 0) return;
+    this.waveState.regularWaveRemainingSec = Math.max(
+      1,
+      this.waveState.regularWaveRemainingSec - seconds
+    );
+    this.waveState.bossWaveRemainingSec = Math.max(
+      1,
+      this.waveState.bossWaveRemainingSec - seconds
+    );
+    this.emitWaveState();
+  }
+
+  /**
+   * 준비된 플레이어가 웨이브를 즉시 소환 (처치 보상 보너스 적용)
+   */
+  public summonEarlyWave(isBossWave: boolean) {
+    this.activeBonusMultiplier = ACTIVE_WAVE_ACCELERATION_CONFIG.earlySummonRewardMultiplier;
+    this.spawnMonsterWave(isBossWave, true, true);
+  }
+
   public triggerRegularWave() {
-    this.spawnMonsterWave(false, true);
+    this.activeBonusMultiplier = 1.0;
+    this.spawnMonsterWave(false, true, false);
   }
 
   public triggerBossWave() {
-    this.spawnMonsterWave(true, true);
+    this.activeBonusMultiplier = 1.0;
+    this.spawnMonsterWave(true, true, false);
   }
 
   public emitWaveState() {
@@ -139,10 +200,12 @@ export class WaveSystem {
       );
 
       if (this.waveState.regularWaveRemainingSec <= 0) {
-        this.spawnMonsterWave(false, true);
+        this.activeBonusMultiplier = 1.0;
+        this.spawnMonsterWave(false, true, false);
       }
       if (this.waveState.bossWaveRemainingSec <= 0) {
-        this.spawnMonsterWave(true, true);
+        this.activeBonusMultiplier = 1.0;
+        this.spawnMonsterWave(true, true, false);
       }
       this.emitWaveState();
     }
@@ -232,28 +295,38 @@ export class WaveSystem {
     }
   }
 
-  public spawnMonsterWave(isBossWave: boolean, isLocalTrigger = true) {
+  public spawnMonsterWave(isBossWave: boolean, isLocalTrigger = true, isEarlySummon = false) {
     const islands = this.ctx.getIslands();
     const outerSpawns = getOuterPerimeterSpawns(islands);
     if (outerSpawns.length === 0) return;
 
     if (isBossWave) {
       this.waveState.bossWaveCount += 1;
-      this.waveState.bossWaveRemainingSec = BOSS_WAVE_INTERVAL_SEC;
+      this.waveState.bossWaveRemainingSec = getGlobalClockRemainingSec(
+        Date.now(),
+        BOSS_WAVE_INTERVAL_SEC
+      );
     } else {
       this.waveState.waveCount += 1;
-      this.waveState.regularWaveRemainingSec = REGULAR_WAVE_INTERVAL_SEC;
+      this.waveState.regularWaveRemainingSec = getGlobalClockRemainingSec(
+        Date.now(),
+        REGULAR_WAVE_INTERVAL_SEC
+      );
     }
 
+    const scaling = getDynamicScalingProfile(this.onlineCount);
     const waveNum = this.waveState.waveCount + this.waveState.bossWaveCount;
     const regularTemplates = getRegularMonsterTemplates(waveNum);
-    const countToSpawn = isBossWave ? 6 : 5;
+    const baseCount = isBossWave ? 6 : 5;
+    const countToSpawn = Math.max(3, Math.round(baseCount * scaling.countMultiplier));
 
     for (let i = 0; i < countToSpawn; i++) {
       const sp = outerSpawns[i % outerSpawns.length];
       const template = regularTemplates[i % regularTemplates.length];
       const jitterX = (Math.random() - 0.5) * 70;
       const jitterY = (Math.random() - 0.5) * 70;
+      const scaledHp = Math.round(template.hp * scaling.hpMultiplier);
+      const scaledAttack = Math.round(template.attack * scaling.attackMultiplier);
 
       const monster: Monster = {
         id: `m_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
@@ -262,9 +335,9 @@ export class WaveSystem {
         isBoss: false,
         x: sp.spawnX + jitterX,
         y: sp.spawnY + jitterY,
-        hp: template.hp,
-        maxHp: template.hp,
-        attack: template.attack,
+        hp: scaledHp,
+        maxHp: scaledHp,
+        attack: scaledAttack,
         speed: template.speed,
         targetTerritoryId: sp.territory.id,
         spawnTerritoryId: sp.territory.id,
@@ -274,10 +347,14 @@ export class WaveSystem {
       this.monsters.set(monster.id, mv);
     }
 
-    // 60분 주기 보스몬스터 출현
+    // 60분 주기 보스몬스터 출현 (접속자 수 기반 HP/공격력 스케일링)
     if (isBossWave) {
       const bossSpawn = outerSpawns[0];
-      const bossHp = 550 + this.waveState.bossWaveCount * 150;
+      const baseBossHp = 550 + this.waveState.bossWaveCount * 150;
+      const bossHp = Math.round(baseBossHp * scaling.hpMultiplier);
+      const bossAttack = Math.round(
+        (42 + this.waveState.bossWaveCount * 8) * scaling.attackMultiplier
+      );
       const bossMonster: Monster = {
         id: `boss_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         type: 'boss_deathlord',
@@ -287,7 +364,7 @@ export class WaveSystem {
         y: bossSpawn.spawnY,
         hp: bossHp,
         maxHp: bossHp,
-        attack: 42 + this.waveState.bossWaveCount * 8,
+        attack: bossAttack,
         speed: 42,
         targetTerritoryId: bossSpawn.territory.id,
         spawnTerritoryId: bossSpawn.territory.id,
@@ -298,9 +375,10 @@ export class WaveSystem {
     }
 
     const firstTerritoryName = outerSpawns[0].territory.name;
+    const bonusSuffix = isEarlySummon ? ' (조기 소환 보상 +35%)' : '';
     const alertMsg = isBossWave
-      ? `👹 [60분 보스 출현!] 외곽 영지(${firstTerritoryName})에서 '심연의 데스로드'와 언데드 군단이 중심부를 노리고 침공합니다!`
-      : `🧟 [30분 마물 침공!] 외곽 영지(${firstTerritoryName}) 경계에서 좀비와 스켈레톤 웨이브가 진입했습니다!`;
+      ? `👹 [${scaling.label}] 외곽 영지(${firstTerritoryName})에서 보스 '심연의 데스로드' 군단이 침공합니다!${bonusSuffix}`
+      : `🧟 [${scaling.label}] 외곽 영지(${firstTerritoryName}) 경계에서 마물 웨이브가 진입했습니다!${bonusSuffix}`;
 
     this.waveState.lastWaveMessage = alertMsg;
     sound.playBreak();
@@ -333,9 +411,10 @@ export class WaveSystem {
       mv.container.destroy();
       this.monsters.delete(monsterId);
 
-      const rewardWood = deadM.isBoss ? 25 : 3;
-      const rewardStone = deadM.isBoss ? 25 : 3;
-      const rewardGold = deadM.isBoss ? 35 : 4;
+      const bonus = this.activeBonusMultiplier;
+      const rewardWood = Math.round((deadM.isBoss ? 25 : 3) * bonus);
+      const rewardStone = Math.round((deadM.isBoss ? 25 : 3) * bonus);
+      const rewardGold = Math.round((deadM.isBoss ? 35 : 4) * bonus);
 
       this.ctx.addRewardResources(rewardWood, rewardStone, rewardGold);
 

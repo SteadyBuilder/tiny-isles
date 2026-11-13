@@ -34,6 +34,9 @@ import { serverSync } from '../../../lib/serverSync';
 import { WaveSystem, MonsterVisual } from '../../systems/WaveSystem';
 import { TowerDefenseSystem, ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
 import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
+import { GarrisonSystem } from '../../systems/GarrisonSystem';
+import { LivingWorldCoordinator } from '../../systems/LivingWorldCoordinator';
+import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../../data/worldRules';
 import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
 import {
   GOLD_MINE_BIOME_CONFIG,
@@ -90,6 +93,8 @@ export class WorldScene extends Phaser.Scene {
   private coreGemSystem!: CoreGemSystem;
   private waveSystem!: WaveSystem;
   private towerDefenseSystem!: TowerDefenseSystem;
+  private garrisonSystem!: GarrisonSystem;
+  private livingWorldCoordinator!: LivingWorldCoordinator;
 
   // Constructed Buildings & Visuals
   private constructedBuildings: ConstructedBuilding[] = [];
@@ -259,6 +264,56 @@ export class WorldScene extends Phaser.Scene {
       this.waveSystem
     );
 
+    this.garrisonSystem = new GarrisonSystem(
+      {
+        scene: this,
+      },
+      this.waveSystem
+    );
+
+    this.livingWorldCoordinator = new LivingWorldCoordinator(
+      {
+        getPlayerId: () => this.playerId,
+        getPlayerName: () => this.playerName,
+        getPlayerColor: () => this.playerColor,
+        getPlayerPosition: () => ({
+          x: this.playerSprite?.x ?? 320,
+          y: this.playerSprite?.y ?? 350,
+        }),
+        getCurrentTerritoryId: () => {
+          const px = this.playerSprite?.x ?? 320;
+          const py = this.playerSprite?.y ?? 350;
+          const gx = Math.round((px - 320) / TERRITORY_STEP);
+          const gy = Math.round((py - 320) / TERRITORY_STEP);
+          const found = this.islands.find((i) => i.unlocked && i.gridX === gx && i.gridY === gy);
+          return found ? found.id : 0;
+        },
+        getIslands: () => this.islands,
+        getConstructedBuildings: () => this.constructedBuildings,
+        applyOfflineWorldUpdate: (updatedIslands, updatedBuildings, passiveGain) => {
+          this.islands = updatedIslands;
+          this.constructedBuildings = updatedBuildings;
+          if (passiveGain.wood > 0 || passiveGain.stone > 0 || passiveGain.gold > 0) {
+            this.inventory = {
+              wood: this.inventory.wood + passiveGain.wood,
+              stone: this.inventory.stone + passiveGain.stone,
+              gold: this.inventory.gold + passiveGain.gold,
+            };
+            EventBus.emit('inventory-updated', this.inventory);
+          }
+          this.spawnAllTerritoryCores();
+          this.spawnAllConstructedBuildings();
+          this.drawTerrainDecorations();
+          this.drawExpansionAltars();
+          this.spawnAllBuildings();
+          this.saveWorldState();
+          this.emitWorldStateToReact();
+        },
+      },
+      this.waveSystem,
+      this.garrisonSystem
+    );
+
     // 6. Territory Core Gems (One per occupied territory!)
     this.spawnAllTerritoryCores();
 
@@ -290,6 +345,9 @@ export class WorldScene extends Phaser.Scene {
     EventBus.emit('scene-ready', this);
     this.emitWorldStateToReact();
     this.emitWaveStateToReact();
+
+    // 16. Living Isles: 오프라인 정산, 스냅샷 복원 및 비동기 수비대 배치
+    void this.livingWorldCoordinator.initialize();
   }
 
   private exposeTestHook() {
@@ -1222,6 +1280,14 @@ export class WorldScene extends Phaser.Scene {
       this.waveSystem.triggerBossWave();
     });
 
+    EventBus.on('summon-early-wave', (data: { isBossWave: boolean }) => {
+      this.waveSystem.summonEarlyWave(Boolean(data?.isBossWave));
+    });
+
+    EventBus.on('reduce-wave-cooldown', (seconds: number) => {
+      this.waveSystem.reduceCooldown(seconds);
+    });
+
     EventBus.on('set-wave-timescale', (scale: number) => {
       this.waveSystem.setTimeScale(scale);
     });
@@ -1362,6 +1428,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (isLocal) {
       this.broadcastBuildingConstructed(newBuilding);
+      this.waveSystem.reduceCooldown(ACTIVE_WAVE_ACCELERATION_CONFIG.buildCooldownReductionSec);
     }
     return true;
   }
@@ -1496,6 +1563,7 @@ export class WorldScene extends Phaser.Scene {
       .on('presence', { event: 'sync' }, () => {
         const presenceState = channel.presenceState();
         const count = Math.max(1, Object.keys(presenceState).length);
+        this.waveSystem.setOnlineCount(count);
         EventBus.emit('online-count-changed', count);
       })
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
@@ -1579,6 +1647,10 @@ export class WorldScene extends Phaser.Scene {
 
     // 2. Update Tower Defense System (Archer/Magic Towers & Barracks Synergies)
     this.towerDefenseSystem.update(time, delta);
+
+    // 2.5. Update Async Offline Garrisons & Living World Snapshots
+    this.garrisonSystem.update(time, delta);
+    this.livingWorldCoordinator.update(delta);
 
     // 3. Update Territory Passive Resource Gains & Sanctuary/House Buffs
     this.updatePassives(delta);
@@ -1927,6 +1999,7 @@ export class WorldScene extends Phaser.Scene {
       if (ent.hp <= 0) {
         sound.playBreak();
         this.removeAndRespawnEntity(ent);
+        this.waveSystem.reduceCooldown(ACTIVE_WAVE_ACCELERATION_CONFIG.gatherCooldownReductionSec);
       }
       return;
     }

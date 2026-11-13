@@ -34,6 +34,7 @@ interface HUDProps {
   onOpenVillageModal?: () => void;
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
+  onSummonEarlyWave?: () => void;
   onChangeTimeScale?: (scale: number) => void;
   onAddTestResources?: () => void;
 }
@@ -62,6 +63,7 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenVillageModal,
   onTriggerRegularWave,
   onTriggerBossWave,
+  onSummonEarlyWave,
   onChangeTimeScale,
   onAddTestResources,
 }) => {
@@ -282,10 +284,37 @@ export const HUD: React.FC<HUDProps> = ({
                   {waveState.activeMonstersCount}
                 </span>
               </div>
+
+              {waveState.onlineScaleLabel && (
+                <span
+                  className="px-2 py-0.5 rounded-md bg-indigo-950/80 border border-indigo-400/40 text-indigo-200 text-[11px] font-bold"
+                  title="접속 인원 기반 실시간 웨이브 난이도 스케일링"
+                >
+                  🌐 {waveState.onlineScaleLabel}
+                </span>
+              )}
+
+              <span
+                className="px-2 py-0.5 rounded-md bg-cyan-950/80 border border-cyan-400/40 text-cyan-200 text-[11px] font-bold"
+                title="함께 마을을 지키는 오프라인 유저 AI 수비대"
+              >
+                🛡️ 수비대 {waveState.activeGarrisonCount ?? 0}
+              </span>
             </div>
 
             {/* Compact Wave Trigger & Speed Test Badges */}
             <div className="flex items-center gap-1.5">
+              {onSummonEarlyWave && (
+                <button
+                  id="summon-early-wave-btn"
+                  onClick={onSummonEarlyWave}
+                  className="px-2.5 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
+                  title="준비 완료 시 웨이브 즉시 소환 (처치 보상 +35% 보너스)"
+                >
+                  ⚔️ 조기 소환 (+35%)
+                </button>
+              )}
+
               <button
                 id="trigger-regular-wave-btn"
                 onClick={onTriggerRegularWave}
