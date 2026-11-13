@@ -41,6 +41,8 @@ import { WaveSystem, MonsterVisual } from '../../systems/WaveSystem';
 import { TowerDefenseSystem, ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
 import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
 import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
+import { WORLD_BOUNDS } from '../../worldBounds';
+import { DEPTH, ySortDepth } from '../../depthLayers';
 
 interface RemotePlayerVisual {
   container: Phaser.GameObjects.Container;
@@ -163,9 +165,7 @@ export class WorldScene extends Phaser.Scene {
     }).map((isl: Island) => BuildingSystem.ensureCentralVillageState(isl));
 
     // Setup Physics World Bounds for expanded territory map
-    const worldMin = -2 * TERRITORY_STEP - 200;
-    const worldMax = 2 * TERRITORY_STEP + TERRITORY_PX + 200;
-    const worldWidth = worldMax - worldMin;
+    const { min: worldMin, max: worldMax, width: worldWidth } = WORLD_BOUNDS;
     this.physics.world.setBounds(worldMin, worldMin, worldWidth, worldWidth);
 
     // 1. Seamless Grass Tile Background covering full expanded plains
@@ -177,13 +177,13 @@ export class WorldScene extends Phaser.Scene {
       worldWidth + bgPadding,
       'grassSeamless'
     );
-    bgTile.setDepth(-100);
+    bgTile.setDepth(DEPTH.BACKGROUND);
 
     // 2. Terrain Graphics (Roads, Plazas, Border lines)
     this.terrainGraphics = this.add.graphics();
-    this.terrainGraphics.setDepth(-50);
+    this.terrainGraphics.setDepth(DEPTH.TERRAIN);
     this.invasionGraphics = this.add.graphics();
-    this.invasionGraphics.setDepth(-40);
+    this.invasionGraphics.setDepth(DEPTH.INVASION_OVERLAY);
     this.drawTerrainDecorations();
 
     // 3. Buildings Static Physics Group (Village Hall & Constructed Buildings)
@@ -193,7 +193,7 @@ export class WorldScene extends Phaser.Scene {
 
     // 4. Territory Expansion Altars Container
     this.altarCardsContainer = this.add.container(0, 0);
-    this.altarCardsContainer.setDepth(-20);
+    this.altarCardsContainer.setDepth(DEPTH.ALTAR_CARDS);
     this.drawExpansionAltars();
 
     // 5. Initialize Core Systems (Modular AI-Friendly Architecture)
@@ -515,7 +515,7 @@ export class WorldScene extends Phaser.Scene {
   private createTerritoryCoreForIsland(isl: Island) {
     const corePos = getTerritoryCorePos(isl.gridX, isl.gridY);
     const container = this.add.container(corePos.x, corePos.y);
-    container.setDepth(corePos.y + 24);
+    container.setDepth(ySortDepth(corePos.y, 24));
 
     const isCentral = isl.id === 0;
     const gemColor = isCentral ? 0x38bdf8 : 0x34d399;
@@ -628,11 +628,11 @@ export class WorldScene extends Phaser.Scene {
     for (const b of this.buildings) {
       const container = this.add.container(b.x, b.y);
 
-      let bDepth = b.y + b.height - 20;
-      if (b.type === 'castle' || b.type === 'tower') bDepth = b.y + 240;
-      else if (b.type === 'monastery') bDepth = b.y + 290;
-      else if (b.type === 'barracks' || b.type === 'archery') bDepth = b.y + 230;
-      container.setDepth(bDepth);
+      let bDepthBias = b.height - 20;
+      if (b.type === 'castle' || b.type === 'tower') bDepthBias = 240;
+      else if (b.type === 'monastery') bDepthBias = 290;
+      else if (b.type === 'barracks' || b.type === 'archery') bDepthBias = 230;
+      container.setDepth(ySortDepth(b.y, bDepthBias));
 
       const img = this.add.image(0, 0, b.type).setOrigin(0, 0);
       img.setDisplaySize(b.width, b.height);
@@ -686,7 +686,7 @@ export class WorldScene extends Phaser.Scene {
   private spawnConstructedBuildingVisual(cb: ConstructedBuilding) {
     const bp = getBlueprint(cb.type);
     const container = this.add.container(cb.x, cb.y);
-    container.setDepth(cb.y + 30);
+    container.setDepth(ySortDepth(cb.y, 30));
 
     if (cb.category === 'wall') {
       const isHorizontal = cb.slotIndex === 0 || cb.slotIndex === 1;
@@ -880,9 +880,9 @@ export class WorldScene extends Phaser.Scene {
 
   private spawnEntity(ent: Entity) {
     const container = this.add.container(ent.x, ent.y);
-    let entDepth = ent.y + 16;
-    if (ent.type === 'rock' || ent.type === 'gold_rock') entDepth = ent.y + 20;
-    container.setDepth(entDepth);
+    let entDepthBias = 16;
+    if (ent.type === 'rock' || ent.type === 'gold_rock') entDepthBias = 20;
+    container.setDepth(ySortDepth(ent.y, entDepthBias));
 
     let sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
 
@@ -1008,7 +1008,7 @@ export class WorldScene extends Phaser.Scene {
       const sprite = this.add.image(c.x, c.y, c.type);
       sprite.setScale(c.scale);
       sprite.setAlpha(0.55);
-      sprite.setDepth(2000);
+      sprite.setDepth(DEPTH.CLOUDS);
       this.clouds.push({ sprite, speed: c.speed });
     }
   }
@@ -1016,7 +1016,8 @@ export class WorldScene extends Phaser.Scene {
   private setupCamera() {
     this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
     this.cameras.main.setZoom(this.targetZoom);
-    this.cameras.main.setBounds(-1300, -1300, 3300, 3300);
+    // Camera bounds follow the full expanded world (all 21 territories), not just the central 3x3
+    this.cameras.main.setBounds(WORLD_BOUNDS.min, WORLD_BOUNDS.min, WORLD_BOUNDS.width, WORLD_BOUNDS.width);
 
     this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: unknown, _deltaX: number, deltaY: number) => {
       const step = 0.12;
@@ -1028,7 +1029,7 @@ export class WorldScene extends Phaser.Scene {
     this.touchIndicator = this.add
       .image(0, 0, 'cursorTarget')
       .setVisible(false)
-      .setDepth(9999)
+      .setDepth(DEPTH.TOUCH_INDICATOR)
       .setScale(0.35)
       .setAlpha(0.85);
 
@@ -1513,7 +1514,7 @@ export class WorldScene extends Phaser.Scene {
   private playExplosionAt(x: number, y: number) {
     if (this.textures.exists('explosionFx') && this.anims.exists('explosion_anim')) {
       const exp = this.add.sprite(x, y, 'explosionFx');
-      exp.setDepth(3500);
+      exp.setDepth(DEPTH.EXPLOSION);
       exp.setDisplaySize(140, 140);
       exp.play('explosion_anim');
       exp.once('animationcomplete', () => exp.destroy());
@@ -1720,9 +1721,9 @@ export class WorldScene extends Phaser.Scene {
     // Synchronize Player Visuals & Depth sorting
     const px = this.playerSprite.x;
     const py = this.playerSprite.y;
-    this.playerSprite.setDepth(py + 24);
-    this.playerNameTag.setPosition(px, py - 42).setDepth(py + 30);
-    this.playerIndicator.setPosition(px, py - 54).setDepth(py + 30);
+    this.playerSprite.setDepth(ySortDepth(py, 24));
+    this.playerNameTag.setPosition(px, py - 42).setDepth(ySortDepth(py, 30));
+    this.playerIndicator.setPosition(px, py - 54).setDepth(ySortDepth(py, 30));
 
     // Continuous interaction when Space, E or Mobile Action Button is held
     const isHoldInput =
@@ -2108,7 +2109,7 @@ export class WorldScene extends Phaser.Scene {
       stroke: '#000000',
       strokeThickness: 3,
     }).setOrigin(0.5);
-    ft.setDepth(3000);
+    ft.setDepth(DEPTH.FLOATING_TEXT);
 
     this.tweens.add({
       targets: ft,
@@ -2159,7 +2160,7 @@ export class WorldScene extends Phaser.Scene {
       });
     }
 
-    visual.container.setDepth(data.y + 24);
+    visual.container.setDepth(ySortDepth(data.y, 24));
     visual.sprite.setFlipX(data.direction === 'left');
     visual.nameTag.setText(data.name);
 

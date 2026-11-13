@@ -10,6 +10,7 @@ import {
   REGULAR_WAVE_INTERVAL_SEC,
 } from '../constants';
 import { EventBus } from '../phaser/EventBus';
+import { ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
 import {
   findNextInwardTargetTerritory,
@@ -190,7 +191,7 @@ export class WaveSystem {
         m.direction = vx < 0 ? 'left' : 'right';
 
         mv.container.setPosition(m.x, m.y);
-        mv.container.setDepth(m.y + 28);
+        mv.container.setDepth(ySortDepth(m.y, 28));
         mv.sprite.setFlipX(m.direction === 'left');
       } else {
         // 공격 범위 진입: 방책 타격 or 코어 보석 타격!

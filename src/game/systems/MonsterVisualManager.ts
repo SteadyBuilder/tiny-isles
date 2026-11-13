@@ -1,4 +1,5 @@
 import { Monster } from '../../types/game';
+import { ySortDepth } from '../depthLayers';
 
 export interface MonsterVisual {
   monster: Monster;
@@ -15,7 +16,7 @@ export interface MonsterVisual {
 export class MonsterVisualManager {
   public static create(scene: Phaser.Scene, monster: Monster): MonsterVisual {
     const container = scene.add.container(monster.x, monster.y);
-    container.setDepth(monster.y + 28);
+    container.setDepth(ySortDepth(monster.y, 28));
 
     const aura = scene.add.graphics();
     if (monster.isBoss) {

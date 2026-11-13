@@ -1,5 +1,6 @@
 import { ConstructedBuilding } from '../../types/game';
 import { getBlueprint } from '../constants';
+import { DEPTH } from '../depthLayers';
 import { sound } from '../../lib/sound';
 import { MonsterVisual, WaveSystem } from './WaveSystem';
 
@@ -97,7 +98,7 @@ export class TowerDefenseSystem {
     const startX = source.x;
     const startY = source.y - 30;
     const proj = scene.add.image(startX, startY, 'arrowProj');
-    proj.setDepth(3200);
+    proj.setDepth(DEPTH.PROJECTILE);
     proj.setDisplaySize(36, 36);
 
     // 타워 타입 및 버프별 투사체 색상 차별화
@@ -141,7 +142,7 @@ export class TowerDefenseSystem {
   private playSlashEffect(x1: number, y1: number, x2: number, y2: number) {
     const scene = this.ctx.scene;
     const slash = scene.add.graphics();
-    slash.setDepth(3250);
+    slash.setDepth(DEPTH.SLASH);
 
     const midX = (x1 + x2) / 2;
     const midY = (y1 + y2) / 2;
@@ -167,7 +168,7 @@ export class TowerDefenseSystem {
   private playHitSpark(x: number, y: number, isMagic: boolean) {
     const scene = this.ctx.scene;
     const spark = scene.add.graphics();
-    spark.setDepth(3220);
+    spark.setDepth(DEPTH.SPARK);
     spark.fillStyle(isMagic ? 0xc084fc : 0xfde047, 0.85);
 
     for (let i = 0; i < 4; i++) {

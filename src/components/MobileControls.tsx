@@ -2,6 +2,12 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Island } from '../types/game';
 import { Sparkles, Swords } from 'lucide-react';
 import { EventBus } from '../game/phaser/EventBus';
+import {
+  GESTURE_BLOCK_PROPS,
+  attachGestureBlock,
+  getPinchEligibleTouches,
+  getTouchDistance,
+} from '../lib/touchGestureGuard';
 
 interface MobileControlsProps {
   onAction: () => void;
@@ -26,6 +32,16 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   zoomRef.current = currentZoom;
   const pinchDistRef = useRef<number | null>(null);
   const pinchStartZoomRef = useRef(1.0);
+  const joystickZoneRef = useRef<HTMLDivElement | null>(null);
+  const actionZoneRef = useRef<HTMLDivElement | null>(null);
+
+  // Control zones swallow their touches so Phaser never counts them toward a pinch gesture
+  useEffect(() => {
+    const cleanups = [joystickZoneRef.current, actionZoneRef.current]
+      .filter((el): el is HTMLDivElement => el !== null)
+      .map((el) => attachGestureBlock(el));
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, []);
 
   const stopActionHold = useCallback(() => {
     setIsActionActive(false);
@@ -65,24 +81,28 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     };
   }, [resetJoystick, stopActionHold]);
 
-  // 2-Finger Pinch Zoom on Window
+  // 2-Finger Pinch Zoom on Window (touches on joystick / ACTION zones are excluded)
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        pinchDistRef.current = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      const touches = getPinchEligibleTouches(e.touches);
+      if (touches.length === 2) {
+        pinchDistRef.current = getTouchDistance(touches[0], touches[1]);
         pinchStartZoomRef.current = zoomRef.current;
+      } else {
+        pinchDistRef.current = null;
       }
     };
     const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && pinchDistRef.current && pinchDistRef.current > 0) {
+      const touches = getPinchEligibleTouches(e.touches);
+      if (touches.length === 2 && pinchDistRef.current && pinchDistRef.current > 0) {
         e.preventDefault();
-        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const dist = getTouchDistance(touches[0], touches[1]);
         const nextZoom = Math.min(2.0, Math.max(0.5, Number((pinchStartZoomRef.current * (dist / pinchDistRef.current)).toFixed(2))));
         EventBus.emit('set-zoom', nextZoom);
         onZoomChange?.(nextZoom);
       }
     };
-    const handleTouchEnd = (e: TouchEvent) => { if (e.touches.length < 2) pinchDistRef.current = null; };
+    const handleTouchEnd = (e: TouchEvent) => { if (getPinchEligibleTouches(e.touches).length < 2) pinchDistRef.current = null; };
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -149,6 +169,8 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
 
       {/* 2. Virtual Joystick (Bottom Left) */}
       <div
+        ref={joystickZoneRef}
+        {...GESTURE_BLOCK_PROPS}
         className="absolute bottom-6 left-6 pointer-events-auto touch-none"
         onTouchStart={handleJoystickTouchStart}
         onTouchMove={handleJoystickTouchMove}
@@ -165,7 +187,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       </div>
 
       {/* 3. Large Action Button with Hold Support (Bottom Right) */}
-      <div className="absolute bottom-6 right-6 pointer-events-auto touch-none">
+      <div ref={actionZoneRef} {...GESTURE_BLOCK_PROPS} className="absolute bottom-6 right-6 pointer-events-auto touch-none">
         <button
           onPointerDown={startActionHold}
           onPointerUp={stopActionHold}

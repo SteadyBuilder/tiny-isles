@@ -131,7 +131,7 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Stone */}
               <div className="flex items-center gap-1.5 wood-hud-slot px-2.5 py-1 rounded-xl">
                 <img
-                  src="/assets/ui/Icons/Icon_01.png"
+                  src="/assets/decorations/Rock2.png"
                   alt="Stone"
                   className="w-5 h-5 pixel-art select-none drop-shadow"
                 />
@@ -397,7 +397,7 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="font-extrabold text-amber-200 text-xs tabular-nums">{inventory.wood}</span>
               </div>
               <div className="flex items-center gap-0.5 wood-hud-slot px-1.5 py-0.5 rounded-lg">
-                <img src="/assets/ui/Icons/Icon_01.png" alt="Stone" className="w-3.5 h-3.5 pixel-art" />
+                <img src="/assets/decorations/Rock2.png" alt="Stone" className="w-3.5 h-3.5 pixel-art" />
                 <span className="font-extrabold text-slate-200 text-xs tabular-nums">{inventory.stone}</span>
               </div>
               <div className="flex items-center gap-0.5 wood-hud-slot px-1.5 py-0.5 rounded-lg">
