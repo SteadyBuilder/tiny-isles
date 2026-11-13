@@ -85,10 +85,9 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
         <div className="flex items-center justify-between pb-2 border-b-2 border-[#7c5a3f]">
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-lg bg-[#b58750] text-[#2e1b0d] border border-[#d8aa6d]"><Hammer className="w-5 h-5" /></span>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-[#faecd1] drop-shadow">🏘️ 마을 발전 & 건설 (Lv.{curTier} {tierCfg.name})</h2>
-              <p className="text-[11px] text-[#dec39f]">6단계 대도시 테크트리와 방어·생산 기지 건설</p>
-            </div>
+            <h2 className="text-base sm:text-lg font-black text-[#faecd1] drop-shadow">
+              🏰 #{curTerritory.id} Lv.{curTier} {tierCfg.name}
+            </h2>
           </div>
           <button id="close-village-modal-btn" onClick={onClose} className="w-7 h-7 active:scale-95 transition-transform flex items-center justify-center">
             <img src="/assets/ui/Buttons/SmallRedRoundButton_Regular.png" alt="X" className="w-full h-full pixel-art" />
@@ -98,59 +97,59 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
         {/* Territory Selector */}
         <div className="mt-2 flex flex-wrap items-center gap-1.5 pb-1.5">
           {unlocked.map((t) => (
-            <button key={t.id} onClick={() => onSelectTerritory(t.id)} className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+            <button key={t.id} onClick={() => onSelectTerritory(t.id)} className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition tabular-nums ${
               t.id === curTerritory.id ? 'bg-[#e2a85c] text-[#2b1708] border-[#ffe2a8] shadow' : 'bg-[#3b2719] text-[#c9ab8d] border-[#291a10] hover:bg-[#4a3221]'
-            }`}>
-              #{t.id} {t.name.split(' ')[0]} ({VILLAGE_TIER_CONFIGS[t.villageTier].name})
+            }`} title={t.name}>
+              #{t.id} Lv.{t.villageTier}
             </button>
           ))}
         </div>
 
         {/* Paper Panel: Tier Tech & Core Status */}
         <div className="bg-[#faecd1] border-2 border-[#b89568] rounded-xl p-3 shadow-inner">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xs text-[#52331c]">💎 코어 HP:</span>
-                <span className="text-xs font-bold text-[#1f4e1f]">{curTerritory.coreHp} / {curTerritory.coreMaxHp}</span>
-                <button onClick={() => onRepairCore(curTerritory.id)} className="px-2 py-0.5 rounded bg-[#4f803b] hover:bg-[#436e31] text-[#fbf5e6] text-[10px] font-bold flex items-center gap-1 shadow">
-                  <Heart className="w-3 h-3" /> 수리 (🪵5 🪨5)
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2.5 tabular-nums">
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-xs text-[#52331c]">💎</span>
+                <span className="text-xs font-black text-[#1f4e1f]">{curTerritory.coreHp}/{curTerritory.coreMaxHp}</span>
+                <button onClick={() => onRepairCore(curTerritory.id)} className="px-2 py-0.5 rounded bg-[#4f803b] hover:bg-[#436e31] text-[#fbf5e6] text-[10px] font-bold flex items-center gap-1 shadow" title="코어 및 방책 수리">
+                  <Heart className="w-3 h-3" /> 🪵5 🪨5
                 </button>
               </div>
-              <div className="text-[11px] text-[#714d2e] mt-1">
-                건설 슬롯: <b className="text-[#322013]">{constructedBuildings.filter((b) => b.territoryId === curTerritory.id).length}</b> / {maxSlots}개 (0: 3개 → 6: 16개 확장)
-              </div>
+              <span className="text-xs font-bold text-[#714d2e]">
+                🏗️ <b className="text-[#322013]">{constructedBuildings.filter((b) => b.territoryId === curTerritory.id).length}</b>/{maxSlots}
+              </span>
             </div>
 
             {/* Upgrade Button */}
             {upgrade.nextTier ? (
-              <button id="upgrade-village-btn" onClick={() => onUpgradeVillage(curTerritory.id)} disabled={!upgrade.canUpgrade} className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border transition ${
+              <button id="upgrade-village-btn" onClick={() => onUpgradeVillage(curTerritory.id)} disabled={!upgrade.canUpgrade} className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border transition tabular-nums ${
                 upgrade.canUpgrade ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white border-[#93c5fd] shadow active:scale-95' : 'bg-[#9ca3af] text-[#4b5563] border-[#6b7280] cursor-not-allowed'
               }`}>
                 <ArrowUpCircle className="w-4 h-4" />
-                <span>{VILLAGE_TIER_CONFIGS[upgrade.nextTier].name} 승급</span>
+                <span>Lv.{upgrade.nextTier} {VILLAGE_TIER_CONFIGS[upgrade.nextTier].name}</span>
                 <span className="text-[10px] opacity-90">🪵{upgrade.costWood} 🪨{upgrade.costStone} 🪙{upgrade.costGold}</span>
               </button>
             ) : (
-              <span className="px-3 py-1 rounded bg-[#eab308] text-[#422006] text-xs font-black">👑 대도시 달성 완료</span>
+              <span className="px-2.5 py-1 rounded bg-[#eab308] text-[#422006] text-xs font-black">👑 MAX</span>
             )}
           </div>
 
           {/* Slot Grid Selector */}
           <div className="mt-2 pt-2 border-t border-[#d8be9a]">
-            <div className="text-[11px] font-bold text-[#5c3c23] mb-1">📍 건설 슬롯 선택 (미선택 시 최적 빈 슬롯 자동 지정):</div>
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
               {slotStates.map((slot) => {
                 const isSelected = selectedSlotIndex === slot.slotIndex;
                 const isOcc = !!slot.building;
+                const slotIcon = slot.role === 'wall' ? '🛡️' : '📍';
                 return (
-                  <button key={slot.slotIndex} disabled={!slot.isUnlocked || isOcc} onClick={() => setSelectedSlotIndex(isSelected ? null : slot.slotIndex)} className={`py-1 px-1 rounded text-[10px] font-bold border transition truncate ${
+                  <button key={slot.slotIndex} disabled={!slot.isUnlocked || isOcc} onClick={() => setSelectedSlotIndex(isSelected ? null : slot.slotIndex)} className={`py-1 px-1 rounded text-[10px] font-bold border transition truncate tabular-nums ${
                     !slot.isUnlocked ? 'bg-[#d8c5aa] text-[#9c8973] border-[#c4b094] opacity-50 cursor-not-allowed' :
                     isOcc ? 'bg-[#c7aa83] text-[#4a3221] border-[#ad8f67] cursor-not-allowed' :
                     isSelected ? 'bg-[#2563eb] text-white border-[#93c5fd] shadow-md ring-2 ring-blue-300' :
                     'bg-[#fff5e2] text-[#6d4626] border-[#d8be9a] hover:bg-[#ffeac4]'
                   }`} title={slot.building ? `${slot.building.name} (HP ${slot.building.hp})` : `슬롯 #${slot.slotIndex} (${slot.role})`}>
-                    #{slot.slotIndex} {isOcc ? '점유' : '빈슬롯'}
+                    #{slot.slotIndex} {isOcc ? '✓' : slotIcon}
                   </button>
                 );
               })}
@@ -170,41 +169,40 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
           ))}
         </div>
 
-        {/* Blueprints Grid */}
+        {/* Blueprints Grid (Sprite + Stat Badges + Resource Costs) */}
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
           {blueprints.map((bp) => {
             const check = BuildingSystem.checkBuild(curTerritory, bp.type, inventory, constructedBuildings, selectedSlotIndex ?? undefined);
             return (
-              <div key={bp.type} className="bg-[#faecd1] border-2 border-[#b89568] rounded-xl p-2 flex flex-col justify-between shadow-sm">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-lg bg-[#edd8b6] border border-[#c7a97e] flex items-center justify-center p-0.5 shrink-0 overflow-hidden">
-                      {SPRITES[bp.spriteKey] ? (
-                        <img src={SPRITES[bp.spriteKey]} alt={bp.name} className="w-full h-full object-contain pixel-art" />
-                      ) : (
-                        <span className="text-base">{bp.icon}</span>
-                      )}
+              <div key={bp.type} className="bg-[#faecd1] border-2 border-[#b89568] rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-sm" title={bp.description}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-11 h-11 rounded-lg bg-[#edd8b6] border border-[#c7a97e] flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                    {SPRITES[bp.spriteKey] ? (
+                      <img src={SPRITES[bp.spriteKey]} alt={bp.name} className="w-full h-full object-contain pixel-art" />
+                    ) : (
+                      <span className="text-lg">{bp.icon}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-black text-xs text-[#3a2211] truncate">{bp.icon} {bp.name}</div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-[#785333] mt-0.5 tabular-nums">
+                      <span>❤️{bp.maxHp}</span>
+                      {bp.attack ? <span>⚔️{bp.attack}</span> : null}
+                      {bp.range ? <span>🎯{bp.range}</span> : null}
                     </div>
-                    <div className="min-w-0">
-                      <div className="font-black text-xs text-[#3a2211] truncate">{bp.name}</div>
-                      <div className="text-[10px] text-[#785333]">HP {bp.maxHp} {bp.attack ? `· 공 ${bp.attack}` : ''}</div>
+                    <div className="flex items-center gap-1.5 text-[11px] font-extrabold mt-1 tabular-nums">
+                      <span className={inventory.wood >= bp.costWood ? 'text-[#386629]' : 'text-red-700'}>🪵{bp.costWood}</span>
+                      <span className={inventory.stone >= bp.costStone ? 'text-[#445b6b]' : 'text-red-700'}>🪨{bp.costStone}</span>
+                      {bp.costGold > 0 && <span className={inventory.gold >= bp.costGold ? 'text-[#b45309]' : 'text-red-700'}>🪙{bp.costGold}</span>}
                     </div>
                   </div>
-                  <p className="text-[11px] text-[#5e3e26] mt-1 leading-snug line-clamp-2">{bp.description}</p>
                 </div>
 
-                <div className="mt-2 pt-1 border-t border-[#dfc5a0] flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold">
-                    <span className={inventory.wood >= bp.costWood ? 'text-[#386629]' : 'text-red-700'}>🪵{bp.costWood}</span>
-                    <span className={inventory.stone >= bp.costStone ? 'text-[#445b6b]' : 'text-red-700'}>🪨{bp.costStone}</span>
-                    {bp.costGold > 0 && <span className={inventory.gold >= bp.costGold ? 'text-[#b45309]' : 'text-red-700'}>🪙{bp.costGold}</span>}
-                  </div>
-                  <button disabled={!check.canBuild} onClick={() => handleBuild(bp.type)} className={`px-3 py-1 rounded-lg text-xs font-black border transition ${
-                    check.canBuild ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white border-[#93c5fd] shadow active:scale-95' : 'bg-[#cbb597] text-[#735e47] border-[#b09a7d] cursor-not-allowed'
-                  }`}>
-                    건설
-                  </button>
-                </div>
+                <button disabled={!check.canBuild} onClick={() => handleBuild(bp.type)} className={`px-3 py-1.5 rounded-lg text-xs font-black border transition shrink-0 ${
+                  check.canBuild ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white border-[#93c5fd] shadow active:scale-95' : 'bg-[#cbb597] text-[#735e47] border-[#b09a7d] cursor-not-allowed'
+                }`}>
+                  🔨
+                </button>
               </div>
             );
           })}

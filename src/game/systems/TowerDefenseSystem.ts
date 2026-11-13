@@ -8,7 +8,6 @@ export interface ConstructedVisualRef {
   building: ConstructedBuilding;
   container: Phaser.GameObjects.Container;
   hpBar: Phaser.GameObjects.Graphics;
-  hpText: Phaser.GameObjects.Text;
   lastFireTime: number;
   colliders?: Phaser.Physics.Arcade.Sprite[];
 }

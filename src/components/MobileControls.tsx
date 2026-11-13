@@ -166,18 +166,19 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
 
   return (
     <div className="md:hidden pointer-events-none select-none fixed inset-0 z-40">
-      {/* 1. Contextual Island Unlock Prompt Banner */}
+      {/* 1. Contextual Island Unlock Prompt Banner (Compact 1-row icon pill) */}
       {nearIsland && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-28 pointer-events-auto animate-bounce">
           <button
             onClick={onAction}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-600 to-amber-800 border-2 border-amber-300 shadow-2xl active:scale-95 text-white"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-800 border-2 border-amber-300 shadow-2xl active:scale-95 text-white text-xs font-black tabular-nums"
           >
-            <Sparkles className="w-4 h-4 text-amber-200 fill-amber-200" />
-            <div className="flex flex-col text-left text-xs font-black text-amber-100">
-              <span>🚩 #{nearIsland.id} 영지 개척</span>
-              <span className="text-[10px] text-amber-200/90 font-bold">🪵{nearIsland.costWood} 🪨{nearIsland.costStone}{nearIsland.costGold > 0 ? ` 🪙${nearIsland.costGold}` : ''}</span>
-            </div>
+            <Sparkles className="w-3.5 h-3.5 text-amber-200 fill-amber-200" />
+            <span>🚩 #{nearIsland.id}</span>
+            <span className="text-amber-200 font-bold">
+              🪵{nearIsland.costWood} 🪨{nearIsland.costStone}
+              {nearIsland.costGold > 0 ? ` 🪙${nearIsland.costGold}` : ''}
+            </span>
           </button>
         </div>
       )}

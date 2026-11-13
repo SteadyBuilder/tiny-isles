@@ -6,7 +6,6 @@ export interface MonsterVisual {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
   hpBar: Phaser.GameObjects.Graphics;
-  nameTag: Phaser.GameObjects.Text;
   lastAttackTime: number;
 }
 
@@ -60,27 +59,11 @@ export class MonsterVisualManager {
     const hpBar = scene.add.graphics();
     container.add(hpBar);
 
-    const nameTag = scene.add.text(
-      0,
-      monster.isBoss ? -68 : -44,
-      monster.name,
-      {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: monster.isBoss ? '13px' : '11px',
-        fontStyle: 'bold',
-        color: monster.isBoss ? '#fca5a5' : '#fde047',
-        stroke: '#000000',
-        strokeThickness: 3,
-      }
-    ).setOrigin(0.5);
-    container.add(nameTag);
-
     const visual: MonsterVisual = {
       monster,
       container,
       sprite,
       hpBar,
-      nameTag,
       lastAttackTime: 0,
     };
 
@@ -98,7 +81,7 @@ export class MonsterVisualManager {
 
     mv.hpBar.clear();
     mv.hpBar.fillStyle(0x0f172a, 0.9);
-    mv.hpBar.fillRect(barX, barY, barW, barH);
+    mv.hpBar.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
     mv.hpBar.fillStyle(m.isBoss ? 0xdc2626 : 0xef4444, 1);
     mv.hpBar.fillRect(barX, barY, Math.max(2, barW * ratio), barH);
   }

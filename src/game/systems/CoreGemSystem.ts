@@ -10,7 +10,6 @@ export interface CoreGemVisualRef {
   aura: Phaser.GameObjects.Graphics;
   hpBar: Phaser.GameObjects.Graphics;
   tierText: Phaser.GameObjects.Text;
-  hpText: Phaser.GameObjects.Text;
 }
 
 export interface ICoreGemSystemContext {
@@ -190,18 +189,16 @@ export class CoreGemSystem {
     if (!isl) return;
 
     const ratio = Math.max(0, Math.min(1, isl.coreHp / Math.max(1, isl.coreMaxHp)));
-    const tierCfg = VILLAGE_TIER_CONFIGS[isl.villageTier];
     const isCentral = isl.id === 0;
 
-    cv.tierText.setText(isCentral ? `🏰 ${tierCfg.badge} ${tierCfg.name}` : `🛡️ ${tierCfg.badge} ${tierCfg.name}`);
-    cv.hpText.setText(`${isl.coreHp}/${isl.coreMaxHp}`);
+    cv.tierText.setText(`${isCentral ? '🏰' : '💎'} Lv.${isl.villageTier}`);
 
     cv.hpBar.clear();
-    cv.hpBar.fillStyle(0x0f172a, 0.85);
-    cv.hpBar.fillRect(-44, -36, 88, 7);
+    cv.hpBar.fillStyle(0x0f172a, 0.9);
+    cv.hpBar.fillRect(-36, -50, 72, 6);
 
     const barColor = ratio > 0.5 ? 0x22c55e : ratio > 0.25 ? 0xf59e0b : 0xef4444;
     cv.hpBar.fillStyle(barColor, 1);
-    cv.hpBar.fillRect(-44, -36, Math.max(2, 88 * ratio), 7);
+    cv.hpBar.fillRect(-36, -50, Math.max(2, 72 * ratio), 6);
   }
 }

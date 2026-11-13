@@ -443,60 +443,37 @@ export class WorldScene extends Phaser.Scene {
 
       // Shadow
       const shadow = this.add.graphics();
-      shadow.fillStyle(0x000000, 0.35);
-      shadow.fillEllipse(0, 48, 180, 40);
+      shadow.fillStyle(0x000000, 0.32);
+      shadow.fillEllipse(0, 32, 130, 26);
       card.add(shadow);
 
-      // Background Card
+      // Compact 2-Line Icon Badge Card
       const bg = this.add.graphics();
       bg.fillStyle(0x0f172a, 0.9);
-      bg.fillRoundedRect(-140, -64, 280, 124, 14);
-      bg.lineStyle(canAfford ? 3 : 2, canAfford ? 0x4ade80 : 0xfbbf24, 1);
-      bg.strokeRoundedRect(-140, -64, 280, 124, 14);
+      bg.fillRoundedRect(-84, -34, 168, 62, 12);
+      bg.lineStyle(canAfford ? 2.5 : 1.5, canAfford ? 0x4ade80 : 0xfbbf24, 1);
+      bg.strokeRoundedRect(-84, -34, 168, 62, 12);
       card.add(bg);
 
-      // Territory Name
-      const nameText = this.add.text(0, -42, `🚩 ${isl.name}`, {
+      // Row 1: Territory Flag #ID + Rich Bonus Badge
+      const headerStr = `🚩 #${isl.id}${isl.isAdjacentRich ? '  🌟×2' : ''}`;
+      const nameText = this.add.text(0, -16, headerStr, {
         fontFamily: 'Pretendard, sans-serif',
         fontSize: '13px',
         fontStyle: 'bold',
-        color: '#ffffff',
+        color: isl.isAdjacentRich ? '#6ee7b7' : '#ffffff',
       }).setOrigin(0.5);
       card.add(nameText);
 
-      // Rich Resource Badge (중심 마을 인접 땅은 자원이 풍부함!)
-      const richStr = isl.isAdjacentRich
-        ? '🌟 중심 마을 인접 [자원 풍요지 - 채집 2배]'
-        : '🗺️ 외곽 자원 영지 (마을 건설 가능)';
-      const richText = this.add.text(0, -20, richStr, {
+      // Row 2: Resource Icons + Costs + [E] Action Badge when affordable
+      const costStr = `🪵${isl.costWood}  🪨${isl.costStone}${isl.costGold > 0 ? `  🪙${isl.costGold}` : ''}${canAfford ? '  [E]' : ''}`;
+      const costText = this.add.text(0, 9, costStr, {
         fontFamily: 'Pretendard, sans-serif',
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: isl.isAdjacentRich ? '#34d399' : '#93c5fd',
-      }).setOrigin(0.5);
-      card.add(richText);
-
-      // Cost Text
-      const costStr = `점령 비용: 🪵${isl.costWood}  🪨${isl.costStone}${isl.costGold > 0 ? `  🪙${isl.costGold}` : ''}`;
-      const costText = this.add.text(0, 4, costStr, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '13px',
+        fontSize: '12px',
         fontStyle: 'bold',
         color: canAfford ? '#86efac' : '#fde047',
       }).setOrigin(0.5);
       card.add(costText);
-
-      // Action Prompt
-      const actionStr = canAfford
-        ? '✨ 점령 가능! [E 키 / 클릭하여 땅 점령]'
-        : '자원 부족 (인접 자원 채집으로 확보)';
-      const actionText = this.add.text(0, 30, actionStr, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: canAfford ? '#4ade80' : '#f87171',
-      }).setOrigin(0.5);
-      card.add(actionText);
 
       this.altarCardsContainer.add(card);
     }
@@ -561,22 +538,21 @@ export class WorldScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
 
-    // Core Info Badge
+    // Compact Core Badge (Icon + Lv + HP Gauge)
     const badge = this.add.graphics();
-    badge.fillStyle(0x0f172a, 0.9);
-    badge.fillRoundedRect(-92, -92, 184, 54, 9);
-    badge.lineStyle(1.5, gemColor, 1);
-    badge.strokeRoundedRect(-92, -92, 184, 54, 9);
+    badge.fillStyle(0x0f172a, 0.88);
+    badge.fillRoundedRect(-44, -76, 88, 36, 8);
+    badge.lineStyle(1.5, gemColor, 0.95);
+    badge.strokeRoundedRect(-44, -76, 88, 36, 8);
     container.add(badge);
 
-    const tierCfg = VILLAGE_TIER_CONFIGS[isl.villageTier];
     const tierText = this.add.text(
       0,
-      -78,
-      `💎 [${tierCfg.name}] 코어 보석`,
+      -63,
+      `${isCentral ? '🏰' : '💎'} Lv.${isl.villageTier}`,
       {
         fontFamily: 'Pretendard, sans-serif',
-        fontSize: '12px',
+        fontSize: '11px',
         fontStyle: 'bold',
         color: '#ffffff',
       }
@@ -586,19 +562,6 @@ export class WorldScene extends Phaser.Scene {
     const hpBar = this.add.graphics();
     container.add(hpBar);
 
-    const hpText = this.add.text(
-      0,
-      -49,
-      `HP ${isl.coreHp}/${isl.coreMaxHp} · [B] 마을/건설`,
-      {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '10px',
-        fontStyle: 'bold',
-        color: '#7dd3fc',
-      }
-    ).setOrigin(0.5);
-    container.add(hpText);
-
     const coreRef: CoreGemVisualRef = {
       territoryId: isl.id,
       container,
@@ -606,7 +569,6 @@ export class WorldScene extends Phaser.Scene {
       aura,
       hpBar,
       tierText,
-      hpText,
     };
     this.coreGemSystem.registerVisual(isl.id, coreRef);
     this.coreGemSystem.updateCoreGemVisual(isl.id);
@@ -641,22 +603,6 @@ export class WorldScene extends Phaser.Scene {
       const img = this.add.image(0, 0, b.type).setOrigin(0, 0);
       img.setDisplaySize(b.width, b.height);
       container.add(img);
-
-      // Village Hall Title Badge
-      const badge = this.add.graphics();
-      badge.fillStyle(0x0f172a, 0.85);
-      badge.fillRoundedRect(b.width / 2 - 90, -26, 180, 24, 6);
-      badge.lineStyle(1.5, 0xfbbf24, 1);
-      badge.strokeRoundedRect(b.width / 2 - 90, -26, 180, 24, 6);
-      container.add(badge);
-
-      const title = this.add.text(b.width / 2, -14, b.name, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#fef08a',
-      }).setOrigin(0.5);
-      container.add(title);
 
       this.buildingVisuals.push(container);
 
@@ -846,36 +792,14 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    // Label & HP Bar
-    const labelBg = this.add.graphics();
-    labelBg.fillStyle(0x0f172a, 0.86);
-    labelBg.fillRoundedRect(-68, -68, 136, 32, 6);
-    container.add(labelBg);
-
-    const titleText = this.add.text(0, -58, `${bp.icon} ${bp.name}`, {
-      fontFamily: 'Pretendard, sans-serif',
-      fontSize: '10px',
-      fontStyle: 'bold',
-      color: '#f8fafc',
-    }).setOrigin(0.5);
-    container.add(titleText);
-
+    // Slim HP Gauge Bar only (building name/number labels removed for clean visual UI)
     const hpBar = this.add.graphics();
     container.add(hpBar);
-
-    const hpText = this.add.text(0, -44, `${cb.hp}/${cb.maxHp}`, {
-      fontFamily: 'Pretendard, sans-serif',
-      fontSize: '9px',
-      fontStyle: 'bold',
-      color: '#86efac',
-    }).setOrigin(0.5);
-    container.add(hpText);
 
     this.constructedVisuals.set(cb.id, {
       building: cb,
       container,
       hpBar,
-      hpText,
       lastFireTime: 0,
       colliders,
     });
@@ -889,12 +813,16 @@ export class WorldScene extends Phaser.Scene {
 
     const cb = cv.building;
     const ratio = Math.max(0, Math.min(1, cb.hp / Math.max(1, cb.maxHp)));
+    const barW = 64;
+    const barH = 6;
+    const barX = -barW / 2;
+    const barY = cb.category === 'wall' ? -28 : -52;
+
     cv.hpBar.clear();
-    cv.hpBar.fillStyle(0x1e293b, 0.9);
-    cv.hpBar.fillRect(-54, -49, 108, 5);
+    cv.hpBar.fillStyle(0x0f172a, 0.88);
+    cv.hpBar.fillRoundedRect(barX - 2, barY - 2, barW + 4, barH + 4, 3);
     cv.hpBar.fillStyle(ratio > 0.5 ? 0x4ade80 : ratio > 0.25 ? 0xfacc15 : 0xef4444, 1);
-    cv.hpBar.fillRect(-54, -49, Math.max(2, 108 * ratio), 5);
-    cv.hpText.setText(`${Math.max(0, cb.hp)}/${cb.maxHp}`);
+    cv.hpBar.fillRect(barX, barY, Math.max(2, barW * ratio), barH);
   }
 
   private spawnAllEntities() {

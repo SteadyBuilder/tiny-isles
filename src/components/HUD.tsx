@@ -153,67 +153,56 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
             </div>
 
-            {/* Occupied Village Territory Count & Map Button */}
+            {/* Occupied Village Territory Count & Map Button (Single unified icon badge) */}
             <button
               id="open-minimap-btn"
               onClick={onOpenMinimap}
-              className="flex items-center gap-2 px-3 py-2 bg-slate-900/90 border border-teal-400/60 rounded-2xl shadow-xl hover:bg-slate-800 active:scale-95 transition"
-              title="클릭하여 전체 마을 영지 지도 보기"
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900/90 border border-teal-400/60 rounded-2xl shadow-xl hover:bg-slate-800 active:scale-95 transition"
+              title="5×5 전체 영지 전략 미니맵 열기"
             >
-              <img
-                src="/assets/ui/Icons/Icon_05.png"
-                alt="Sword"
-                className="w-5 h-5 pixel-art select-none"
-              />
-              <div className="flex flex-col leading-none text-left">
-                <span className="text-[10px] text-teal-300 font-black tracking-wider">
-                  점령 마을 영지
-                </span>
-                <span id="hud-unlocked-count" className="font-extrabold text-white text-sm">
-                  <span className="text-teal-200">{unlockedCount}</span>
-                  <span className="text-white/40 mx-0.5">/</span>
-                  <span>{totalIslands}</span>
-                </span>
-              </div>
+              <Compass className="w-4 h-4 text-teal-300" />
+              <span id="hud-unlocked-count" className="font-extrabold text-white text-sm tabular-nums">
+                <span className="text-teal-200">{unlockedCount}</span>
+                <span className="text-white/40 mx-0.5">/</span>
+                <span>{totalIslands}</span>
+              </span>
             </button>
 
-            {/* Village Development & Construction Button */}
+            {/* Village Development & Construction Button (Compact Icon + Lv + Core HP Badge) */}
             <button
               id="open-village-modal-btn"
               onClick={onOpenVillageModal}
-              className="flex items-center gap-2 px-3.5 py-2 bg-amber-600/90 hover:bg-amber-500 border-2 border-amber-300 rounded-2xl shadow-xl active:scale-95 transition text-black"
-              title="마을 발전 및 방어타워/성벽/건물 건설 (단축키 B)"
+              className="flex items-center gap-2 px-3 py-2 bg-amber-600/90 hover:bg-amber-500 border-2 border-amber-300 rounded-2xl shadow-xl active:scale-95 transition text-black"
+              title={`마을 발전 및 건설 (${curTierCfg.name} · 단축키 B)`}
             >
-              <Hammer className="w-4 h-4 text-black" />
-              <div className="flex flex-col leading-none text-left">
-                <span className="text-[10px] font-black uppercase text-amber-950">
-                  현재: {curTierCfg.name} · 코어 {currentTerritory?.coreHp ?? 350}HP
+              <Hammer className="w-4 h-4 text-black shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs font-black text-black leading-none tabular-nums">
+                <span>🏰 Lv.{currentTerritory?.villageTier ?? 2}</span>
+                <span className="px-1.5 py-0.5 rounded-md bg-black/15 text-[11px] text-amber-950">
+                  💎{currentTerritory?.coreHp ?? 350}
                 </span>
-                <span className="font-black text-xs text-black">
-                  🏘️ 마을 발전 & 건설 [B]
-                </span>
+                <span className="text-[10px] px-1 py-0.5 rounded bg-amber-950/20 text-amber-950">[B]</span>
               </div>
             </button>
           </div>
 
-          {/* Center: Co-op Multiplayer Status */}
-          <div className="flex items-center gap-2.5 pointer-events-auto bg-black/75 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 shadow-xl">
-            <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold">
+          {/* Center: Co-op Multiplayer Status (Compact Icon + Count + Share Icon) */}
+          <div className="flex items-center gap-2 pointer-events-auto bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-white/15 shadow-xl">
+            <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-black tabular-nums" title="접속 중인 수호자 수">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <Users className="w-3.5 h-3.5" />
-              <span>협동 디펜스 접속: {onlineCount}명</span>
+              <span>{onlineCount}</span>
             </div>
             <button
               onClick={handleCopyLink}
-              className="flex items-center gap-1 text-xs bg-white/10 hover:bg-white/20 active:scale-95 text-white/90 px-2.5 py-1 rounded-lg transition"
-              title="협동 멀티플레이 초대 링크 복사"
+              className="flex items-center justify-center w-7 h-7 bg-white/10 hover:bg-white/20 active:scale-95 text-white/90 rounded-lg transition"
+              title={copied ? '초대 링크 복사됨!' : '협동 멀티플레이 초대 링크 복사'}
             >
               {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Share2 className="w-3.5 h-3.5" />}
-              <span>{copied ? '복사됨!' : '동료 초대'}</span>
             </button>
           </div>
 
-          {/* Right: Audio, Map & Settings */}
+          {/* Right: Audio & Settings Icon Buttons */}
           <div className="flex items-center gap-2 pointer-events-auto">
             <button
               onClick={toggleSound}
@@ -233,19 +222,6 @@ export const HUD: React.FC<HUDProps> = ({
               {isMuted && (
                 <span className="absolute text-red-500 font-black text-base select-none">✕</span>
               )}
-            </button>
-
-            <button
-              id="open-minimap-top-btn"
-              onClick={onOpenMinimap}
-              className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/90 border border-teal-400/60 rounded-2xl shadow-xl hover:bg-slate-800 active:scale-95 transition"
-              title="5×5 전체 영지 전략 미니맵 열기"
-            >
-              <Compass className="w-4 h-4 text-teal-300" />
-              <div className="flex flex-col text-left leading-none">
-                <span className="text-[10px] text-teal-300 font-black">5×5 미니맵</span>
-                <span className="text-xs text-white font-bold">{unlockedCount}/{totalIslands}</span>
-              </div>
             </button>
 
             <button
@@ -270,62 +246,68 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
 
-        {/* Second Row: Real-Time Tower Defense Wave Timers (30m Monster Wave / 60m Boss Wave) & Test Controls */}
+        {/* Second Row: Compact Icon-First Wave Timers & Action Badges */}
         {waveState && (
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/88 backdrop-blur-md border border-red-500/35 px-3.5 py-2 rounded-2xl shadow-xl pointer-events-auto">
-            <div className="flex flex-wrap items-center gap-4 text-xs">
-              <div className="flex items-center gap-1.5 text-amber-300 font-bold">
-                <Skull className="w-4 h-4 text-emerald-400" />
-                <span>30분 마물 침공(좀비·스켈레톤):</span>
-                <span id="regular-wave-timer" className="font-mono font-black text-white bg-slate-800 px-2 py-0.5 rounded">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/88 backdrop-blur-md border border-red-500/35 px-3 py-1.5 rounded-2xl shadow-xl pointer-events-auto">
+            <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
+              <div
+                className="flex items-center gap-1 text-emerald-300 font-bold"
+                title="30분 주기 일반 마물 웨이브 남은 시간"
+              >
+                <Skull className="w-3.5 h-3.5 text-emerald-400" />
+                <span>🧟</span>
+                <span id="regular-wave-timer" className="font-mono font-black text-white bg-slate-800 px-1.5 py-0.5 rounded">
                   {formatSeconds(waveState.regularWaveRemainingSec)}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5 text-red-300 font-bold">
-                <Flame className="w-4 h-4 text-red-400" />
-                <span>60분 보스몬스터 출현:</span>
-                <span id="boss-wave-timer" className="font-mono font-black text-red-200 bg-red-950/70 border border-red-500/30 px-2 py-0.5 rounded">
+              <div
+                className="flex items-center gap-1 text-red-300 font-bold"
+                title="60분 주기 보스몬스터 출현 남은 시간"
+              >
+                <Flame className="w-3.5 h-3.5 text-red-400" />
+                <span>👹</span>
+                <span id="boss-wave-timer" className="font-mono font-black text-red-200 bg-red-950/70 border border-red-500/30 px-1.5 py-0.5 rounded">
                   {formatSeconds(waveState.bossWaveRemainingSec)}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5 text-slate-200 font-bold">
-                <ShieldAlert className="w-4 h-4 text-cyan-400" />
-                <span>현재 침공 마물:</span>
+              <div
+                className="flex items-center gap-1 text-slate-200 font-bold"
+                title="현재 침공 중인 마물 수"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
+                <span>⚔️</span>
                 <span id="active-monsters-count" className="font-black text-amber-300">
-                  {waveState.activeMonstersCount}마리
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  (점령지 외곽 진입 → 중심부 코어 노림)
+                  {waveState.activeMonstersCount}
                 </span>
               </div>
             </div>
 
-            {/* Immediate Wave Trigger & Speed Test Buttons */}
+            {/* Compact Wave Trigger & Speed Test Badges */}
             <div className="flex items-center gap-1.5">
               <button
                 id="trigger-regular-wave-btn"
                 onClick={onTriggerRegularWave}
-                className="px-2.5 py-1 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-bold border border-emerald-400/50 transition active:scale-95"
-                title="현실시간 30분 주기 마물(좀비/스켈레톤) 웨이브 즉시 출현 테스트"
+                className="px-2 py-1 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-black border border-emerald-400/50 transition active:scale-95"
+                title="마물 웨이브 즉시 출현"
               >
-                🧟 30분 마물웨이브 출현
+                🧟 +Wave
               </button>
 
               <button
                 id="trigger-boss-wave-btn"
                 onClick={onTriggerBossWave}
-                className="px-2.5 py-1 rounded-lg bg-red-700/85 hover:bg-red-600 text-white text-[11px] font-bold border border-red-400/50 transition active:scale-95"
-                title="현실시간 60분 주기 보스몬스터 즉시 출현 테스트"
+                className="px-2 py-1 rounded-lg bg-red-700/85 hover:bg-red-600 text-white text-[11px] font-black border border-red-400/50 transition active:scale-95"
+                title="보스몬스터 즉시 출현"
               >
-                👹 60분 보스몬스터 출현
+                👹 +Boss
               </button>
 
               <button
                 id="toggle-timescale-btn"
                 onClick={cycleTimeScale}
-                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold border border-slate-600 flex items-center gap-1 transition active:scale-95"
+                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold border border-slate-600 flex items-center gap-1 transition active:scale-95 tabular-nums"
                 title="웨이브 타이머 배속 전환 (1x / 60x / 300x)"
               >
                 <FastForward className="w-3 h-3" />
@@ -337,9 +319,9 @@ export const HUD: React.FC<HUDProps> = ({
                   id="add-test-resources-btn"
                   onClick={onAddTestResources}
                   className="px-2 py-1 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
-                  title="마을 발전 및 건물 건설 검증용 자원(+500) 지급"
+                  title="테스트 자원 +500 지급"
                 >
-                  🎁 자원+500
+                  🎁 +500
                 </button>
               )}
             </div>
@@ -350,15 +332,15 @@ export const HUD: React.FC<HUDProps> = ({
         {waveState?.activeBoss && (
           <div
             id="active-boss-banner"
-            className="w-full max-w-2xl mx-auto bg-red-950/90 border-2 border-red-500 rounded-2xl px-4 py-2 shadow-2xl pointer-events-auto animate-fadeIn"
+            className="w-full max-w-xl mx-auto bg-red-950/90 border-2 border-red-500 rounded-2xl px-3.5 py-1.5 shadow-2xl pointer-events-auto animate-fadeIn"
           >
-            <div className="flex items-center justify-between text-xs font-black text-red-200 mb-1">
-              <span>{waveState.activeBoss.name} (목표: {waveState.activeBoss.targetTerritoryName})</span>
+            <div className="flex items-center justify-between text-xs font-black text-red-200 mb-1 tabular-nums">
+              <span>👹 {waveState.activeBoss.targetTerritoryName}</span>
               <span>
-                HP {waveState.activeBoss.hp} / {waveState.activeBoss.maxHp}
+                {waveState.activeBoss.hp} / {waveState.activeBoss.maxHp}
               </span>
             </div>
-            <div className="w-full h-3 bg-black/70 rounded-full overflow-hidden border border-red-400/40">
+            <div className="w-full h-2.5 bg-black/70 rounded-full overflow-hidden border border-red-400/40">
               <div
                 className="h-full bg-gradient-to-r from-red-600 to-amber-500 transition-all duration-200"
                 style={{
@@ -408,9 +390,11 @@ export const HUD: React.FC<HUDProps> = ({
 
             <button
               onClick={onOpenVillageModal}
-              className="px-2 py-1 bg-amber-500 text-black rounded-xl text-[11px] font-black shadow border border-amber-200"
+              className="flex items-center gap-1 px-2 py-1 bg-amber-500 text-black rounded-xl text-[11px] font-black shadow border border-amber-200 tabular-nums"
+              title="마을 발전 & 건설"
             >
-              🏘️ 마을/건설
+              <Hammer className="w-3 h-3" />
+              <span>Lv.{currentTerritory?.villageTier ?? 2}</span>
             </button>
           </div>
 
@@ -418,7 +402,7 @@ export const HUD: React.FC<HUDProps> = ({
             <button
               id="open-minimap-mobile-btn"
               onClick={onOpenMinimap}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-900/95 text-teal-200 rounded-xl text-[10px] font-black border border-teal-400/60 shadow active:scale-95"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-900/95 text-teal-200 rounded-xl text-[10px] font-black border border-teal-400/60 shadow active:scale-95 tabular-nums"
               title="5×5 전체 영지 미니맵 열기"
             >
               <Compass className="w-3.5 h-3.5 text-teal-300" />
@@ -443,26 +427,28 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
 
-        {/* Mobile Compact Wave Bar */}
+        {/* Mobile Compact Icon Wave Bar */}
         {waveState && (
-          <div className="flex items-center justify-between bg-slate-950/90 border border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-white pointer-events-auto">
-            <div className="flex items-center gap-2">
-              <span>🧟30분: <b>{formatSeconds(waveState.regularWaveRemainingSec)}</b></span>
-              <span>👹60분: <b className="text-red-300">{formatSeconds(waveState.bossWaveRemainingSec)}</b></span>
-              <span>마물: <b className="text-amber-300">{waveState.activeMonstersCount}</b></span>
+          <div className="flex items-center justify-between bg-slate-950/90 border border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-white pointer-events-auto tabular-nums">
+            <div className="flex items-center gap-2.5">
+              <span>🧟 <b>{formatSeconds(waveState.regularWaveRemainingSec)}</b></span>
+              <span>👹 <b className="text-red-300">{formatSeconds(waveState.bossWaveRemainingSec)}</b></span>
+              <span>⚔️ <b className="text-amber-300">{waveState.activeMonstersCount}</b></span>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={onTriggerRegularWave}
                 className="px-1.5 py-0.5 rounded bg-emerald-700 text-white font-bold"
+                title="마물 웨이브 출현"
               >
-                웨이브
+                🧟⚡
               </button>
               <button
                 onClick={onTriggerBossWave}
                 className="px-1.5 py-0.5 rounded bg-red-700 text-white font-bold"
+                title="보스 출현"
               >
-                보스
+                👹⚡
               </button>
             </div>
           </div>
