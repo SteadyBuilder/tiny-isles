@@ -10,6 +10,7 @@ export interface ConstructedVisualRef {
   hpBar: Phaser.GameObjects.Graphics;
   hpText: Phaser.GameObjects.Text;
   lastFireTime: number;
+  colliders?: Phaser.Physics.Arcade.Sprite[];
 }
 
 export interface ITowerDefenseContext {

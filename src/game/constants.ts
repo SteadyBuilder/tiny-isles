@@ -9,6 +9,7 @@ import {
   ConstructedBuilding,
   ConstructableType,
 } from '../types/game';
+import { resolveOutdoorRelPos } from './resourceSpawnRules';
 
 export const TILE_SIZE = 64;
 export const TERRITORY_TILES = 10; // 10x10 tiles per territory (640x640 px)
@@ -937,21 +938,30 @@ export function getBuildingCollisionBox(b: Building): CollisionBox {
 }
 
 /**
- * 영지별 자원 엔티티 생성
- * - 중심 마을(id: 0)은 나무 방책과 중소마을 건물이 자리하며 기본 시작 자원을 보유
- * - 중심 마을과 인접한 땅(id: 1~8)은 자원이 매우 풍부함! (고밀도 배치 + 채집 보너스)
- * - 외곽 땅(id: 9~20)도 넓혀가며 자원을 대량 확보할 수 있도록 구성
+/**
+ * 영지별 자원 엔티티 생성 (마을 영역 `TERRITORY_PX` 외부 야외 평원 벨트에만 스폰)
+ * - 마을 내부(0..TERRITORY_PX 건축/거주 구역)에는 자원이 스폰되지 않으며, 성문 바깥 야외 평원에 분포합니다.
+ * - 중심 마을(id: 0) 외곽 평원에는 기본 시작 자원이 배치됩니다.
+ * - 중심 마을과 인접한 땅(id: 1~8) 외곽 평원은 자원이 매우 풍부합니다! (고밀도 배치 + 채집 보너스)
+ * - 외곽 땅(id: 9~20)도 넓혀가며 야외 자원을 대량 확보할 수 있도록 구성합니다.
  */
 export function generateIslandEntities(islandId: number, gridX: number, gridY: number): Entity[] {
   const origin = getIslandOrigin(gridX, gridY);
   const entities: Entity[] = [];
+  let slotCounter = islandId * 3;
+
+  const toWorldOutdoor = (relX: number, relY: number) => {
+    const out = resolveOutdoorRelPos(relX, relY, slotCounter++);
+    return { x: origin.x + out.relX, y: origin.y + out.relY };
+  };
 
   const addTree = (idSuffix: string, relX: number, relY: number, hp = 3) => {
+    const pos = toWorldOutdoor(relX, relY);
     entities.push({
       id: `t_${islandId}_${idSuffix}`,
       type: 'tree',
-      x: origin.x + relX,
-      y: origin.y + relY,
+      x: pos.x,
+      y: pos.y,
       hp,
       maxHp: hp,
       islandId,
@@ -959,11 +969,12 @@ export function generateIslandEntities(islandId: number, gridX: number, gridY: n
   };
 
   const addRock = (idSuffix: string, relX: number, relY: number, hp = 4) => {
+    const pos = toWorldOutdoor(relX, relY);
     entities.push({
       id: `r_${islandId}_${idSuffix}`,
       type: 'rock',
-      x: origin.x + relX,
-      y: origin.y + relY,
+      x: pos.x,
+      y: pos.y,
       hp,
       maxHp: hp,
       islandId,
@@ -971,11 +982,12 @@ export function generateIslandEntities(islandId: number, gridX: number, gridY: n
   };
 
   const addGoldRock = (idSuffix: string, relX: number, relY: number, hp = 5) => {
+    const pos = toWorldOutdoor(relX, relY);
     entities.push({
       id: `g_${islandId}_${idSuffix}`,
       type: 'gold_rock',
-      x: origin.x + relX,
-      y: origin.y + relY,
+      x: pos.x,
+      y: pos.y,
       hp,
       maxHp: hp,
       islandId,
@@ -983,11 +995,12 @@ export function generateIslandEntities(islandId: number, gridX: number, gridY: n
   };
 
   const addSheep = (idSuffix: string, relX: number, relY: number) => {
+    const pos = toWorldOutdoor(relX, relY);
     entities.push({
       id: `s_${islandId}_${idSuffix}`,
       type: 'sheep',
-      x: origin.x + relX,
-      y: origin.y + relY,
+      x: pos.x,
+      y: pos.y,
       hp: 3,
       maxHp: 3,
       islandId,
@@ -995,101 +1008,101 @@ export function generateIslandEntities(islandId: number, gridX: number, gridY: n
   };
 
   switch (islandId) {
-    case 0: // 중심 마을 (중소마을 + 나무 방책 내부의 시작 자원)
-      addTree('1', 430, 460);
-      addTree('2', 200, 460);
-      addTree('3', 110, 420);
-      addRock('1', 510, 120);
-      addRock('2', 520, 420);
-      addGoldRock('1', 120, 120);
-      addSheep('1', 260, 510);
+    case 0: // 중심 마을 외곽 야외 평원 시작 자원
+      addTree('1', -130, 220);
+      addTree('2', 210, 760);
+      addTree('3', 440, 760);
+      addRock('1', 760, 210);
+      addRock('2', 760, 480);
+      addGoldRock('1', 190, -135);
+      addSheep('1', -135, 480);
       break;
 
-    case 1: // [인접 풍요지] 동쪽 풍요의 삼림 마을터: 나무 + 석재 + 금광 대량 분포!
-      addTree('1', 110, 110, 4);
-      addTree('2', 230, 100, 4);
-      addTree('3', 420, 100, 4);
-      addTree('4', 530, 120, 4);
-      addTree('5', 110, 260, 4);
-      addTree('6', 530, 260, 4);
-      addTree('7', 120, 500, 4);
-      addTree('8', 250, 520, 4);
-      addTree('9', 430, 520, 4);
-      addRock('1', 530, 490, 5);
-      addRock('2', 220, 250, 5);
-      addGoldRock('1', 420, 250, 5);
+    case 1: // [인접 풍요지] 동쪽 풍요의 삼림 외곽 평원: 나무 + 석재 + 금광 대량 분포!
+      addTree('1', 110, -120, 4);
+      addTree('2', 225, -160, 4);
+      addTree('3', 430, -160, 4);
+      addTree('4', 545, -120, 4);
+      addTree('5', -135, 180, 4);
+      addTree('6', 765, 180, 4);
+      addTree('7', 115, 755, 4);
+      addTree('8', 235, 790, 4);
+      addTree('9', 435, 790, 4);
+      addRock('1', 545, 755, 5);
+      addRock('2', -150, 470, 5);
+      addGoldRock('1', 775, 470, 5);
       break;
 
-    case 2: // [인접 풍요지] 남쪽 풍요의 채석 마을터: 석재 + 금광 + 목재 대량 분포!
-      addRock('1', 110, 110, 5);
-      addRock('2', 230, 110, 5);
-      addRock('3', 420, 110, 5);
-      addRock('4', 530, 120, 5);
-      addRock('5', 110, 270, 5);
-      addRock('6', 530, 270, 5);
-      addRock('7', 130, 510, 5);
-      addGoldRock('1', 430, 510, 6);
-      addGoldRock('2', 530, 500, 6);
-      addTree('1', 240, 510, 4);
-      addTree('2', 220, 250, 4);
+    case 2: // [인접 풍요지] 남쪽 풍요의 채석 외곽 평원: 석재 + 금광 + 목재 대량 분포!
+      addRock('1', 110, -120, 5);
+      addRock('2', 225, -155, 5);
+      addRock('3', 430, -155, 5);
+      addRock('4', 545, -120, 5);
+      addRock('5', -140, 200, 5);
+      addRock('6', 765, 200, 5);
+      addRock('7', 120, 755, 5);
+      addGoldRock('1', 435, 780, 6);
+      addGoldRock('2', 550, 745, 6);
+      addTree('1', 230, 780, 4);
+      addTree('2', -145, 480, 4);
       break;
 
-    case 3: // [인접 풍요지] 서쪽 풍요의 황금 마을터: 황금 광맥 + 석재 + 목재 대량 분포!
-      addGoldRock('1', 110, 110, 6);
-      addGoldRock('2', 230, 110, 6);
-      addGoldRock('3', 420, 110, 6);
-      addGoldRock('4', 530, 120, 6);
-      addGoldRock('5', 120, 500, 6);
-      addGoldRock('6', 520, 500, 6);
-      addRock('1', 110, 260, 5);
-      addRock('2', 530, 260, 5);
-      addTree('1', 240, 510, 4);
-      addTree('2', 410, 510, 4);
+    case 3: // [인접 풍요지] 서쪽 풍요의 황금 외곽 평원: 황금 광맥 + 석재 + 목재 대량 분포!
+      addGoldRock('1', 110, -120, 6);
+      addGoldRock('2', 225, -160, 6);
+      addGoldRock('3', 430, -160, 6);
+      addGoldRock('4', 545, -120, 6);
+      addGoldRock('5', 120, 755, 6);
+      addGoldRock('6', 540, 755, 6);
+      addRock('1', -145, 210, 5);
+      addRock('2', 770, 210, 5);
+      addTree('1', 235, 785, 4);
+      addTree('2', 425, 785, 4);
       break;
 
-    case 4: // [인접 풍요지] 북쪽 풍요의 고원 마을터: 모든 자원 균형 대량 분포!
-      addGoldRock('1', 110, 110, 6);
-      addGoldRock('2', 530, 110, 6);
-      addGoldRock('3', 230, 240, 6);
-      addGoldRock('4', 410, 240, 6);
-      addRock('1', 230, 110, 5);
-      addRock('2', 410, 110, 5);
-      addRock('3', 120, 500, 5);
-      addRock('4', 520, 500, 5);
-      addTree('1', 110, 260, 4);
-      addTree('2', 530, 260, 4);
-      addTree('3', 240, 510, 4);
-      addTree('4', 410, 510, 4);
+    case 4: // [인접 풍요지] 북쪽 풍요의 고원 외곽 평원: 모든 자원 균형 대량 분포!
+      addGoldRock('1', 110, -125, 6);
+      addGoldRock('2', 545, -125, 6);
+      addGoldRock('3', -150, 210, 6);
+      addGoldRock('4', 775, 210, 6);
+      addRock('1', 225, -160, 5);
+      addRock('2', 430, -160, 5);
+      addRock('3', 120, 755, 5);
+      addRock('4', 540, 755, 5);
+      addTree('1', -145, 475, 4);
+      addTree('2', 770, 475, 4);
+      addTree('3', 235, 785, 4);
+      addTree('4', 425, 785, 4);
       break;
 
-    case 5: // [인접 풍요지] 남동쪽 과수원 마을터
-    case 6: // [인접 풍요지] 남서쪽 흑요석 광산 마을터
-    case 7: // [인접 풍요지] 북동쪽 에메랄드 숲 마을터
-    case 8: // [인접 풍요지] 북서쪽 고대 유적 마을터
-      addTree('1', 110, 110, 4);
-      addTree('2', 230, 110, 4);
-      addTree('3', 530, 120, 4);
-      addTree('4', 120, 500, 4);
-      addRock('1', 420, 110, 5);
-      addRock('2', 110, 260, 5);
-      addRock('3', 530, 260, 5);
-      addRock('4', 240, 510, 5);
-      addGoldRock('1', 420, 510, 6);
-      addGoldRock('2', 520, 500, 6);
-      addGoldRock('3', 220, 240, 6);
+    case 5: // [인접 풍요지] 남동쪽 과수원 외곽 평원
+    case 6: // [인접 풍요지] 남서쪽 흑요석 광산 외곽 평원
+    case 7: // [인접 풍요지] 북동쪽 에메랄드 숲 외곽 평원
+    case 8: // [인접 풍요지] 북서쪽 고대 유적 외곽 평원
+      addTree('1', 110, -120, 4);
+      addTree('2', 225, -160, 4);
+      addTree('3', 545, -120, 4);
+      addTree('4', 120, 755, 4);
+      addRock('1', 430, -160, 5);
+      addRock('2', -145, 210, 5);
+      addRock('3', 770, 210, 5);
+      addRock('4', 235, 785, 5);
+      addGoldRock('1', 430, 785, 6);
+      addGoldRock('2', 545, 750, 6);
+      addGoldRock('3', -150, 475, 6);
       break;
 
     default:
-      // 외곽 확장 영지 (땅을 넓혀가며 추가 자원 확보)
-      addTree('1', 120, 120, 4);
-      addTree('2', 520, 120, 4);
-      addTree('3', 120, 500, 4);
-      addRock('1', 240, 120, 5);
-      addRock('2', 400, 120, 5);
-      addRock('3', 240, 500, 5);
-      addGoldRock('1', 520, 500, 6);
-      addGoldRock('2', 400, 500, 6);
-      addGoldRock('3', 120, 260, 6);
+      // 외곽 확장 영지 야외 평원 (땅을 넓혀가며 추가 자원 확보)
+      addTree('1', 115, -125, 4);
+      addTree('2', 535, -125, 4);
+      addTree('3', 115, 755, 4);
+      addRock('1', 230, -155, 5);
+      addRock('2', 420, -155, 5);
+      addRock('3', 230, 780, 5);
+      addGoldRock('1', 535, 755, 6);
+      addGoldRock('2', 420, 780, 6);
+      addGoldRock('3', -145, 220, 6);
       break;
   }
 

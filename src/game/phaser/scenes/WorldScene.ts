@@ -43,6 +43,8 @@ import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
 import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { DEPTH, ySortDepth } from '../../depthLayers';
+import { ensureOutdoorEntityCoords } from '../../resourceSpawnRules';
+import { getWallCollisionBoxes } from '../../wallCollisionGeometry';
 
 interface RemotePlayerVisual {
   container: Phaser.GameObjects.Container;
@@ -76,6 +78,7 @@ export class WorldScene extends Phaser.Scene {
   private islands: Island[] = [];
   private buildings: Building[] = [];
   private buildingColliders: Phaser.Physics.Arcade.StaticGroup | null = null;
+  private wallColliders: Phaser.Physics.Arcade.StaticGroup | null = null;
   private buildingVisuals: Phaser.GameObjects.Container[] = [];
   private entityVisuals = new Map<string, EntityVisual>();
 
@@ -188,6 +191,7 @@ export class WorldScene extends Phaser.Scene {
 
     // 3. Buildings Static Physics Group (Village Hall & Constructed Buildings)
     this.buildingColliders = this.physics.add.staticGroup();
+    this.wallColliders = this.physics.add.staticGroup();
     this.spawnAllBuildings();
     this.spawnAllConstructedBuildings();
 
@@ -672,8 +676,12 @@ export class WorldScene extends Phaser.Scene {
    * 플레이어가 건설한 건물(방어 타워, 성벽/나무 방책, 기본건물, 특수건물) 스폰
    */
   private spawnAllConstructedBuildings() {
-    this.constructedVisuals.forEach((cv) => cv.container.destroy());
+    this.constructedVisuals.forEach((cv) => {
+      cv.colliders?.forEach((col) => col.destroy());
+      cv.container.destroy();
+    });
     this.constructedVisuals.clear();
+    this.wallColliders?.clear(true, true);
 
     for (const cb of this.constructedBuildings) {
       const isl = this.islands.find((i) => i.id === cb.territoryId);
@@ -687,6 +695,7 @@ export class WorldScene extends Phaser.Scene {
     const bp = getBlueprint(cb.type);
     const container = this.add.container(cb.x, cb.y);
     container.setDepth(ySortDepth(cb.y, 30));
+    const colliders: Phaser.Physics.Arcade.Sprite[] = [];
 
     if (cb.category === 'wall') {
       const isHorizontal = cb.slotIndex === 0 || cb.slotIndex === 1;
@@ -750,48 +759,73 @@ export class WorldScene extends Phaser.Scene {
           container.add(palisade);
         }
       } else {
-        // 석조 성벽(stone_wall) 바리케이드 그래픽스 시각화
+        // 석조 성벽(stone_wall) 바리케이드 그래픽스 시각화 (중앙 성문 통로 + 양 날개 성벽)
         const wallGraphics = this.add.graphics();
         const mainColor = 0x64748b;
         const borderColor = 0xe2e8f0;
 
         if (isHorizontal) {
-          // 좌우로 뻗은 성벽 (중앙 통로 게이트 표현 + 양 날개 방책)
-          wallGraphics.fillStyle(mainColor, 0.92);
+          // 좌/우 날개 석벽 ([-300, -44], [+44, +300])
+          wallGraphics.fillStyle(mainColor, 0.94);
           wallGraphics.lineStyle(2.5, borderColor, 0.95);
-          wallGraphics.fillRoundedRect(-268, -14, 218, 28, 6);
-          wallGraphics.strokeRoundedRect(-268, -14, 218, 28, 6);
-          wallGraphics.fillRoundedRect(50, -14, 218, 28, 6);
-          wallGraphics.strokeRoundedRect(50, -14, 218, 28, 6);
+          wallGraphics.fillRoundedRect(-300, -15, 256, 30, 6);
+          wallGraphics.strokeRoundedRect(-300, -15, 256, 30, 6);
+          wallGraphics.fillRoundedRect(44, -15, 256, 30, 6);
+          wallGraphics.strokeRoundedRect(44, -15, 256, 30, 6);
 
-          // 중앙 성문 바리케이드
-          wallGraphics.fillStyle(0x475569, 0.85);
-          wallGraphics.fillRoundedRect(-50, -10, 100, 20, 4);
-          wallGraphics.strokeRoundedRect(-50, -10, 100, 20, 4);
+          // 중앙 석조 성문 기둥 및 통로 바닥 문턱
+          wallGraphics.fillStyle(0x334155, 0.55);
+          wallGraphics.fillRoundedRect(-44, -8, 88, 16, 3);
+          wallGraphics.fillStyle(0x94a3b8, 1);
+          wallGraphics.fillRoundedRect(-54, -18, 14, 36, 4);
+          wallGraphics.strokeRoundedRect(-54, -18, 14, 36, 4);
+          wallGraphics.fillRoundedRect(40, -18, 14, 36, 4);
+          wallGraphics.strokeRoundedRect(40, -18, 14, 36, 4);
 
-          for (let px = -250; px <= 250; px += 24) {
+          for (let px = -280; px <= 280; px += 28) {
+            if (Math.abs(px) < 56) continue;
             wallGraphics.fillStyle(0x94a3b8, 1);
             wallGraphics.fillCircle(px, 0, 5);
           }
         } else {
-          // 상하로 뻗은 성벽
-          wallGraphics.fillStyle(mainColor, 0.92);
+          // 상/하 날개 석벽 ([-298, -44], [+44, +238])
+          wallGraphics.fillStyle(mainColor, 0.94);
           wallGraphics.lineStyle(2.5, borderColor, 0.95);
-          wallGraphics.fillRoundedRect(-14, -298, 28, 248, 6);
-          wallGraphics.strokeRoundedRect(-14, -298, 28, 248, 6);
-          wallGraphics.fillRoundedRect(-14, 50, 28, 188, 6);
-          wallGraphics.strokeRoundedRect(-14, 50, 28, 188, 6);
+          wallGraphics.fillRoundedRect(-15, -298, 30, 254, 6);
+          wallGraphics.strokeRoundedRect(-15, -298, 30, 254, 6);
+          wallGraphics.fillRoundedRect(-15, 44, 30, 194, 6);
+          wallGraphics.strokeRoundedRect(-15, 44, 30, 194, 6);
 
-          wallGraphics.fillStyle(0x475569, 0.85);
-          wallGraphics.fillRoundedRect(-10, -50, 20, 100, 4);
-          wallGraphics.strokeRoundedRect(-10, -50, 20, 100, 4);
+          // 중앙 석조 성문 기둥 및 통로 바닥 문턱
+          wallGraphics.fillStyle(0x334155, 0.55);
+          wallGraphics.fillRoundedRect(-8, -44, 16, 88, 3);
+          wallGraphics.fillStyle(0x94a3b8, 1);
+          wallGraphics.fillRoundedRect(-18, -54, 36, 14, 4);
+          wallGraphics.strokeRoundedRect(-18, -54, 36, 14, 4);
+          wallGraphics.fillRoundedRect(-18, 40, 36, 14, 4);
+          wallGraphics.strokeRoundedRect(-18, 40, 36, 14, 4);
 
-          for (let py = -280; py <= 220; py += 24) {
+          for (let py = -280; py <= 220; py += 28) {
+            if (Math.abs(py) < 56) continue;
             wallGraphics.fillStyle(0x94a3b8, 1);
             wallGraphics.fillCircle(0, py, 5);
           }
         }
         container.add(wallGraphics);
+      }
+
+      // 벽체 구간 Static Collider 생성 (중앙 Gate 통로 영역은 비워두어 문으로만 출입 가능)
+      const wallBoxes = getWallCollisionBoxes(cb);
+      for (const box of wallBoxes) {
+        const wallCol = this.physics.add.staticSprite(
+          box.x + box.w / 2,
+          box.y + box.h / 2,
+          ''
+        );
+        wallCol.setVisible(false);
+        wallCol.body.setSize(box.w, box.h);
+        this.wallColliders?.add(wallCol);
+        colliders.push(wallCol);
       }
     } else {
       // 방어 타워 / 기본건물 / 특수건물 스프라이트
@@ -843,6 +877,7 @@ export class WorldScene extends Phaser.Scene {
       hpBar,
       hpText,
       lastFireTime: 0,
+      colliders,
     });
 
     this.updateConstructedBuildingHpBar(cb.id);
@@ -879,6 +914,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spawnEntity(ent: Entity) {
+    // 마을 영역(TERRITORY_PX) 내부에는 자원이 스폰/리스폰되지 않도록 야외 평원 좌표 보장
+    const ownerIsl = this.islands.find((i) => i.id === ent.islandId);
+    if (ownerIsl) {
+      const origin = getIslandOrigin(ownerIsl.gridX, ownerIsl.gridY);
+      const hint = ent.id.charCodeAt(ent.id.length - 1) || 0;
+      const outdoorPos = ensureOutdoorEntityCoords(ent, origin, hint);
+      ent.x = outdoorPos.x;
+      ent.y = outdoorPos.y;
+    }
+
     const container = this.add.container(ent.x, ent.y);
     let entDepthBias = 16;
     if (ent.type === 'rock' || ent.type === 'gold_rock') entDepthBias = 20;
@@ -906,9 +951,14 @@ export class WorldScene extends Phaser.Scene {
       rockImg.setDisplaySize(64, 64);
       sprite = rockImg;
     } else if (ent.type === 'gold_rock') {
-      if (this.textures.exists('goldResource')) {
-        const goldImg = this.add.image(32, 12, 'goldResource');
-        goldImg.setDisplaySize(72, 72);
+      const useVariant2 = ent.id.includes('2') || ent.id.includes('4') || ent.id.includes('6');
+      const goldKey =
+        useVariant2 && this.textures.exists('goldResource2')
+          ? 'goldResource2'
+          : 'goldResource';
+      if (this.textures.exists(goldKey)) {
+        const goldImg = this.add.image(32, 14, goldKey);
+        goldImg.setDisplaySize(96, 96);
         sprite = goldImg;
       } else {
         const rockImg = this.add.image(32, 16, 'rock2');
@@ -971,6 +1021,9 @@ export class WorldScene extends Phaser.Scene {
 
     if (this.buildingColliders) {
       this.physics.add.collider(this.playerSprite, this.buildingColliders);
+    }
+    if (this.wallColliders) {
+      this.physics.add.collider(this.playerSprite, this.wallColliders);
     }
 
     this.playerNameTag = this.add.text(startX, startY - 42, this.playerName, {
@@ -1763,6 +1816,7 @@ export class WorldScene extends Phaser.Scene {
     const cv = this.constructedVisuals.get(buildingId);
     if (cv) {
       this.playExplosionAt(removed.x, removed.y);
+      cv.colliders?.forEach((col) => col.destroy());
       cv.container.destroy();
       this.constructedVisuals.delete(buildingId);
     }

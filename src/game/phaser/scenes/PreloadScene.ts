@@ -101,7 +101,8 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('rock4', '/assets/decorations/Rock4.png');
     this.load.image('bush', '/assets/decorations/Bushe1.png');
     this.load.image('bush2', '/assets/decorations/Bushe2.png');
-    this.load.image('goldResource', '/assets/resources/Gold_Resource.png');
+    this.load.image('goldResource', '/assets/resources/Gold_Stone_6.png');
+    this.load.image('goldResource2', '/assets/resources/Gold_Stone_5.png');
     this.load.image('woodResource', '/assets/resources/Wood Resource.png');
 
     // Buildings

@@ -64,7 +64,7 @@ export async function loadGameAssets(onProgress?: (ratio: number) => void): Prom
     archery: '/assets/buildings/Archery.png',
     monastery: '/assets/buildings/Monastery.png',
     sheep: '/assets/resources/Sheep_Idle.png',
-    goldResource: '/assets/resources/Gold_Resource.png',
+    goldResource: '/assets/resources/Gold_Stone_6.png',
     woodResource: '/assets/resources/Wood Resource.png',
     grassSeamless: '/assets/terrain/Grass_Seamless.png',
     cloud1: '/assets/decorations/Clouds_01.png',

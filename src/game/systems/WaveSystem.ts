@@ -19,6 +19,7 @@ import {
 } from '../utils/waveUtils';
 import { CoreGemSystem } from './CoreGemSystem';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
+import { distanceToCollisionBox, getWallCollisionBoxes } from '../wallCollisionGeometry';
 
 export type { MonsterVisual };
 
@@ -164,13 +165,20 @@ export class WaveSystem {
 
       const corePos = getTerritoryCorePos(targetIsl.gridX, targetIsl.gridY);
 
-      // 1순위: 진입 경로 상의 성벽/나무 방책 장애물 탐색
+      // 1순위: 진입 경로 상의 성벽/나무 방책 장애물 탐색 (날개 벽체 및 성문 전체 구간 판정)
       let blockingBuilding: ConstructedBuilding | null = null;
-      let minBldDist = 90;
+      let minBldDist = 96;
       for (const cb of constructedBuildings) {
         if (cb.territoryId === targetIsl.id && cb.hp > 0) {
-          const d = Math.hypot(m.x - cb.x, m.y - cb.y);
-          const threshold = cb.category === 'wall' ? 135 : 85;
+          const wallBoxes = cb.category === 'wall' ? getWallCollisionBoxes(cb) : [];
+          const d =
+            wallBoxes.length > 0
+              ? Math.min(
+                  Math.hypot(m.x - cb.x, m.y - cb.y),
+                  ...wallBoxes.map((box) => distanceToCollisionBox(m.x, m.y, box))
+                )
+              : Math.hypot(m.x - cb.x, m.y - cb.y);
+          const threshold = cb.category === 'wall' ? 96 : 85;
           if (d < threshold && d < minBldDist) {
             minBldDist = d;
             blockingBuilding = cb;
