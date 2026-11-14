@@ -6,30 +6,19 @@ import {
 } from '../../types/game';
 import {
   BOSS_WAVE_INTERVAL_SEC,
-  getTerritoryCorePos,
   REGULAR_WAVE_INTERVAL_SEC,
 } from '../constants';
-import { ACTIVE_WAVE_ACCELERATION_CONFIG, WORLD_CLOCK_CONFIG } from '../../data/worldRules';
+import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../data/worldRules';
 import { GameEvents } from '../events/gameEvents';
-import { ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
-import {
-  findNextInwardTargetTerritory,
-  getBossMonsterTemplate,
-  getOuterPerimeterSpawns,
-  getRegularMonsterTemplates,
-} from '../utils/waveUtils';
 import {
   getDynamicScalingProfile,
   getGlobalClockRemainingSec,
 } from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
-import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
-import {
-  getMonsterWallCollisionBox,
-  nearestPointOnCollisionBox,
-  resolveMonsterWallClamping,
-} from '../wallCollisionGeometry';
+import { MonsterCombatAI } from './MonsterCombatAI';
+import { MonsterVisual } from './MonsterVisualManager';
+import { WaveSpawner } from './WaveSpawner';
 
 export type { MonsterVisual };
 
@@ -52,15 +41,15 @@ export interface IWaveSystemContext {
 }
 
 /**
- * 글로벌 시계 기반 30분/60분 침공 타이머, 접속자 수 동적 스케일링, 조기 소환 및 몬스터 AI 시스템
+ * 글로벌 시계 기반 30분/60분 침공 타이머, 접속자 수 동적 스케일링, 조기 소환 및 전투 오케스트레이션 시스템
  */
 export class WaveSystem {
   private ctx: IWaveSystemContext;
   private coreGemSystem: CoreGemSystem;
+  private combatAI: MonsterCombatAI;
+  private spawner: WaveSpawner;
   private monsters = new Map<string, MonsterVisual>();
   private waveTimerAccum = 0;
-  private monsterSyncAccum = 0;
-  private hadMonstersLastSync = false;
   private isHost = true;
   private onlineCount = 1;
   private activeBonusMultiplier = 1.0;
@@ -88,10 +77,32 @@ export class WaveSystem {
   constructor(ctx: IWaveSystemContext, coreGemSystem: CoreGemSystem) {
     this.ctx = ctx;
     this.coreGemSystem = coreGemSystem;
-    this.setupListeners();
-  }
 
-  private setupListeners() {
+    this.combatAI = new MonsterCombatAI({
+      getMonsters: () => this.monsters,
+      getIslands: () => this.ctx.getIslands(),
+      getConstructedBuildings: () => this.ctx.getConstructedBuildings(),
+      updateConstructedBuildingHpBar: (id) => this.ctx.updateConstructedBuildingHpBar(id),
+      getConstructedVisualContainer: (id) => this.ctx.getConstructedVisualContainer(id),
+      destroyConstructedBuilding: (id) => this.ctx.destroyConstructedBuilding(id),
+      onBuildingDamaged: () => this.ctx.onBuildingDamaged?.(),
+      damageTerritoryCore: (territoryId, dmg, attacker) =>
+        this.coreGemSystem.damageTerritoryCore(territoryId, dmg, attacker, false),
+      showFloatingText: (x, y, text, color) => this.ctx.showFloatingText(x, y, text, color),
+      shakeObject: (target) => this.ctx.shakeObject(target),
+      playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
+      addRewardResources: (w, s, g) => this.ctx.addRewardResources(w, s, g),
+      broadcastMonsterHit: (id, dmg, atk) => this.ctx.broadcastMonsterHit?.(id, dmg, atk),
+    });
+
+    this.spawner = new WaveSpawner({
+      scene: ctx.scene,
+      getMonsters: () => this.monsters,
+      getIslands: () => this.ctx.getIslands(),
+      playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
+      shakeObject: (target) => this.ctx.shakeObject(target),
+    });
+
     GameEvents.on('territory-lost', this.onTerritoryLost);
   }
 
@@ -123,23 +134,23 @@ export class WaveSystem {
     return this.monsters;
   }
 
-  public setTimeScale(scale: number) {
+  public setTimeScale(scale: number): void {
     this.waveState.timeScale = scale;
     this.emitWaveState();
   }
 
-  public setOnlineCount(count: number) {
+  public setOnlineCount(count: number): void {
     this.onlineCount = Math.max(1, count);
     this.waveState.onlineScaleLabel = getDynamicScalingProfile(this.onlineCount).label;
     this.emitWaveState();
   }
 
-  public setActiveGarrisonCount(count: number) {
+  public setActiveGarrisonCount(count: number): void {
     this.waveState.activeGarrisonCount = Math.max(0, count);
     this.emitWaveState();
   }
 
-  public syncCountsFromWorldState(waveCount: number, bossWaveCount: number) {
+  public syncCountsFromWorldState(waveCount: number, bossWaveCount: number): void {
     this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
     this.waveState.regularWaveRemainingSec = getGlobalClockRemainingSec(
@@ -156,7 +167,7 @@ export class WaveSystem {
   /**
    * 자원 채집 또는 건설 시 다음 웨이브 대기 시간을 단축 (능동적 가속)
    */
-  public reduceCooldown(seconds: number) {
+  public reduceCooldown(seconds: number): void {
     if (seconds <= 0) return;
     this.waveState.regularWaveRemainingSec = Math.max(
       1,
@@ -172,22 +183,22 @@ export class WaveSystem {
   /**
    * 준비된 플레이어가 웨이브를 즉시 소환 (처치 보상 보너스 적용)
    */
-  public summonEarlyWave(isBossWave: boolean) {
+  public summonEarlyWave(isBossWave: boolean): void {
     this.activeBonusMultiplier = ACTIVE_WAVE_ACCELERATION_CONFIG.earlySummonRewardMultiplier;
     this.spawnMonsterWave(isBossWave, true, true);
   }
 
-  public triggerRegularWave() {
+  public triggerRegularWave(): void {
     this.activeBonusMultiplier = 1.0;
     this.spawnMonsterWave(false, true, false);
   }
 
-  public triggerBossWave() {
+  public triggerBossWave(): void {
     this.activeBonusMultiplier = 1.0;
     this.spawnMonsterWave(true, true, false);
   }
 
-  public emitWaveState() {
+  public emitWaveState(): void {
     this.waveState.activeMonstersCount = this.monsters.size;
     let bossInfo = null;
     const islands = this.ctx.getIslands();
@@ -209,170 +220,43 @@ export class WaveSystem {
     GameEvents.emit('wave-state-updated', { ...this.waveState });
   }
 
-  public update(time: number, delta: number) {
+  public update(time: number, delta: number): void {
     this.updateWaveTimers(delta);
-    this.updateMonsters(time, delta);
+    this.combatAI.updateMonsters(time, delta);
   }
 
-  private updateWaveTimers(delta: number) {
+  private updateWaveTimers(delta: number): void {
     this.waveTimerAccum += delta * this.waveState.timeScale;
-    if (this.waveTimerAccum >= 1000) {
-      const elapsedSec = Math.floor(this.waveTimerAccum / 1000);
-      this.waveTimerAccum -= elapsedSec * 1000;
+    if (this.waveTimerAccum < 1000) return;
 
-      this.waveState.regularWaveRemainingSec = Math.max(
-        0,
-        this.waveState.regularWaveRemainingSec - elapsedSec
-      );
-      this.waveState.bossWaveRemainingSec = Math.max(
-        0,
-        this.waveState.bossWaveRemainingSec - elapsedSec
-      );
+    const elapsedSec = Math.floor(this.waveTimerAccum / 1000);
+    this.waveTimerAccum -= elapsedSec * 1000;
 
-      if (this.waveState.regularWaveRemainingSec <= 0) {
-        this.activeBonusMultiplier = 1.0;
-        this.spawnMonsterWave(false, true, false);
-      }
-      if (this.waveState.bossWaveRemainingSec <= 0) {
-        this.activeBonusMultiplier = 1.0;
-        this.spawnMonsterWave(true, true, false);
-      }
-      this.emitWaveState();
-    }
-  }
-
-  private updateMonsters(time: number, delta: number) {
-    const dt = delta / 1000;
-    const islands = this.ctx.getIslands();
-    const constructedBuildings = this.ctx.getConstructedBuildings();
-    const aliveWalls = constructedBuildings.filter(
-      (cb) => cb.category === 'wall' && cb.hp > 0
+    this.waveState.regularWaveRemainingSec = Math.max(
+      0,
+      this.waveState.regularWaveRemainingSec - elapsedSec
+    );
+    this.waveState.bossWaveRemainingSec = Math.max(
+      0,
+      this.waveState.bossWaveRemainingSec - elapsedSec
     );
 
-    for (const mv of this.monsters.values()) {
-      const m = mv.monster;
-
-      // 타겟 영지가 이미 상실된 경우 다음 안쪽 영지(중심 마을 방향)로 재설정
-      let targetIsl = islands.find((i) => i.id === m.targetTerritoryId && i.unlocked);
-      if (!targetIsl) {
-        m.targetTerritoryId = findNextInwardTargetTerritory(m.x, m.y, islands);
-        targetIsl = islands.find((i) => i.id === m.targetTerritoryId) || islands[0];
-      }
-
-      const corePos = getTerritoryCorePos(targetIsl.gridX, targetIsl.gridY);
-
-      // 1순위: 전 영지 성벽(성문 포함 닫힌 방책) 및 목표 영지 내 방해 건물 탐색
-      let blockingBuilding: ConstructedBuilding | null = null;
-      let blockingTargetX = corePos.x;
-      let blockingTargetY = corePos.y;
-      let minBldDist = 96;
-      for (const cb of constructedBuildings) {
-        if (cb.hp <= 0) continue;
-        if (cb.category !== 'wall' && cb.territoryId !== targetIsl.id) continue;
-
-        let nearestX = cb.x;
-        let nearestY = cb.y;
-        let d = Math.hypot(m.x - cb.x, m.y - cb.y);
-
-        if (cb.category === 'wall') {
-          const solidBox = getMonsterWallCollisionBox(cb);
-          if (solidBox) {
-            const hit = nearestPointOnCollisionBox(m.x, m.y, solidBox);
-            d = hit.dist;
-            nearestX = hit.x;
-            nearestY = hit.y;
-          }
-        }
-
-        const threshold = cb.category === 'wall' ? 96 : 85;
-        if (d < threshold && d < minBldDist) {
-          minBldDist = d;
-          blockingBuilding = cb;
-          blockingTargetX = nearestX;
-          blockingTargetY = nearestY;
-        }
-      }
-
-      let targetX = blockingBuilding ? blockingTargetX : corePos.x;
-      let targetY = blockingBuilding ? blockingTargetY : corePos.y;
-      const distToTarget = Math.hypot(targetX - m.x, targetY - m.y);
-      const attackRange = blockingBuilding
-        ? blockingBuilding.category === 'wall'
-          ? 36
-          : 52
-        : 56;
-
-      let canAttackNow = distToTarget <= attackRange;
-
-      if (!canAttackNow) {
-        const vx = ((targetX - m.x) / distToTarget) * m.speed;
-        const vy = ((targetY - m.y) / distToTarget) * m.speed;
-        const nextX = m.x + vx * dt;
-        const nextY = m.y + vy * dt;
-
-        // 성벽 관통 방지 클램핑 (전 영지 살아있는 성벽 대상)
-        const clamp = resolveMonsterWallClamping(m.x, m.y, nextX, nextY, 16, aliveWalls);
-        m.x = clamp.x;
-        m.y = clamp.y;
-        m.direction = vx < 0 ? 'left' : 'right';
-
-        mv.container.setPosition(m.x, m.y);
-        mv.container.setDepth(ySortDepth(m.y, 28));
-        mv.sprite.setFlipX(m.direction === 'left');
-
-        if (clamp.blockedBy) {
-          blockingBuilding = clamp.blockedBy;
-          const solidBox = getMonsterWallCollisionBox(clamp.blockedBy);
-          if (solidBox) {
-            const hit = nearestPointOnCollisionBox(m.x, m.y, solidBox);
-            targetX = hit.x;
-            targetY = hit.y;
-          } else {
-            targetX = clamp.blockedBy.x;
-            targetY = clamp.blockedBy.y;
-          }
-          canAttackNow = true;
-        }
-      }
-
-      if (canAttackNow) {
-        // 공격 범위 진입: 방책 타격 or 코어 보석 타격!
-        if (time - mv.lastAttackTime >= 1100) {
-          mv.lastAttackTime = time;
-          this.ctx.shakeObject(mv.container);
-
-          if (blockingBuilding) {
-            blockingBuilding.hp = Math.max(0, blockingBuilding.hp - m.attack);
-            this.ctx.updateConstructedBuildingHpBar(blockingBuilding.id);
-            const bCont = this.ctx.getConstructedVisualContainer(blockingBuilding.id);
-            if (bCont) this.ctx.shakeObject(bCont);
-
-            this.ctx.showFloatingText(
-              targetX,
-              targetY - 30,
-              `🛡️ -${m.attack}`,
-              '#fb923c'
-            );
-
-            if (blockingBuilding.hp <= 0) {
-              this.ctx.destroyConstructedBuilding(blockingBuilding.id);
-            } else {
-              this.ctx.onBuildingDamaged?.();
-            }
-          } else {
-            // 2순위: 점령 영지의 코어 보석 직접 공격
-            this.coreGemSystem.damageTerritoryCore(targetIsl.id, m.attack, m.name, false);
-          }
-        }
-      }
+    if (this.waveState.regularWaveRemainingSec <= 0) {
+      this.activeBonusMultiplier = 1.0;
+      this.spawnMonsterWave(false, true, false);
     }
+    if (this.waveState.bossWaveRemainingSec <= 0) {
+      this.activeBonusMultiplier = 1.0;
+      this.spawnMonsterWave(true, true, false);
+    }
+    this.emitWaveState();
   }
 
-  public spawnMonsterWave(isBossWave: boolean, isLocalTrigger = true, isEarlySummon = false) {
-    const islands = this.ctx.getIslands();
-    const outerSpawns = getOuterPerimeterSpawns(islands);
-    if (outerSpawns.length === 0) return;
-
+  public spawnMonsterWave(
+    isBossWave: boolean,
+    isLocalTrigger = true,
+    isEarlySummon = false
+  ): void {
     if (isBossWave) {
       this.waveState.bossWaveCount += 1;
       this.waveState.bossWaveRemainingSec = getGlobalClockRemainingSec(
@@ -387,72 +271,18 @@ export class WaveSystem {
       );
     }
 
-    const scaling = getDynamicScalingProfile(this.onlineCount);
-    const waveNum = this.waveState.waveCount + this.waveState.bossWaveCount;
-    const regularTemplates = getRegularMonsterTemplates(waveNum);
-    const baseCount = isBossWave ? 6 : 5;
-    const countToSpawn = Math.max(3, Math.round(baseCount * scaling.countMultiplier));
+    const result = this.spawner.spawnWave({
+      isBossWave,
+      onlineCount: this.onlineCount,
+      waveCount: this.waveState.waveCount,
+      bossWaveCount: this.waveState.bossWaveCount,
+    });
+    if (!result) return;
 
-    for (let i = 0; i < countToSpawn; i++) {
-      const sp = outerSpawns[i % outerSpawns.length];
-      const template = regularTemplates[i % regularTemplates.length];
-      const jitterX = (Math.random() - 0.5) * 70;
-      const jitterY = (Math.random() - 0.5) * 70;
-      const scaledHp = Math.round(template.hp * scaling.hpMultiplier);
-      const scaledAttack = Math.round(template.attack * scaling.attackMultiplier);
-
-      const monster: Monster = {
-        id: `m_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
-        type: template.type,
-        name: template.name,
-        isBoss: false,
-        x: sp.spawnX + jitterX,
-        y: sp.spawnY + jitterY,
-        hp: scaledHp,
-        maxHp: scaledHp,
-        attack: scaledAttack,
-        speed: template.speed,
-        targetTerritoryId: sp.territory.id,
-        spawnTerritoryId: sp.territory.id,
-        direction: sp.spawnX > 320 ? 'left' : 'right',
-      };
-      const mv = MonsterVisualManager.create(this.ctx.scene, monster);
-      this.monsters.set(monster.id, mv);
-    }
-
-    // 60분 주기 보스몬스터 출현 (src/data/waves.ts BOSS_MONSTER_TEMPLATES 기반 + 접속자 수 스케일링)
-    let spawnedBossName = '';
-    if (isBossWave) {
-      const bossSpawn = outerSpawns[0];
-      const bossTemplate = getBossMonsterTemplate(this.waveState.bossWaveCount);
-      const bossHp = Math.round(bossTemplate.hp * scaling.hpMultiplier);
-      const bossAttack = Math.round(bossTemplate.attack * scaling.attackMultiplier);
-      spawnedBossName = bossTemplate.name;
-
-      const bossMonster: Monster = {
-        id: `boss_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        type: bossTemplate.type,
-        name: bossTemplate.name,
-        isBoss: true,
-        x: bossSpawn.spawnX,
-        y: bossSpawn.spawnY,
-        hp: bossHp,
-        maxHp: bossHp,
-        attack: bossAttack,
-        speed: bossTemplate.speed,
-        targetTerritoryId: bossSpawn.territory.id,
-        spawnTerritoryId: bossSpawn.territory.id,
-        direction: bossSpawn.spawnX > 320 ? 'left' : 'right',
-      };
-      const bossMv = MonsterVisualManager.create(this.ctx.scene, bossMonster);
-      this.monsters.set(bossMonster.id, bossMv);
-    }
-
-    const firstTerritoryName = outerSpawns[0].territory.name;
     const bonusSuffix = isEarlySummon ? ' (조기 소환 보상 +35%)' : '';
     const alertMsg = isBossWave
-      ? `👹 [${scaling.label}] 외곽 영지(${firstTerritoryName})에서 보스 '${spawnedBossName}' 군단이 침공합니다!${bonusSuffix}`
-      : `🧟 [${scaling.label}] 외곽 영지(${firstTerritoryName}) 경계에서 마물 웨이브가 진입했습니다!${bonusSuffix}`;
+      ? `👹 [${result.scalingLabel}] 외곽 영지(${result.firstTerritoryName})에서 보스 '${result.spawnedBossName}' 군단이 침공합니다!${bonusSuffix}`
+      : `🧟 [${result.scalingLabel}] 외곽 영지(${result.firstTerritoryName}) 경계에서 마물 웨이브가 진입했습니다!${bonusSuffix}`;
 
     this.waveState.lastWaveMessage = alertMsg;
     sound.playBreak();
@@ -463,7 +293,6 @@ export class WaveSystem {
       this.ctx.broadcastWaveSpawn(isBossWave);
     }
     if (this.isHost) {
-      this.hadMonstersLastSync = this.monsters.size > 0;
       this.ctx.broadcastMonstersSync?.(
         this.getMonsters(),
         this.waveState.waveCount,
@@ -474,18 +303,7 @@ export class WaveSystem {
   }
 
   public restoreMonsters(monsters: Monster[]): void {
-    for (const mv of this.monsters.values()) {
-      mv.container.destroy();
-    }
-    this.monsters.clear();
-
-    for (const m of monsters) {
-      if (m.hp <= 0) continue;
-      const cloned: Monster = { ...m };
-      const mv = MonsterVisualManager.create(this.ctx.scene, cloned);
-      this.monsters.set(cloned.id, mv);
-    }
-    this.hadMonstersLastSync = this.monsters.size > 0;
+    this.spawner.restoreMonsters(monsters);
     this.emitWaveState();
   }
 
@@ -495,40 +313,9 @@ export class WaveSystem {
     bossWaveCount: number
   ): void {
     if (this.isHost) return;
-
     this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
-
-    const incomingIds = new Set(monsters.map((m) => m.id));
-    for (const [id, mv] of this.monsters.entries()) {
-      if (!incomingIds.has(id)) {
-        this.ctx.playExplosionAt(mv.container.x, mv.container.y);
-        mv.container.destroy();
-        this.monsters.delete(id);
-      }
-    }
-
-    for (const incoming of monsters) {
-      if (incoming.hp <= 0) continue;
-      const existing = this.monsters.get(incoming.id);
-      if (existing) {
-        const prevHp = existing.monster.hp;
-        existing.monster.x = incoming.x;
-        existing.monster.y = incoming.y;
-        existing.monster.hp = incoming.hp;
-        existing.monster.maxHp = incoming.maxHp;
-        existing.monster.direction = incoming.direction;
-        existing.monster.targetTerritoryId = incoming.targetTerritoryId;
-        if (incoming.hp < prevHp) {
-          this.ctx.shakeObject(existing.container);
-          MonsterVisualManager.updateHpBar(existing);
-        }
-      } else {
-        const cloned: Monster = { ...incoming };
-        const mv = MonsterVisualManager.create(this.ctx.scene, cloned);
-        this.monsters.set(cloned.id, mv);
-      }
-    }
+    this.spawner.applyRemoteSync(monsters);
     this.emitWaveState();
   }
 
@@ -537,56 +324,16 @@ export class WaveSystem {
     damage: number,
     sourceName = '타워',
     fromRemote = false
-  ) {
-    const mv = this.monsters.get(monsterId);
-    if (!mv) return;
-
-    // 게스트는 몬스터 HP를 직접 깎지 않고 호스트에게 피격 이벤트만 전송
-    if (!this.isHost && !fromRemote) {
-      this.ctx.showFloatingText(
-        mv.monster.x,
-        mv.monster.y - 25,
-        `-${damage}`,
-        mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
-      );
-      this.ctx.shakeObject(mv.container);
-      this.ctx.broadcastMonsterHit?.(monsterId, damage, sourceName);
-      return;
-    }
-
-    mv.monster.hp = Math.max(0, mv.monster.hp - damage);
-
-    this.ctx.showFloatingText(
-      mv.monster.x,
-      mv.monster.y - 25,
-      `-${damage}`,
-      mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
-    );
-
-    if (mv.monster.hp > 0) {
-      this.ctx.shakeObject(mv.container);
-      MonsterVisualManager.updateHpBar(mv);
-      return;
-    }
-
-    if (mv.monster.hp <= 0) {
-      const deadM = mv.monster;
-      this.ctx.playExplosionAt(deadM.x, deadM.y);
-      mv.container.destroy();
-      this.monsters.delete(monsterId);
-
-      const bonus = this.activeBonusMultiplier;
-      const rewardWood = Math.round((deadM.isBoss ? 25 : 3) * bonus);
-      const rewardStone = Math.round((deadM.isBoss ? 25 : 3) * bonus);
-      const rewardGold = Math.round((deadM.isBoss ? 35 : 4) * bonus);
-
-      this.ctx.addRewardResources(rewardWood, rewardStone, rewardGold);
-
-      sound.playUnlock();
-      const rewardText = deadM.isBoss
-        ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold})`
-        : `⚔️ 마물 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold})`;
-      this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
+  ): void {
+    const killed = this.combatAI.damageMonster({
+      monsterId,
+      damage,
+      sourceName,
+      fromRemote,
+      isHost: this.isHost,
+      bonusMultiplier: this.activeBonusMultiplier,
+    });
+    if (killed) {
       this.emitWaveState();
       if (this.isHost) {
         this.ctx.onMonstersChanged?.();
@@ -594,17 +341,8 @@ export class WaveSystem {
     }
   }
 
-  public handleTerritoryLost(territoryId: number) {
-    const islands = this.ctx.getIslands();
-    for (const mv of this.monsters.values()) {
-      if (mv.monster.targetTerritoryId === territoryId) {
-        mv.monster.targetTerritoryId = findNextInwardTargetTerritory(
-          mv.monster.x,
-          mv.monster.y,
-          islands
-        );
-      }
-    }
+  public handleTerritoryLost(territoryId: number): void {
+    this.combatAI.retargetFromLostTerritory(territoryId);
     this.emitWaveState();
   }
 }
