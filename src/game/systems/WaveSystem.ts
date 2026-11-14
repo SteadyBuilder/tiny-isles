@@ -26,8 +26,9 @@ import {
 import { CoreGemSystem } from './CoreGemSystem';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import {
-  getWallCollisionBoxes,
+  getMonsterWallCollisionBox,
   nearestPointOnCollisionBox,
+  resolveMonsterWallClamping,
 } from '../wallCollisionGeometry';
 
 export type { MonsterVisual };
@@ -244,6 +245,9 @@ export class WaveSystem {
     const dt = delta / 1000;
     const islands = this.ctx.getIslands();
     const constructedBuildings = this.ctx.getConstructedBuildings();
+    const aliveWalls = constructedBuildings.filter(
+      (cb) => cb.category === 'wall' && cb.hp > 0
+    );
 
     for (const mv of this.monsters.values()) {
       const m = mv.monster;
@@ -257,41 +261,40 @@ export class WaveSystem {
 
       const corePos = getTerritoryCorePos(targetIsl.gridX, targetIsl.gridY);
 
-      // 1순위: 진입 경로 상의 성벽/나무 방책 장애물 탐색 (날개 벽체 및 성문 전체 구간 판정)
+      // 1순위: 전 영지 성벽(성문 포함 닫힌 방책) 및 목표 영지 내 방해 건물 탐색
       let blockingBuilding: ConstructedBuilding | null = null;
       let blockingTargetX = corePos.x;
       let blockingTargetY = corePos.y;
       let minBldDist = 96;
       for (const cb of constructedBuildings) {
-        if (cb.territoryId === targetIsl.id && cb.hp > 0) {
-          const wallBoxes = cb.category === 'wall' ? getWallCollisionBoxes(cb) : [];
-          let nearestX = cb.x;
-          let nearestY = cb.y;
-          let d = Math.hypot(m.x - cb.x, m.y - cb.y);
+        if (cb.hp <= 0) continue;
+        if (cb.category !== 'wall' && cb.territoryId !== targetIsl.id) continue;
 
-          if (wallBoxes.length > 0) {
-            for (const box of wallBoxes) {
-              const hit = nearestPointOnCollisionBox(m.x, m.y, box);
-              if (hit.dist < d) {
-                d = hit.dist;
-                nearestX = hit.x;
-                nearestY = hit.y;
-              }
-            }
-          }
+        let nearestX = cb.x;
+        let nearestY = cb.y;
+        let d = Math.hypot(m.x - cb.x, m.y - cb.y);
 
-          const threshold = cb.category === 'wall' ? 96 : 85;
-          if (d < threshold && d < minBldDist) {
-            minBldDist = d;
-            blockingBuilding = cb;
-            blockingTargetX = nearestX;
-            blockingTargetY = nearestY;
+        if (cb.category === 'wall') {
+          const solidBox = getMonsterWallCollisionBox(cb);
+          if (solidBox) {
+            const hit = nearestPointOnCollisionBox(m.x, m.y, solidBox);
+            d = hit.dist;
+            nearestX = hit.x;
+            nearestY = hit.y;
           }
+        }
+
+        const threshold = cb.category === 'wall' ? 96 : 85;
+        if (d < threshold && d < minBldDist) {
+          minBldDist = d;
+          blockingBuilding = cb;
+          blockingTargetX = nearestX;
+          blockingTargetY = nearestY;
         }
       }
 
-      const targetX = blockingBuilding ? blockingTargetX : corePos.x;
-      const targetY = blockingBuilding ? blockingTargetY : corePos.y;
+      let targetX = blockingBuilding ? blockingTargetX : corePos.x;
+      let targetY = blockingBuilding ? blockingTargetY : corePos.y;
       const distToTarget = Math.hypot(targetX - m.x, targetY - m.y);
       const attackRange = blockingBuilding
         ? blockingBuilding.category === 'wall'
@@ -299,17 +302,40 @@ export class WaveSystem {
           : 52
         : 56;
 
-      if (distToTarget > attackRange) {
+      let canAttackNow = distToTarget <= attackRange;
+
+      if (!canAttackNow) {
         const vx = ((targetX - m.x) / distToTarget) * m.speed;
         const vy = ((targetY - m.y) / distToTarget) * m.speed;
-        m.x += vx * dt;
-        m.y += vy * dt;
+        const nextX = m.x + vx * dt;
+        const nextY = m.y + vy * dt;
+
+        // 성벽 관통 방지 클램핑 (전 영지 살아있는 성벽 대상)
+        const clamp = resolveMonsterWallClamping(m.x, m.y, nextX, nextY, 16, aliveWalls);
+        m.x = clamp.x;
+        m.y = clamp.y;
         m.direction = vx < 0 ? 'left' : 'right';
 
         mv.container.setPosition(m.x, m.y);
         mv.container.setDepth(ySortDepth(m.y, 28));
         mv.sprite.setFlipX(m.direction === 'left');
-      } else {
+
+        if (clamp.blockedBy) {
+          blockingBuilding = clamp.blockedBy;
+          const solidBox = getMonsterWallCollisionBox(clamp.blockedBy);
+          if (solidBox) {
+            const hit = nearestPointOnCollisionBox(m.x, m.y, solidBox);
+            targetX = hit.x;
+            targetY = hit.y;
+          } else {
+            targetX = clamp.blockedBy.x;
+            targetY = clamp.blockedBy.y;
+          }
+          canAttackNow = true;
+        }
+      }
+
+      if (canAttackNow) {
         // 공격 범위 진입: 방책 타격 or 코어 보석 타격!
         if (time - mv.lastAttackTime >= 1100) {
           mv.lastAttackTime = time;

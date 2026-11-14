@@ -2,7 +2,10 @@ import Phaser from 'phaser';
 import { ConstructedBuilding, Island } from '../../../types/game';
 import { getBlueprint } from '../../constants';
 import { ySortDepth } from '../../depthLayers';
-import { getWallCollisionBoxes } from '../../wallCollisionGeometry';
+import {
+  getConstructedBuildingFootprintBox,
+  getWallCollisionBoxes,
+} from '../../wallCollisionGeometry';
 import { ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
 
 /**
@@ -92,6 +95,21 @@ export class ConstructedBuildingRenderer {
         rangeRing.lineStyle(1, cb.type === 'magic_tower' ? 0xc084fc : 0x38bdf8, 0.18);
         rangeRing.strokeCircle(0, 0, bp.range);
         container.add(rangeRing);
+      }
+
+      const footBox = getConstructedBuildingFootprintBox(cb);
+      const footCol = this.scene.physics.add.staticSprite(
+        footBox.x + footBox.w / 2,
+        footBox.y + footBox.h / 2,
+        ''
+      );
+      footCol.setVisible(false);
+      footCol.setDisplaySize(footBox.w, footBox.h);
+      footCol.refreshBody();
+      this.wallColliders.add(footCol);
+      colliders.push(footCol);
+      if (refreshColliders) {
+        this.wallColliders.refresh();
       }
     }
 
