@@ -11,7 +11,6 @@ import {
   VillageTier,
   WorldSyncState,
 } from '../../types/game';
-import { storage } from '../../lib/storage';
 import { worldStateSync } from '../../lib/worldStateSync';
 import { resolveOfflinePeriod } from '../utils/offlineResolver';
 import { EventBus } from '../phaser/EventBus';
@@ -42,6 +41,7 @@ export class LivingWorldCoordinator {
   private garrisonSystem: GarrisonSystem;
   private worldSnapshotAccumMs = 0;
   private garrisonSyncAccumMs = 0;
+  private immediateSnapshotTimer: ReturnType<typeof setTimeout> | null = null;
   private initialized = false;
   private disposed = false;
 
@@ -57,6 +57,10 @@ export class LivingWorldCoordinator {
 
   public destroy(): void {
     this.disposed = true;
+    if (this.immediateSnapshotTimer) {
+      clearTimeout(this.immediateSnapshotTimer);
+      this.immediateSnapshotTimer = null;
+    }
   }
 
   public async initialize(): Promise<void> {
@@ -82,14 +86,9 @@ export class LivingWorldCoordinator {
 
       let baseIslands = this.ctx.getIslands();
       let baseBuildings = this.ctx.getConstructedBuildings();
-      const localUnlockedCount = baseIslands.filter((i) => i.unlocked).length;
 
-      // 다른 기기/새 세션에서 서버 월드 스냅샷을 불러온 경우 영지 및 건물 상태 동기화
-      if (
-        localUnlockedCount <= 1 &&
-        Array.isArray(savedWorld.unlockedIslandIds) &&
-        savedWorld.unlockedIslandIds.length > 1
-      ) {
+      // 서버 DB(world_state)를 단일 진실 공급원(SSOT)으로 사용하여 영지 및 건물 상태 동기화
+      if (Array.isArray(savedWorld.unlockedIslandIds) && savedWorld.unlockedIslandIds.length > 0) {
         baseIslands = baseIslands.map((isl) => {
           const isUnlocked = savedWorld.unlockedIslandIds.includes(isl.id) || isl.id === 0;
           const tier = isUnlocked
@@ -112,6 +111,11 @@ export class LivingWorldCoordinator {
         });
       }
 
+      const savedMonsters = Array.isArray(savedWorld.activeMonsters)
+        ? savedWorld.activeMonsters.filter((m) => m.hp > 0)
+        : [];
+      const hasBossActive = savedMonsters.some((m) => m.isBoss);
+
       const resolution = resolveOfflinePeriod({
         lastActiveAtIso: savedWorld.lastActiveAt,
         nowMs: Date.now(),
@@ -120,6 +124,8 @@ export class LivingWorldCoordinator {
         islands: baseIslands,
         constructedBuildings: baseBuildings,
         garrisons,
+        activeMonstersCount: savedMonsters.length,
+        hasBossActive,
       });
 
       if (resolution.shouldReport && resolution.report) {
@@ -133,11 +139,18 @@ export class LivingWorldCoordinator {
           resolution.newBossWaveCount
         );
         this.emitOfflineReport(resolution.report);
+      } else if (savedMonsters.length > 0) {
+        // 5분 미만 재접속 등 오프라인 정산 대상이 아닌 경우 진행 중이던 몬스터 복원
+        this.waveSystem.restoreMonsters(savedMonsters);
       }
     }
 
     if (this.disposed) return;
-    await this.persistAllSnapshots();
+    if (this.waveSystem.getIsHost()) {
+      await this.persistAllSnapshots();
+    } else {
+      await this.saveLocalGarrison();
+    }
   }
 
   private emitOfflineReport(report: OfflineResolutionReport) {
@@ -152,7 +165,9 @@ export class LivingWorldCoordinator {
 
     if (this.worldSnapshotAccumMs >= WORLD_CLOCK_CONFIG.worldSnapshotIntervalMs) {
       this.worldSnapshotAccumMs = 0;
-      void this.saveWorldSnapshot();
+      if (this.waveSystem.getIsHost()) {
+        void this.saveWorldSnapshot();
+      }
     }
 
     if (this.garrisonSyncAccumMs >= WORLD_CLOCK_CONFIG.garrisonSyncIntervalMs) {
@@ -161,8 +176,25 @@ export class LivingWorldCoordinator {
     }
   }
 
+  public requestImmediateSnapshot(): void {
+    if (!this.initialized || this.disposed || !this.waveSystem.getIsHost()) return;
+    if (this.immediateSnapshotTimer) {
+      clearTimeout(this.immediateSnapshotTimer);
+    }
+    this.immediateSnapshotTimer = setTimeout(() => {
+      this.immediateSnapshotTimer = null;
+      if (!this.disposed && this.waveSystem.getIsHost()) {
+        void this.saveWorldSnapshot();
+      }
+    }, 800);
+  }
+
   public async persistAllSnapshots(): Promise<void> {
-    await Promise.all([this.saveWorldSnapshot(), this.saveLocalGarrison()]);
+    if (this.waveSystem.getIsHost()) {
+      await Promise.all([this.saveWorldSnapshot(), this.saveLocalGarrison()]);
+    } else {
+      await this.saveLocalGarrison();
+    }
   }
 
   public saveWorldSnapshot(): Promise<boolean> {
@@ -190,13 +222,8 @@ export class LivingWorldCoordinator {
       villageTiers,
       coreHps,
       constructedBuildings: this.ctx.getConstructedBuildings(),
+      activeMonsters: this.waveSystem.getMonsters(),
     };
-
-    // 로컬 영지 스토리지에도 최신 상태 반영
-    storage.saveUnlockedIslands(unlockedIslandIds);
-    storage.saveVillageTiers(villageTiers);
-    storage.saveCoreHps(coreHps);
-    storage.saveConstructedBuildings(state.constructedBuildings);
 
     return worldStateSync.saveWorldState(state);
   }

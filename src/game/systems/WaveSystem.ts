@@ -9,7 +9,7 @@ import {
   getTerritoryCorePos,
   REGULAR_WAVE_INTERVAL_SEC,
 } from '../constants';
-import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../data/worldRules';
+import { ACTIVE_WAVE_ACCELERATION_CONFIG, WORLD_CLOCK_CONFIG } from '../../data/worldRules';
 import { EventBus } from '../phaser/EventBus';
 import { ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
@@ -45,6 +45,9 @@ export interface IWaveSystemContext {
   playExplosionAt: (x: number, y: number) => void;
   addRewardResources: (wood: number, stone: number, gold: number) => void;
   broadcastWaveSpawn?: (isBossWave: boolean) => void;
+  broadcastMonstersSync?: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
+  broadcastMonsterHit?: (monsterId: string, damage: number, attackerName: string) => void;
+  onMonstersChanged?: () => void;
 }
 
 /**
@@ -55,6 +58,9 @@ export class WaveSystem {
   private coreGemSystem: CoreGemSystem;
   private monsters = new Map<string, MonsterVisual>();
   private waveTimerAccum = 0;
+  private monsterSyncAccum = 0;
+  private hadMonstersLastSync = false;
+  private isHost = true;
   private onlineCount = 1;
   private activeBonusMultiplier = 1.0;
 
@@ -96,12 +102,20 @@ export class WaveSystem {
     this.monsters.clear();
   }
 
+  public setHostMode(isHost: boolean): void {
+    this.isHost = isHost;
+  }
+
+  public getIsHost(): boolean {
+    return this.isHost;
+  }
+
   public getWaveState(): WaveState {
     return { ...this.waveState };
   }
 
   public getMonsters(): Monster[] {
-    return Array.from(this.monsters.values()).map((m) => m.monster);
+    return Array.from(this.monsters.values()).map((m) => ({ ...m.monster }));
   }
 
   public getMonsterVisuals(): Map<string, MonsterVisual> {
@@ -422,11 +436,97 @@ export class WaveSystem {
     if (isLocalTrigger && this.ctx.broadcastWaveSpawn) {
       this.ctx.broadcastWaveSpawn(isBossWave);
     }
+    if (this.isHost) {
+      this.hadMonstersLastSync = this.monsters.size > 0;
+      this.ctx.broadcastMonstersSync?.(
+        this.getMonsters(),
+        this.waveState.waveCount,
+        this.waveState.bossWaveCount
+      );
+      this.ctx.onMonstersChanged?.();
+    }
   }
 
-  public damageMonster(monsterId: string, damage: number, _sourceName = '타워') {
+  public restoreMonsters(monsters: Monster[]): void {
+    for (const mv of this.monsters.values()) {
+      mv.container.destroy();
+    }
+    this.monsters.clear();
+
+    for (const m of monsters) {
+      if (m.hp <= 0) continue;
+      const cloned: Monster = { ...m };
+      const mv = MonsterVisualManager.create(this.ctx.scene, cloned);
+      this.monsters.set(cloned.id, mv);
+    }
+    this.hadMonstersLastSync = this.monsters.size > 0;
+    this.emitWaveState();
+  }
+
+  public applyRemoteMonstersSync(
+    monsters: Monster[],
+    waveCount: number,
+    bossWaveCount: number
+  ): void {
+    if (this.isHost) return;
+
+    this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
+    this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
+
+    const incomingIds = new Set(monsters.map((m) => m.id));
+    for (const [id, mv] of this.monsters.entries()) {
+      if (!incomingIds.has(id)) {
+        this.ctx.playExplosionAt(mv.container.x, mv.container.y);
+        mv.container.destroy();
+        this.monsters.delete(id);
+      }
+    }
+
+    for (const incoming of monsters) {
+      if (incoming.hp <= 0) continue;
+      const existing = this.monsters.get(incoming.id);
+      if (existing) {
+        const prevHp = existing.monster.hp;
+        existing.monster.x = incoming.x;
+        existing.monster.y = incoming.y;
+        existing.monster.hp = incoming.hp;
+        existing.monster.maxHp = incoming.maxHp;
+        existing.monster.direction = incoming.direction;
+        existing.monster.targetTerritoryId = incoming.targetTerritoryId;
+        if (incoming.hp < prevHp) {
+          this.ctx.shakeObject(existing.container);
+          MonsterVisualManager.updateHpBar(existing);
+        }
+      } else {
+        const cloned: Monster = { ...incoming };
+        const mv = MonsterVisualManager.create(this.ctx.scene, cloned);
+        this.monsters.set(cloned.id, mv);
+      }
+    }
+    this.emitWaveState();
+  }
+
+  public damageMonster(
+    monsterId: string,
+    damage: number,
+    sourceName = '타워',
+    fromRemote = false
+  ) {
     const mv = this.monsters.get(monsterId);
     if (!mv) return;
+
+    // 게스트는 몬스터 HP를 직접 깎지 않고 호스트에게 피격 이벤트만 전송
+    if (!this.isHost && !fromRemote) {
+      this.ctx.showFloatingText(
+        mv.monster.x,
+        mv.monster.y - 25,
+        `-${damage}`,
+        mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
+      );
+      this.ctx.shakeObject(mv.container);
+      this.ctx.broadcastMonsterHit?.(monsterId, damage, sourceName);
+      return;
+    }
 
     mv.monster.hp = Math.max(0, mv.monster.hp - damage);
 
@@ -462,6 +562,9 @@ export class WaveSystem {
         : `⚔️ 마물 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold})`;
       this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
       this.emitWaveState();
+      if (this.isHost) {
+        this.ctx.onMonstersChanged?.();
+      }
     }
   }
 

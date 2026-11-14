@@ -132,8 +132,10 @@ export class TowerDefenseSystem {
         // 적중 파티클 스파크 연출
         this.playHitSpark(targetMv.monster.x, targetMv.monster.y, source.type === 'magic_tower');
 
-        // WaveSystem의 damageMonster 호출 (처치 시 자원 드랍 & 파티클 처리 자동 발동)
-        this.waveSystem.damageMonster(targetMonsterId, damage, source.name);
+        // WaveSystem의 damageMonster 호출 (호스트만 권위 데미지 연산)
+        if (this.waveSystem.getIsHost()) {
+          this.waveSystem.damageMonster(targetMonsterId, damage, source.name);
+        }
       },
     });
   }

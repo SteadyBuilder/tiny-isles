@@ -249,6 +249,11 @@ export class WorldScene extends Phaser.Scene {
           EventBus.emit('inventory-updated', this.inventory);
         },
         broadcastWaveSpawn: (isBossWave) => this.multiplayerSync?.broadcastWaveSpawn(isBossWave),
+        broadcastMonstersSync: (monsters, waveCount, bossWaveCount) =>
+          this.multiplayerSync?.broadcastMonstersSync(monsters, waveCount, bossWaveCount),
+        broadcastMonsterHit: (monsterId, damage, attackerName) =>
+          this.multiplayerSync?.broadcastMonsterHit(monsterId, damage, attackerName),
+        onMonstersChanged: () => this.livingWorldCoordinator?.requestImmediateSnapshot(),
       },
       this.coreGemSystem
     );
@@ -353,6 +358,20 @@ export class WorldScene extends Phaser.Scene {
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupScene());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanupScene());
+
+    if (typeof window !== 'undefined') {
+      const handleUnload = () => {
+        if (this.waveSystem?.getIsHost()) {
+          void this.livingWorldCoordinator?.persistAllSnapshots();
+        }
+      };
+      window.addEventListener('pagehide', handleUnload);
+      window.addEventListener('beforeunload', handleUnload);
+      this.unbindEventBus.push(() => {
+        window.removeEventListener('pagehide', handleUnload);
+        window.removeEventListener('beforeunload', handleUnload);
+      });
+    }
 
     // 15. Notify React scene is ready & emit initial states
     EventBus.emit('scene-ready', this);
@@ -1411,6 +1430,12 @@ export class WorldScene extends Phaser.Scene {
         action: this.currentAction,
       }),
       onOnlineCountChanged: (count) => this.waveSystem.setOnlineCount(count),
+      onHostStatusChanged: (isHost) => {
+        this.waveSystem.setHostMode(isHost);
+        if (isHost) {
+          this.livingWorldCoordinator?.requestImmediateSnapshot();
+        }
+      },
       onRemoteEntityHit: (entityId, damage, hitByName) =>
         this.handleRemoteHit(entityId, damage, hitByName),
       onRemoteIslandUnlocked: (islandId, unlockedBy) =>
@@ -1425,7 +1450,22 @@ export class WorldScene extends Phaser.Scene {
           this.emitWorldStateToReact();
         }
       },
-      onRemoteWaveSpawned: (isBossWave) => this.spawnMonsterWave(isBossWave, false),
+      onRemoteWaveSpawned: (isBossWave) => {
+        sound.playBreak();
+        EventBus.emit(
+          'game-alert',
+          isBossWave
+            ? '👹 외곽 영지에서 보스 군단 침공이 시작되었습니다!'
+            : '🧟 외곽 영지 경계에서 마물 웨이브가 진입했습니다!'
+        );
+      },
+      onRemoteMonstersSync: (monsters, waveCount, bossWaveCount) =>
+        this.waveSystem.applyRemoteMonstersSync(monsters, waveCount, bossWaveCount),
+      onRemoteMonsterHit: (monsterId, damage, attackerName) => {
+        if (this.waveSystem.getIsHost()) {
+          this.waveSystem.damageMonster(monsterId, damage, attackerName, true);
+        }
+      },
       onRemoteTerritoryLost: (territoryId, reason) =>
         this.loseTerritoryByCoreDestruction(territoryId, reason, false),
     });

@@ -2,6 +2,7 @@ import { GARRISON_CONFIG } from '../data/worldRules';
 import {
   ConstructedBuilding,
   GarrisonUnit,
+  Monster,
   VillageTier,
   WorldSyncState,
 } from '../types/game';
@@ -17,7 +18,10 @@ function readLocalWorldState(): WorldSyncState | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as WorldSyncState;
     if (parsed && typeof parsed.lastActiveAt === 'string') {
-      return parsed;
+      return {
+        ...parsed,
+        activeMonsters: Array.isArray(parsed.activeMonsters) ? parsed.activeMonsters : [],
+      };
     }
   } catch {
     // ignore storage read error
@@ -54,6 +58,7 @@ function writeLocalGarrisons(units: GarrisonUnit[]): void {
 
 /**
  * 리빙 아일즈 월드 스냅샷 및 비동기 수비대 DB/로컬 폴백 동기화 서비스
+ * - 서버 DB(world_state)를 단일 진실 공급원(SSOT)으로 사용하며, 로컬 캐시는 DB 미연결 시 폴백으로만 사용합니다.
  */
 export const worldStateSync = {
   fetchWorldState: async (worldId: string = DEFAULT_WORLD_ID): Promise<WorldSyncState | null> => {
@@ -82,15 +87,11 @@ export const worldStateSync = {
         constructedBuildings: Array.isArray(data.constructed_buildings)
           ? (data.constructed_buildings as ConstructedBuilding[])
           : [],
+        activeMonsters: Array.isArray(data.active_monsters)
+          ? (data.active_monsters as Monster[])
+          : [],
       };
 
-      // 로컬 기록이 더 최신이면(DB 테이블 미생성 또는 오프라인 테스트 시) 더 최신 시점 채택
-      if (
-        localFallback &&
-        Date.parse(localFallback.lastActiveAt) > Date.parse(remote.lastActiveAt)
-      ) {
-        return localFallback;
-      }
       return remote;
     } catch {
       return localFallback;
@@ -110,6 +111,7 @@ export const worldStateSync = {
           village_tiers: state.villageTiers,
           core_hps: state.coreHps,
           constructed_buildings: state.constructedBuildings,
+          active_monsters: state.activeMonsters,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'world_id' }

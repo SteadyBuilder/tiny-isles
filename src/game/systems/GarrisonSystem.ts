@@ -187,11 +187,13 @@ export class GarrisonSystem {
       onComplete: () => {
         if (proj.scene) proj.destroy();
         if (!scene.sys || !scene.scene?.isActive()) return;
-        this.waveSystem.damageMonster(
-          targetId,
-          GARRISON_CONFIG.baseAttack,
-          `${ref.unit.name} 수비대`
-        );
+        if (this.waveSystem.getIsHost()) {
+          this.waveSystem.damageMonster(
+            targetId,
+            GARRISON_CONFIG.baseAttack,
+            `${ref.unit.name} 수비대`
+          );
+        }
       },
     });
   }

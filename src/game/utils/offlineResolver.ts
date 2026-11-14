@@ -21,6 +21,8 @@ export interface OfflineResolveInput {
   islands: Island[];
   constructedBuildings: ConstructedBuilding[];
   garrisons: GarrisonUnit[];
+  activeMonstersCount?: number;
+  hasBossActive?: boolean;
 }
 
 export interface OfflineResolveOutput {
@@ -107,7 +109,7 @@ export function resolveOfflinePeriod(input: OfflineResolveInput): OfflineResolve
     };
   }
 
-  const simulatedRegularWaves = countCrossedWaveBoundaries(
+  const crossedRegularWaves = countCrossedWaveBoundaries(
     lastActiveMs,
     input.nowMs,
     WORLD_CLOCK_CONFIG.regularWaveIntervalSec,
@@ -119,6 +121,11 @@ export function resolveOfflinePeriod(input: OfflineResolveInput): OfflineResolve
     WORLD_CLOCK_CONFIG.bossWaveIntervalSec,
     Math.floor(OFFLINE_RESOLUTION_CONFIG.maxSimulatedWaves / 2)
   );
+
+  // 진행 중이던 미완료 웨이브가 있었다면 최소 1회 웨이브 공방으로 정산에 포함
+  const hasUnfinishedWave = (input.activeMonstersCount ?? 0) > 0;
+  const simulatedRegularWaves =
+    crossedRegularWaves === 0 && hasUnfinishedWave ? 1 : crossedRegularWaves;
 
   // 지난 웨이브가 전혀 없고 시간만 흐른 경우 패시브 자원만 소폭 정산할지 여부
   const totalWaves = Math.max(1, simulatedRegularWaves);
@@ -133,7 +140,9 @@ export function resolveOfflinePeriod(input: OfflineResolveInput): OfflineResolve
     OFFLINE_RESOLUTION_CONFIG.baseWaveThreatPower +
     avgWaveIndex * OFFLINE_RESOLUTION_CONFIG.threatPowerPerWave;
   const bossThreat =
-    simulatedBossWaves > 0 ? OFFLINE_RESOLUTION_CONFIG.bossExtraThreatPower : 0;
+    simulatedBossWaves > 0 || input.hasBossActive
+      ? OFFLINE_RESOLUTION_CONFIG.bossExtraThreatPower
+      : 0;
   const threatPower = Math.round(singleWaveThreat + bossThreat);
 
   const victory = defensePower >= threatPower;

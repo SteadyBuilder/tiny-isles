@@ -221,6 +221,7 @@ export interface WorldSyncState {
   villageTiers: Record<number, VillageTier>;
   coreHps: Record<number, number>;
   constructedBuildings: ConstructedBuilding[];
+  activeMonsters: Monster[];
 }
 
 export interface OfflineResolutionReport {

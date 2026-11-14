@@ -8,8 +8,9 @@ import { BOSS_WAVE_INTERVAL_SEC, REGULAR_WAVE_INTERVAL_SEC } from './waves';
 export const WORLD_CLOCK_CONFIG = {
   regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC, // 1800초 (30분)
   bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,       // 3600초 (60분)
-  worldSnapshotIntervalMs: 30_000,                   // 30초마다 월드 상태 스냅샷 저장
+  worldSnapshotIntervalMs: 10_000,                   // 10초마다 월드 상태 스냅샷 저장
   garrisonSyncIntervalMs: 25_000,                    // 25초마다 내 수비대 위치 갱신
+  monsterSyncIntervalMs: 180,                        // 호스트 -> 게스트 몬스터 상태 브로드캐스트 주기
 } as const;
 
 /**

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import {
   ConstructedBuilding,
+  Monster,
   Player,
   PlayerAction,
   PlayerColor,
@@ -10,6 +11,7 @@ import { supabase } from '../../../lib/supabase';
 import { serverSync } from '../../../lib/serverSync';
 import { ySortDepth } from '../../depthLayers';
 import { EventBus } from '../EventBus';
+import { electHostFromPresence, PresenceEntryMeta } from './HostAuthorityHelper';
 
 interface RemotePlayerVisual {
   container: Phaser.GameObjects.Container;
@@ -30,11 +32,14 @@ export interface IMultiplayerSyncContext {
     action: PlayerAction;
   };
   onOnlineCountChanged: (count: number) => void;
+  onHostStatusChanged?: (isHost: boolean) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteIslandUnlocked: (islandId: number, unlockedBy: string) => void;
   onRemoteVillageUpgraded: (territoryId: number) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
+  onRemoteMonstersSync: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
+  onRemoteMonsterHit: (monsterId: string, damage: number, attackerName: string) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
 }
 
@@ -51,11 +56,16 @@ export class MultiplayerSyncController {
   private localBus: BroadcastChannel | null = null;
   private supabaseChannel: ReturnType<typeof supabase.channel> | null = null;
   private isSubscribed = false;
+  private isHost = true;
   private lastBroadcastTime = 0;
   private remotePlayers = new Map<string, RemotePlayerVisual>();
 
   constructor(ctx: IMultiplayerSyncContext) {
     this.ctx = ctx;
+  }
+
+  public getIsHost(): boolean {
+    return this.isHost;
   }
 
   public setup(): void {
@@ -90,6 +100,20 @@ export class MultiplayerSyncController {
         } else if (data.type === 'wave_spawned') {
           const { isBossWave } = data.payload as { isBossWave: boolean };
           this.ctx.onRemoteWaveSpawned(isBossWave);
+        } else if (data.type === 'monsters_sync') {
+          const { monsters, waveCount, bossWaveCount } = data.payload as {
+            monsters: Monster[];
+            waveCount: number;
+            bossWaveCount: number;
+          };
+          this.ctx.onRemoteMonstersSync(monsters || [], waveCount ?? 0, bossWaveCount ?? 0);
+        } else if (data.type === 'monster_hit') {
+          const { monsterId, damage, attackerName } = data.payload as {
+            monsterId: string;
+            damage: number;
+            attackerName: string;
+          };
+          this.ctx.onRemoteMonsterHit(monsterId, damage, attackerName);
         } else if (data.type === 'territory_lost') {
           const { territoryId, reason } = data.payload as {
             territoryId: number;
@@ -111,10 +135,14 @@ export class MultiplayerSyncController {
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        const presenceState = channel.presenceState();
-        const count = Math.max(1, Object.keys(presenceState).length);
-        this.ctx.onOnlineCountChanged(count);
-        EventBus.emit('online-count-changed', count);
+        const presenceState = channel.presenceState() as Record<string, PresenceEntryMeta[]>;
+        const { isHost, onlineCount } = electHostFromPresence(presenceState, playerId);
+        if (this.isHost !== isHost) {
+          this.isHost = isHost;
+          this.ctx.onHostStatusChanged?.(isHost);
+        }
+        this.ctx.onOnlineCountChanged(onlineCount);
+        EventBus.emit('online-count-changed', onlineCount);
       })
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
         this.removeRemotePlayer(key);
@@ -163,6 +191,34 @@ export class MultiplayerSyncController {
         ({ payload }: { payload: { isBossWave: boolean } & BroadcastMeta }) => {
           if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, playerId)) return;
           this.ctx.onRemoteWaveSpawned(payload.isBossWave);
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'monsters_sync' },
+        ({
+          payload,
+        }: {
+          payload: { monsters: Monster[]; waveCount: number; bossWaveCount: number } & BroadcastMeta;
+        }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, playerId)) return;
+          this.ctx.onRemoteMonstersSync(
+            payload.monsters || [],
+            payload.waveCount ?? 0,
+            payload.bossWaveCount ?? 0
+          );
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'monster_hit' },
+        ({
+          payload,
+        }: {
+          payload: { monsterId: string; damage: number; attackerName: string } & BroadcastMeta;
+        }) => {
+          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, playerId)) return;
+          this.ctx.onRemoteMonsterHit(payload.monsterId, payload.damage, payload.attackerName);
         }
       )
       .on(
@@ -274,6 +330,28 @@ export class MultiplayerSyncController {
     this.localBus?.postMessage({ type: 'wave_spawned', senderId: playerId, payload });
     if (this.supabaseChannel && this.isSubscribed) {
       serverSync.broadcast(this.supabaseChannel, 'wave_spawned', payload, playerId);
+    }
+  }
+
+  public broadcastMonstersSync(
+    monsters: Monster[],
+    waveCount: number,
+    bossWaveCount: number
+  ): void {
+    const playerId = this.ctx.getPlayerId();
+    const payload = { monsters, waveCount, bossWaveCount };
+    this.localBus?.postMessage({ type: 'monsters_sync', senderId: playerId, payload });
+    if (this.supabaseChannel && this.isSubscribed) {
+      serverSync.broadcast(this.supabaseChannel, 'monsters_sync', payload, playerId);
+    }
+  }
+
+  public broadcastMonsterHit(monsterId: string, damage: number, attackerName: string): void {
+    const playerId = this.ctx.getPlayerId();
+    const payload = { monsterId, damage, attackerName };
+    this.localBus?.postMessage({ type: 'monster_hit', senderId: playerId, payload });
+    if (this.supabaseChannel && this.isSubscribed) {
+      serverSync.broadcast(this.supabaseChannel, 'monster_hit', payload, playerId);
     }
   }
 
