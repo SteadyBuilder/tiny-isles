@@ -1,7 +1,6 @@
 import {
   ConstructableBlueprint,
   ConstructableType,
-  ConstructedBuilding,
   VillageTier,
   VillageTierConfig,
 } from '../types/game';

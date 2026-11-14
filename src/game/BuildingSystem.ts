@@ -7,7 +7,6 @@ import {
   VillageTier,
 } from '../types/game';
 import {
-  CONSTRUCTABLE_BLUEPRINTS,
   getBlueprint,
   getIslandOrigin,
   TERRITORY_BUILD_SLOTS,

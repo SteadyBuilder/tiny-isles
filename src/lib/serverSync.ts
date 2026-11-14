@@ -1,12 +1,9 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import {
-  ConstructedBuilding,
   Inventory,
-  Player,
   ServerIslandRecord,
   ServerPlayerRecord,
-  VillageTier,
 } from '../types/game';
 import { SavedProfile } from './storage';
 

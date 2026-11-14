@@ -4,6 +4,7 @@ import {
   INITIAL_ISLANDS,
   REGULAR_WAVE_INTERVAL_SEC,
 } from '../game/constants';
+import { GameEvents } from '../game/events/gameEvents';
 import { serverSync } from '../lib/serverSync';
 import { storage } from '../lib/storage';
 import {
@@ -158,7 +159,7 @@ export function useGameShellState() {
   };
 
   const handleMobileAction = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('player-action'));
+    GameEvents.emit('trigger-interact');
   }, []);
 
   const handleZoomChange = useCallback((newZoom: number) => {

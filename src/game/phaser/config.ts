@@ -4,7 +4,7 @@ import { WorldScene } from './scenes/WorldScene';
 
 export function createPhaserConfig(
   parent: HTMLElement,
-  initData?: { playerName?: string; playerColor?: string; zoom?: number }
+  _initData?: { playerName?: string; playerColor?: string; zoom?: number }
 ): Phaser.Types.Core.GameConfig {
   return {
     type: Phaser.AUTO,

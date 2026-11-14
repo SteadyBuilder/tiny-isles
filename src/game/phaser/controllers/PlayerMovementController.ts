@@ -37,7 +37,6 @@ export class PlayerMovementController {
   private wasdKeys!: { [key: string]: Phaser.Input.Keyboard.Key };
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private eKey!: Phaser.Input.Keyboard.Key;
-  private bKey!: Phaser.Input.Keyboard.Key;
   private joystickVector = { x: 0, y: 0 };
   private isActionHolding = false;
 
@@ -184,17 +183,11 @@ export class PlayerMovementController {
       };
       this.spaceKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.eKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-      this.bKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.B);
 
       this.spaceKey.on('down', () => this.ctx.onInteract());
       this.eKey.on('down', () => this.ctx.onInteract());
-      this.bKey.on('down', () => {
-        const curIsl = this.getCurrentTerritory();
-        GameEvents.emit('open-village-modal', curIsl.id);
-      });
     }
 
-    const handlePlayerAction = () => this.ctx.onInteract();
     const handleActionStart = () => {
       this.isActionHolding = true;
     };
@@ -202,16 +195,10 @@ export class PlayerMovementController {
       this.isActionHolding = false;
     };
 
-    window.addEventListener('player-action', handlePlayerAction);
-    window.addEventListener('player-action-start', handleActionStart);
-    window.addEventListener('player-action-stop', handleActionStop);
     GameEvents.on('player-action-start', handleActionStart);
     GameEvents.on('player-action-stop', handleActionStop);
 
     this.unbindInputs.push(() => {
-      window.removeEventListener('player-action', handlePlayerAction);
-      window.removeEventListener('player-action-start', handleActionStart);
-      window.removeEventListener('player-action-stop', handleActionStop);
       GameEvents.off('player-action-start', handleActionStart);
       GameEvents.off('player-action-stop', handleActionStop);
     });
