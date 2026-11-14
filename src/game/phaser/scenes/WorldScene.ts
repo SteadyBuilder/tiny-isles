@@ -6,13 +6,10 @@ import {
   INITIAL_ISLANDS,
   VILLAGE_TIER_CONFIGS,
   getTerritoryCorePos,
-  generateTerritoryBuildings,
   getIslandOrigin,
-  getBuildingCollisionBox,
 } from '../../constants';
 import { BuildingSystem } from '../../BuildingSystem';
 import {
-  Building,
   ConstructableType,
   ConstructedBuilding,
   Entity,
@@ -27,11 +24,10 @@ import { storage } from '../../../lib/storage';
 import { serverSync } from '../../../lib/serverSync';
 import { WaveSystem, MonsterVisual } from '../../systems/WaveSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
-import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
+import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
 import { LivingWorldCoordinator } from '../../systems/LivingWorldCoordinator';
 import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../../data/worldRules';
-import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
 import {
   GOLD_MINE_BIOME_CONFIG,
   RESOURCE_DISTRIBUTION_CONFIG,
@@ -47,6 +43,8 @@ import {
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
+import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
+import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 import { attachWebGLContextGuard } from '../utils/webglContextGuard';
 
@@ -56,8 +54,6 @@ interface EntityVisual {
   sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
   hpBar?: Phaser.GameObjects.Graphics;
 }
-
-const MAX_ACTIVE_FLOATING_TEXTS = 24;
 
 export class WorldScene extends Phaser.Scene {
   // Player
@@ -72,10 +68,7 @@ export class WorldScene extends Phaser.Scene {
 
   // World Data
   private islands: Island[] = [];
-  private buildings: Building[] = [];
-  private buildingColliders: Phaser.Physics.Arcade.StaticGroup | null = null;
   private wallColliders: Phaser.Physics.Arcade.StaticGroup | null = null;
-  private buildingVisuals: Phaser.GameObjects.Container[] = [];
   private entityVisuals = new Map<string, EntityVisual>();
 
   // Subsystems & Controllers (SRP Modular Architecture)
@@ -85,6 +78,8 @@ export class WorldScene extends Phaser.Scene {
   private garrisonSystem!: GarrisonSystem;
   private livingWorldCoordinator!: LivingWorldCoordinator;
   private constructedBuildingRenderer!: ConstructedBuildingRenderer;
+  private territoryStructureRenderer!: TerritoryStructureRenderer;
+  private effectsRenderer!: WorldEffectsRenderer;
   private multiplayerSync!: MultiplayerSyncController;
 
   // Constructed Buildings
@@ -96,8 +91,6 @@ export class WorldScene extends Phaser.Scene {
   private terrainMap!: WorldTerrainMap;
   private terrainRenderer!: TerrainRenderer;
   private altarRenderer!: ExpansionAltarRenderer;
-  private invasionGraphics!: Phaser.GameObjects.Graphics;
-  private clouds: { sprite: Phaser.GameObjects.Image; speed: number }[] = [];
 
   // Controls & Inputs
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -116,14 +109,12 @@ export class WorldScene extends Phaser.Scene {
   private targetZoom = 1.0;
   private lastGridPos = { gridX: 0, gridY: 0 };
   private lastNearIsland: Island | null = null;
-  private lastInvasionSignature = '';
   private lastInteractTime = 0;
   private unbindEventBus: Array<() => void> = [];
   private unbindWebGLGuard: (() => void) | null = null;
   private saveWorldTimer: ReturnType<typeof setTimeout> | null = null;
   private emitWorldTimer: ReturnType<typeof setTimeout> | null = null;
   private hasPendingSaveWorld = false;
-  private activeFloatingTexts: Phaser.GameObjects.Text[] = [];
   private isCleanedUp = false;
 
   constructor() {
@@ -132,7 +123,6 @@ export class WorldScene extends Phaser.Scene {
 
   init(data?: { playerName?: string; playerColor?: PlayerColor; zoom?: number }) {
     this.isCleanedUp = false;
-    this.lastInvasionSignature = '';
     this.unbindEventBus = [];
     this.playerId = storage.getPlayerId();
     const profile = storage.loadProfile();
@@ -180,13 +170,13 @@ export class WorldScene extends Phaser.Scene {
     this.terrainRenderer.bakeTerrainChunks();
     this.terrainRenderer.buildWaterColliders();
 
-    // 2. Invasion & Territory Overlay Graphics
-    this.invasionGraphics = this.add.graphics();
-    this.invasionGraphics.setDepth(DEPTH.INVASION_OVERLAY);
+    // 2. Invasion & Territory Overlay Graphics & Effects Renderer
+    this.effectsRenderer = new WorldEffectsRenderer(this, () => this.isSceneAlive());
     this.drawTerrainDecorations();
 
     // 3. Buildings Static Physics Group (Village Hall & Constructed Buildings)
-    this.buildingColliders = this.physics.add.staticGroup();
+    const buildingColliders = this.physics.add.staticGroup();
+    this.territoryStructureRenderer = new TerritoryStructureRenderer(this, buildingColliders);
     this.wallColliders = this.physics.add.staticGroup();
     this.constructedBuildingRenderer = new ConstructedBuildingRenderer(this, this.wallColliders);
     this.spawnAllBuildings();
@@ -410,17 +400,12 @@ export class WorldScene extends Phaser.Scene {
     this.livingWorldCoordinator?.destroy();
     this.waveSystem?.destroy();
     this.coreGemSystem?.clearAllVisuals();
+    this.territoryStructureRenderer?.destroy();
     this.constructedBuildingRenderer?.clear();
     this.altarRenderer?.destroy();
     this.terrainRenderer?.destroy();
+    this.effectsRenderer?.destroy();
     this.multiplayerSync?.destroy();
-
-    for (const ft of this.activeFloatingTexts) {
-      if (ft.scene) {
-        ft.destroy();
-      }
-    }
-    this.activeFloatingTexts = [];
   }
 
   private isSceneAlive(): boolean {
@@ -535,25 +520,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawOuterPerimeterWarning() {
-    if (!this.isSceneAlive()) return;
-    const signature = this.islands
-      .filter((i) => i.unlocked)
-      .map((i) => i.id)
-      .join(',');
-    if (signature === this.lastInvasionSignature) return;
-    this.lastInvasionSignature = signature;
-
-    const ig = this.invasionGraphics;
-    ig.clear();
-
-    const outerSpawns = getOuterPerimeterSpawns(this.islands);
-    for (const sp of outerSpawns) {
-      // Draw subtle outer invasion entry indicator on the perimeter of occupied territories
-      ig.fillStyle(0xef4444, 0.18);
-      ig.fillCircle(sp.spawnX, sp.spawnY, 26);
-      ig.lineStyle(2, 0xef4444, 0.5);
-      ig.strokeCircle(sp.spawnX, sp.spawnY, 26);
-    }
+    this.effectsRenderer.drawOuterPerimeterWarning(this.islands);
   }
 
   private drawExpansionAltars() {
@@ -566,94 +533,11 @@ export class WorldScene extends Phaser.Scene {
    * 점령한 땅의 코어 보석이 부숴지면 땅을 잃게 됨!
    */
   private spawnAllTerritoryCores() {
-    this.coreGemSystem.clearAllVisuals();
-
-    for (const isl of this.islands) {
-      if (isl.unlocked) {
-        this.createTerritoryCoreForIsland(isl);
-      }
-    }
+    this.territoryStructureRenderer.spawnAllTerritoryCores(this.islands, this.coreGemSystem);
   }
 
   private createTerritoryCoreForIsland(isl: Island) {
-    const corePos = getTerritoryCorePos(isl.gridX, isl.gridY);
-    const container = this.add.container(corePos.x, corePos.y);
-    container.setDepth(ySortDepth(corePos.y, 24));
-
-    const isCentral = isl.id === 0;
-    const gemColor = isCentral ? 0x38bdf8 : 0x34d399;
-
-    // Glowing Aura
-    const aura = this.add.graphics();
-    aura.fillStyle(gemColor, 0.24);
-    aura.fillCircle(0, 0, 50);
-    container.add(aura);
-
-    this.tweens.add({
-      targets: aura,
-      scaleX: 1.22,
-      scaleY: 1.22,
-      alpha: 0.1,
-      duration: 1200,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-
-    // Floating Magical Core Gem Crystal
-    const points = [
-      { x: 0, y: -22 },
-      { x: 15, y: 0 },
-      { x: 0, y: 22 },
-      { x: -15, y: 0 },
-    ];
-    const crystal = this.add.polygon(0, -24, points, gemColor);
-    crystal.setStrokeStyle(2.5, 0xe0f2fe);
-    container.add(crystal);
-
-    this.tweens.add({
-      targets: crystal,
-      y: -34,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-
-    // Compact Core Badge (Icon + Lv + HP Gauge)
-    const badge = this.add.graphics();
-    badge.fillStyle(0x0f172a, 0.88);
-    badge.fillRoundedRect(-44, -76, 88, 36, 8);
-    badge.lineStyle(1.5, gemColor, 0.95);
-    badge.strokeRoundedRect(-44, -76, 88, 36, 8);
-    container.add(badge);
-
-    const tierText = this.add.text(
-      0,
-      -63,
-      `${isCentral ? '🏰' : '💎'} Lv.${isl.villageTier}`,
-      {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-      }
-    ).setOrigin(0.5);
-    container.add(tierText);
-
-    const hpBar = this.add.graphics();
-    container.add(hpBar);
-
-    const coreRef: CoreGemVisualRef = {
-      territoryId: isl.id,
-      container,
-      crystal,
-      aura,
-      hpBar,
-      tierText,
-    };
-    this.coreGemSystem.registerVisual(isl.id, coreRef);
-    this.coreGemSystem.updateCoreGemVisual(isl.id);
+    this.territoryStructureRenderer.createTerritoryCoreForIsland(isl, this.coreGemSystem);
   }
 
   private updateCoreGemVisual(territoryId: number) {
@@ -661,45 +545,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spawnAllBuildings() {
-    this.buildings = [];
-    this.buildingVisuals.forEach((c) => c.destroy());
-    this.buildingVisuals = [];
-    this.buildingColliders?.clear(true, true);
-
-    for (const isl of this.islands) {
-      if (isl.unlocked) {
-        const blds = generateTerritoryBuildings(isl.id, isl.gridX, isl.gridY, isl.villageTier);
-        this.buildings.push(...blds);
-      }
-    }
-
-    for (const b of this.buildings) {
-      const container = this.add.container(b.x, b.y);
-
-      let bDepthBias = b.height - 20;
-      if (b.type === 'castle' || b.type === 'tower') bDepthBias = 240;
-      else if (b.type === 'monastery') bDepthBias = 290;
-      else if (b.type === 'barracks' || b.type === 'archery') bDepthBias = 230;
-      container.setDepth(ySortDepth(b.y, bDepthBias));
-
-      const img = this.add.image(0, 0, b.type).setOrigin(0, 0);
-      img.setDisplaySize(b.width, b.height);
-      container.add(img);
-
-      this.buildingVisuals.push(container);
-
-      const box = getBuildingCollisionBox(b);
-      const colliderSprite = this.physics.add.staticSprite(
-        box.x + box.w / 2,
-        box.y + box.h / 2,
-        ''
-      );
-      colliderSprite.setVisible(false);
-      colliderSprite.setDisplaySize(box.w, box.h);
-      colliderSprite.refreshBody();
-      this.buildingColliders?.add(colliderSprite);
-    }
-    this.buildingColliders?.refresh();
+    this.territoryStructureRenderer.spawnAllBuildings(this.islands);
   }
 
   /**
@@ -836,9 +682,10 @@ export class WorldScene extends Phaser.Scene {
     this.playerSprite.setSize(36, 24);
     this.playerSprite.setOffset(78, 96);
 
-    if (this.buildingColliders) {
-      this.physics.add.collider(this.playerSprite, this.buildingColliders);
-    }
+    this.physics.add.collider(
+      this.playerSprite,
+      this.territoryStructureRenderer.getBuildingColliders()
+    );
     if (this.wallColliders) {
       this.physics.add.collider(this.playerSprite, this.wallColliders);
     }
@@ -866,22 +713,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createClouds() {
-    const cloudConfigs = [
-      { x: -1600, y: -800, speed: 0.35, scale: 0.9, type: 'cloud1' },
-      { x: 300, y: 200, speed: 0.42, scale: 1.1, type: 'cloud2' },
-      { x: 2200, y: -200, speed: 0.3, scale: 0.85, type: 'cloud1' },
-      { x: -500, y: 1800, speed: 0.38, scale: 1.0, type: 'cloud2' },
-      { x: 1800, y: 2200, speed: 0.28, scale: 0.95, type: 'cloud1' },
-      { x: -2200, y: 800, speed: 0.34, scale: 1.05, type: 'cloud2' },
-    ];
-
-    for (const c of cloudConfigs) {
-      const sprite = this.add.image(c.x, c.y, c.type);
-      sprite.setScale(c.scale);
-      sprite.setAlpha(0.55);
-      sprite.setDepth(DEPTH.CLOUDS);
-      this.clouds.push({ sprite, speed: c.speed });
-    }
+    this.effectsRenderer.createClouds();
   }
 
   private setupCamera() {
@@ -1408,13 +1240,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private playExplosionAt(x: number, y: number) {
-    if (this.textures.exists('explosionFx') && this.anims.exists('explosion_anim')) {
-      const exp = this.add.sprite(x, y, 'explosionFx');
-      exp.setDepth(DEPTH.EXPLOSION);
-      exp.setDisplaySize(140, 140);
-      exp.play('explosion_anim');
-      exp.once('animationcomplete', () => exp.destroy());
-    }
+    this.effectsRenderer.playExplosionAt(x, y);
   }
 
   private setupMultiplayer() {
@@ -1572,13 +1398,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.checkTerritoryAndGridUpdates();
 
-    for (const c of this.clouds) {
-      c.sprite.x += c.speed;
-      if (c.sprite.x > 3800) {
-        c.sprite.x = -3800;
-        c.sprite.y = -1500 + Math.random() * 4500;
-      }
-    }
+    this.effectsRenderer.updateClouds();
 
     this.multiplayerSync?.maybeBroadcastPlayerMove(time);
   }
@@ -1959,70 +1779,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private shakeObject(target: Phaser.GameObjects.Container) {
-    if (!target || !target.scene || !this.isSceneAlive()) return;
-    const wasTweening = this.tweens.isTweening(target);
-    const existingBaseX = wasTweening
-      ? (target.getData('shakeBaseX') as number | undefined)
-      : undefined;
-    this.tweens.killTweensOf(target);
-
-    const baseX = typeof existingBaseX === 'number' ? existingBaseX : target.x;
-    target.setData('shakeBaseX', baseX);
-    target.x = baseX;
-
-    this.tweens.add({
-      targets: target,
-      x: baseX + 6,
-      duration: 40,
-      yoyo: true,
-      repeat: 3,
-      onComplete: () => {
-        if (target.scene) {
-          target.setData('shakeBaseX', undefined);
-          target.x = baseX;
-        }
-      },
-    });
+    this.effectsRenderer.shakeObject(target);
   }
 
   private showFloatingText(x: number, y: number, text: string, color: string) {
-    if (!this.isSceneAlive()) return;
-
-    while (this.activeFloatingTexts.length >= MAX_ACTIVE_FLOATING_TEXTS) {
-      const oldest = this.activeFloatingTexts.shift();
-      if (oldest && oldest.scene) {
-        this.tweens.killTweensOf(oldest);
-        oldest.destroy();
-      }
-    }
-
-    const ft = this.add.text(x, y, text, {
-      fontFamily: 'Pretendard, sans-serif',
-      fontSize: '14px',
-      fontStyle: 'bold',
-      color,
-      stroke: '#000000',
-      strokeThickness: 3,
-    }).setOrigin(0.5);
-    ft.setDepth(DEPTH.FLOATING_TEXT);
-    this.activeFloatingTexts.push(ft);
-
-    this.tweens.add({
-      targets: ft,
-      y: y - 50,
-      alpha: 0,
-      duration: 1300,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        const idx = this.activeFloatingTexts.indexOf(ft);
-        if (idx !== -1) {
-          this.activeFloatingTexts.splice(idx, 1);
-        }
-        if (ft.scene) {
-          ft.destroy();
-        }
-      },
-    });
+    this.effectsRenderer.showFloatingText(x, y, text, color);
   }
 
   private handleRemoteHit(entityId: string, damage: number, _hitByName: string) {
