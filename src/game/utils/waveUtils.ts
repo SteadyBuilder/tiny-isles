@@ -1,6 +1,6 @@
 import { Island, MonsterType } from '../../types/game';
 import { getIslandOrigin, getTerritoryCorePos } from '../constants';
-import { REGULAR_MONSTER_TEMPLATES } from '../../data/waves';
+import { BOSS_MONSTER_TEMPLATES, REGULAR_MONSTER_TEMPLATES } from '../../data/waves';
 
 export interface PerimeterSpawnPoint {
   territory: Island;
@@ -108,4 +108,16 @@ export function getRegularMonsterTemplates(waveNum: number): MonsterTemplate[] {
     attack: tmpl.baseAttack + waveNum * tmpl.attackPerWave,
     speed: tmpl.speed,
   }));
+}
+
+export function getBossMonsterTemplate(bossWaveCount: number): MonsterTemplate {
+  const index = Math.max(0, bossWaveCount - 1) % BOSS_MONSTER_TEMPLATES.length;
+  const tmpl = BOSS_MONSTER_TEMPLATES[index];
+  return {
+    type: tmpl.type,
+    name: `${tmpl.name} (60분 보스 Lv.${bossWaveCount})`,
+    hp: tmpl.baseHp + bossWaveCount * tmpl.hpPerBossWave,
+    attack: tmpl.baseAttack + bossWaveCount * 8,
+    speed: tmpl.speed,
+  };
 }

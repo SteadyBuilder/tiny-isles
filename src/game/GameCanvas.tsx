@@ -1037,8 +1037,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Track player grid coordinate for minimap
-      const currentGridX = Math.round(player.x / TERRITORY_STEP);
-      const currentGridY = Math.round(player.y / TERRITORY_STEP);
+      const currentGridX = Math.round((player.x - 320) / TERRITORY_STEP);
+      const currentGridY = Math.round((player.y - 320) / TERRITORY_STEP);
       if (
         currentGridX !== lastGridPosRef.current.gridX ||
         currentGridY !== lastGridPosRef.current.gridY

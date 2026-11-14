@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { INITIAL_ISLANDS, VILLAGE_TIER_CONFIGS } from '../game/constants';
 import { Inventory, Island, PlayerColor } from '../types/game';
 import { CheckCircle, Lock, Compass, Sparkles, Hammer } from 'lucide-react';
@@ -25,18 +25,25 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
   playerColor,
   onManageTerritory,
 }) => {
-  if (!isOpen) return null;
-
-  const unlockedCount = unlockedIslandIds.length;
-  const totalCount = territories.length;
-  const progressPercent = Math.round((unlockedCount / totalCount) * 100);
-
   const currentIsland =
     territories.find(
       (isl) => isl.gridX === playerGridPos.gridX && isl.gridY === playerGridPos.gridY
     ) || territories[0];
 
   const [selectedId, setSelectedId] = useState<number>(currentIsland.id);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedId(currentIsland.id);
+    }
+  }, [isOpen, currentIsland.id]);
+
+  if (!isOpen) return null;
+
+  const unlockedCount = unlockedIslandIds.length;
+  const totalCount = territories.length;
+  const progressPercent = Math.round((unlockedCount / totalCount) * 100);
+
   const selectedIsland =
     territories.find((isl) => isl.id === selectedId) || currentIsland;
 

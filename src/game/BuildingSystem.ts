@@ -134,6 +134,8 @@ export class BuildingSystem {
   ): number {
     const slots = this.getSlotStates(territoryId, tier, constructedBuildings);
     const bp = getBlueprint(type);
+    const isAllowedForRole = (role: 'wall' | 'inner') =>
+      bp.category === 'wall' ? true : role === 'inner';
 
     // 지정 슬롯이 유효하고 비어있으며 해금된 경우 우선 선택
     if (
@@ -142,7 +144,7 @@ export class BuildingSystem {
       preferredSlotIndex < slots.length
     ) {
       const target = slots[preferredSlotIndex];
-      if (target.isUnlocked && !target.building) {
+      if (target.isUnlocked && !target.building && isAllowedForRole(target.role)) {
         return preferredSlotIndex;
       }
     }
@@ -154,13 +156,12 @@ export class BuildingSystem {
     if (bp.category === 'wall') {
       const wallSlot = emptySlots.find((s) => s.role === 'wall');
       if (wallSlot) return wallSlot.slotIndex;
-    } else {
-      // 일반/타워/특수 건물은 inner 슬롯 우선
-      const innerSlot = emptySlots.find((s) => s.role === 'inner');
-      if (innerSlot) return innerSlot.slotIndex;
+      return emptySlots[0].slotIndex;
     }
 
-    return emptySlots[0].slotIndex;
+    // 일반/타워/특수 건물은 반드시 inner 슬롯에만 배치 (외곽 성문 슬롯 침범 방지)
+    const innerSlot = emptySlots.find((s) => s.role === 'inner');
+    return innerSlot ? innerSlot.slotIndex : -1;
   }
 
   /**
@@ -185,19 +186,6 @@ export class BuildingSystem {
       };
     }
 
-    const canAfford =
-      inventory.wood >= bp.costWood &&
-      inventory.stone >= bp.costStone &&
-      inventory.gold >= bp.costGold;
-
-    if (!canAfford) {
-      return {
-        canBuild: false,
-        reason: `자원 부족 (필요: 🪵${bp.costWood} 🪨${bp.costStone} 🪙${bp.costGold})`,
-        blueprint: bp,
-      };
-    }
-
     const slotIndex = this.findBestSlot(
       type,
       territory.id,
@@ -209,7 +197,23 @@ export class BuildingSystem {
     if (slotIndex === -1) {
       return {
         canBuild: false,
-        reason: '사용 가능한 건설 슬롯이 없습니다.',
+        reason:
+          bp.category === 'wall'
+            ? '사용 가능한 건설 슬롯이 없습니다.'
+            : '내부 건물 슬롯(📍)이 없습니다. 마을을 승급하여 내부 슬롯을 해금하세요.',
+        blueprint: bp,
+      };
+    }
+
+    const canAfford =
+      inventory.wood >= bp.costWood &&
+      inventory.stone >= bp.costStone &&
+      inventory.gold >= bp.costGold;
+
+    if (!canAfford) {
+      return {
+        canBuild: false,
+        reason: `자원 부족 (필요: 🪵${bp.costWood} 🪨${bp.costStone} 🪙${bp.costGold})`,
         blueprint: bp,
       };
     }

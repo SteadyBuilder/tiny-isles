@@ -101,7 +101,7 @@ export class CoreGemSystem {
   public loseTerritory(territoryId: number, attackerName: string, isLocalTrigger: boolean) {
     const islands = this.ctx.getIslands();
     const isl = islands.find((i) => i.id === territoryId);
-    if (!isl) return;
+    if (!isl || !isl.unlocked) return;
 
     const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
     this.ctx.playExplosionAt(cPos.x, cPos.y);

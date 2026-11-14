@@ -15,6 +15,7 @@ import { ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
 import {
   findNextInwardTargetTerritory,
+  getBossMonsterTemplate,
   getOuterPerimeterSpawns,
   getRegularMonsterTemplates,
 } from '../utils/waveUtils';
@@ -24,7 +25,10 @@ import {
 } from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
-import { distanceToCollisionBox, getWallCollisionBoxes } from '../wallCollisionGeometry';
+import {
+  getWallCollisionBoxes,
+  nearestPointOnCollisionBox,
+} from '../wallCollisionGeometry';
 
 export type { MonsterVisual };
 
@@ -34,6 +38,7 @@ export interface IWaveSystemContext {
   getConstructedBuildings: () => ConstructedBuilding[];
   destroyConstructedBuilding: (buildingId: string) => void;
   updateConstructedBuildingHpBar: (buildingId: string) => void;
+  onBuildingDamaged?: () => void;
   getConstructedVisualContainer: (buildingId: string) => Phaser.GameObjects.Container | undefined;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
@@ -69,6 +74,10 @@ export class WaveSystem {
     isGlobalClockSynced: true,
   };
 
+  private onTerritoryLost = (data: { territoryId: number }) => {
+    this.handleTerritoryLost(data.territoryId);
+  };
+
   constructor(ctx: IWaveSystemContext, coreGemSystem: CoreGemSystem) {
     this.ctx = ctx;
     this.coreGemSystem = coreGemSystem;
@@ -76,9 +85,15 @@ export class WaveSystem {
   }
 
   private setupListeners() {
-    EventBus.on('territory-lost', (data: { territoryId: number }) => {
-      this.handleTerritoryLost(data.territoryId);
-    });
+    EventBus.on('territory-lost', this.onTerritoryLost);
+  }
+
+  public destroy(): void {
+    EventBus.off('territory-lost', this.onTerritoryLost);
+    for (const mv of this.monsters.values()) {
+      mv.container.destroy();
+    }
+    this.monsters.clear();
   }
 
   public getWaveState(): WaveState {
@@ -230,29 +245,45 @@ export class WaveSystem {
 
       // 1순위: 진입 경로 상의 성벽/나무 방책 장애물 탐색 (날개 벽체 및 성문 전체 구간 판정)
       let blockingBuilding: ConstructedBuilding | null = null;
+      let blockingTargetX = corePos.x;
+      let blockingTargetY = corePos.y;
       let minBldDist = 96;
       for (const cb of constructedBuildings) {
         if (cb.territoryId === targetIsl.id && cb.hp > 0) {
           const wallBoxes = cb.category === 'wall' ? getWallCollisionBoxes(cb) : [];
-          const d =
-            wallBoxes.length > 0
-              ? Math.min(
-                  Math.hypot(m.x - cb.x, m.y - cb.y),
-                  ...wallBoxes.map((box) => distanceToCollisionBox(m.x, m.y, box))
-                )
-              : Math.hypot(m.x - cb.x, m.y - cb.y);
+          let nearestX = cb.x;
+          let nearestY = cb.y;
+          let d = Math.hypot(m.x - cb.x, m.y - cb.y);
+
+          if (wallBoxes.length > 0) {
+            for (const box of wallBoxes) {
+              const hit = nearestPointOnCollisionBox(m.x, m.y, box);
+              if (hit.dist < d) {
+                d = hit.dist;
+                nearestX = hit.x;
+                nearestY = hit.y;
+              }
+            }
+          }
+
           const threshold = cb.category === 'wall' ? 96 : 85;
           if (d < threshold && d < minBldDist) {
             minBldDist = d;
             blockingBuilding = cb;
+            blockingTargetX = nearestX;
+            blockingTargetY = nearestY;
           }
         }
       }
 
-      const targetX = blockingBuilding ? blockingBuilding.x : corePos.x;
-      const targetY = blockingBuilding ? blockingBuilding.y : corePos.y;
+      const targetX = blockingBuilding ? blockingTargetX : corePos.x;
+      const targetY = blockingBuilding ? blockingTargetY : corePos.y;
       const distToTarget = Math.hypot(targetX - m.x, targetY - m.y);
-      const attackRange = blockingBuilding ? 52 : 56;
+      const attackRange = blockingBuilding
+        ? blockingBuilding.category === 'wall'
+          ? 36
+          : 52
+        : 56;
 
       if (distToTarget > attackRange) {
         const vx = ((targetX - m.x) / distToTarget) * m.speed;
@@ -277,14 +308,16 @@ export class WaveSystem {
             if (bCont) this.ctx.shakeObject(bCont);
 
             this.ctx.showFloatingText(
-              blockingBuilding.x,
-              blockingBuilding.y - 30,
+              targetX,
+              targetY - 30,
               `🛡️ -${m.attack}`,
               '#fb923c'
             );
 
             if (blockingBuilding.hp <= 0) {
               this.ctx.destroyConstructedBuilding(blockingBuilding.id);
+            } else {
+              this.ctx.onBuildingDamaged?.();
             }
           } else {
             // 2순위: 점령 영지의 코어 보석 직접 공격
@@ -347,25 +380,26 @@ export class WaveSystem {
       this.monsters.set(monster.id, mv);
     }
 
-    // 60분 주기 보스몬스터 출현 (접속자 수 기반 HP/공격력 스케일링)
+    // 60분 주기 보스몬스터 출현 (src/data/waves.ts BOSS_MONSTER_TEMPLATES 기반 + 접속자 수 스케일링)
+    let spawnedBossName = '';
     if (isBossWave) {
       const bossSpawn = outerSpawns[0];
-      const baseBossHp = 550 + this.waveState.bossWaveCount * 150;
-      const bossHp = Math.round(baseBossHp * scaling.hpMultiplier);
-      const bossAttack = Math.round(
-        (42 + this.waveState.bossWaveCount * 8) * scaling.attackMultiplier
-      );
+      const bossTemplate = getBossMonsterTemplate(this.waveState.bossWaveCount);
+      const bossHp = Math.round(bossTemplate.hp * scaling.hpMultiplier);
+      const bossAttack = Math.round(bossTemplate.attack * scaling.attackMultiplier);
+      spawnedBossName = bossTemplate.name;
+
       const bossMonster: Monster = {
         id: `boss_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        type: 'boss_deathlord',
-        name: `👹 심연의 데스로드 (60분 보스 Lv.${this.waveState.bossWaveCount})`,
+        type: bossTemplate.type,
+        name: bossTemplate.name,
         isBoss: true,
         x: bossSpawn.spawnX,
         y: bossSpawn.spawnY,
         hp: bossHp,
         maxHp: bossHp,
         attack: bossAttack,
-        speed: 42,
+        speed: bossTemplate.speed,
         targetTerritoryId: bossSpawn.territory.id,
         spawnTerritoryId: bossSpawn.territory.id,
         direction: bossSpawn.spawnX > 320 ? 'left' : 'right',
@@ -377,7 +411,7 @@ export class WaveSystem {
     const firstTerritoryName = outerSpawns[0].territory.name;
     const bonusSuffix = isEarlySummon ? ' (조기 소환 보상 +35%)' : '';
     const alertMsg = isBossWave
-      ? `👹 [${scaling.label}] 외곽 영지(${firstTerritoryName})에서 보스 '심연의 데스로드' 군단이 침공합니다!${bonusSuffix}`
+      ? `👹 [${scaling.label}] 외곽 영지(${firstTerritoryName})에서 보스 '${spawnedBossName}' 군단이 침공합니다!${bonusSuffix}`
       : `🧟 [${scaling.label}] 외곽 영지(${firstTerritoryName}) 경계에서 마물 웨이브가 진입했습니다!${bonusSuffix}`;
 
     this.waveState.lastWaveMessage = alertMsg;

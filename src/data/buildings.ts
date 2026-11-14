@@ -27,25 +27,25 @@ export const VILLAGE_TIER_CONFIG: Record<VillageTier, VillageTierConfig> = {
   1: {
     tier: 1,
     name: '개척마을',
-    badge: '🏕️ 개척마을',
-    coreMaxHp: 200,
+    badge: '🏡 개척마을',
+    coreMaxHp: 220,
     maxBuildings: 5,
-    costWood: 0,
-    costStone: 0,
+    costWood: 15,
+    costStone: 10,
     costGold: 0,
     passiveWood: 1,
     passiveStone: 1,
     passiveGold: 0,
-    description: '최초 개척지입니다. 텐트와 기본 방책으로 구성됩니다.',
+    description: '점령한 땅에 세워진 개척 마을입니다. 기본적인 방어와 건설이 가능합니다.',
   },
   2: {
     tier: 2,
     name: '중소마을',
-    badge: '🏡 중소마을',
+    badge: '🏘️ 중소마을',
     coreMaxHp: 350,
     maxBuildings: 7,
-    costWood: 20,
-    costStone: 15,
+    costWood: 25,
+    costStone: 20,
     costGold: 5,
     passiveWood: 2,
     passiveStone: 2,
@@ -109,6 +109,8 @@ export const VILLAGE_TIER_CONFIG: Record<VillageTier, VillageTierConfig> = {
     description: '왕국 최고 단계로 발전한 난공불락의 대도시입니다!',
   },
 };
+
+export const VILLAGE_TIER_CONFIGS = VILLAGE_TIER_CONFIG;
 
 export const VILLAGE_PROGRESSION_TEXT =
   '점령지 → 개척마을 → 중소마을 → 큰마을 → 소도시 → 중소도시 → 대도시';

@@ -5,7 +5,6 @@ import {
   TERRITORY_STEP,
   INITIAL_ISLANDS,
   VILLAGE_TIER_CONFIGS,
-  getBlueprint,
   getTerritoryCorePos,
   generateTerritoryBuildings,
   getIslandOrigin,
@@ -19,20 +18,15 @@ import {
   Entity,
   Inventory,
   Island,
-  Monster,
-  MonsterType,
-  Player,
   PlayerAction,
   PlayerColor,
   VillageTier,
-  WaveState,
 } from '../../../types/game';
 import { sound } from '../../../lib/sound';
-import { supabase } from '../../../lib/supabase';
 import { storage } from '../../../lib/storage';
 import { serverSync } from '../../../lib/serverSync';
 import { WaveSystem, MonsterVisual } from '../../systems/WaveSystem';
-import { TowerDefenseSystem, ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
+import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
 import { LivingWorldCoordinator } from '../../systems/LivingWorldCoordinator';
@@ -44,7 +38,6 @@ import {
 } from '../../../data/biomes';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { DEPTH, ySortDepth } from '../../depthLayers';
-import { getWallCollisionBoxes } from '../../wallCollisionGeometry';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import {
   generateGoldMineClusterEntities,
@@ -52,13 +45,8 @@ import {
   pickRespawnSpot,
 } from '../../world/ResourceDistributionSystem';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
-
-interface RemotePlayerVisual {
-  container: Phaser.GameObjects.Container;
-  sprite: Phaser.GameObjects.Sprite;
-  nameTag: Phaser.GameObjects.Text;
-  data: Player;
-}
+import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
+import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 
 interface EntityVisual {
   entity: Entity;
@@ -78,9 +66,6 @@ export class WorldScene extends Phaser.Scene {
   private currentAction: PlayerAction = 'idle';
   private currentDirection: 'left' | 'right' = 'right';
 
-  // Remote Players
-  private remotePlayers = new Map<string, RemotePlayerVisual>();
-
   // World Data
   private islands: Island[] = [];
   private buildings: Building[] = [];
@@ -89,16 +74,17 @@ export class WorldScene extends Phaser.Scene {
   private buildingVisuals: Phaser.GameObjects.Container[] = [];
   private entityVisuals = new Map<string, EntityVisual>();
 
-  // Subsystems (SRP Modular Architecture)
+  // Subsystems & Controllers (SRP Modular Architecture)
   private coreGemSystem!: CoreGemSystem;
   private waveSystem!: WaveSystem;
   private towerDefenseSystem!: TowerDefenseSystem;
   private garrisonSystem!: GarrisonSystem;
   private livingWorldCoordinator!: LivingWorldCoordinator;
+  private constructedBuildingRenderer!: ConstructedBuildingRenderer;
+  private multiplayerSync!: MultiplayerSyncController;
 
-  // Constructed Buildings & Visuals
+  // Constructed Buildings
   private constructedBuildings: ConstructedBuilding[] = [];
-  private constructedVisuals = new Map<string, ConstructedVisualRef>();
 
   private passiveTickAccum = 0;
 
@@ -123,24 +109,22 @@ export class WorldScene extends Phaser.Scene {
   private pinchStartZoom: number = 1.0;
   private isActionHolding = false;
 
-  // Multiplayer Channels
-  private localBus: BroadcastChannel | null = null;
-  private supabaseChannel: ReturnType<typeof supabase.channel> | null = null;
-  private isSubscribed = false;
-  private lastBroadcastTime = 0;
-
   // Inventory & State Cache
   private inventory: Inventory = { wood: 30, stone: 20, gold: 10 };
   private targetZoom = 1.0;
   private lastGridPos = { gridX: 0, gridY: 0 };
   private lastNearIsland: Island | null = null;
   private lastInteractTime = 0;
+  private unbindEventBus: Array<() => void> = [];
+  private isCleanedUp = false;
 
   constructor() {
     super('WorldScene');
   }
 
   init(data?: { playerName?: string; playerColor?: PlayerColor; zoom?: number }) {
+    this.isCleanedUp = false;
+    this.unbindEventBus = [];
     this.playerId = storage.getPlayerId();
     const profile = storage.loadProfile();
     this.playerName = data?.playerName || profile.name || '수호자';
@@ -195,6 +179,7 @@ export class WorldScene extends Phaser.Scene {
     // 3. Buildings Static Physics Group (Village Hall & Constructed Buildings)
     this.buildingColliders = this.physics.add.staticGroup();
     this.wallColliders = this.physics.add.staticGroup();
+    this.constructedBuildingRenderer = new ConstructedBuildingRenderer(this, this.wallColliders);
     this.spawnAllBuildings();
     this.spawnAllConstructedBuildings();
 
@@ -226,7 +211,8 @@ export class WorldScene extends Phaser.Scene {
         this.drawExpansionAltars();
         this.spawnAllBuildings();
       },
-      broadcastTerritoryLost: (territoryId: number) => this.broadcastTerritoryLost(territoryId),
+      broadcastTerritoryLost: (territoryId: number) =>
+        this.multiplayerSync?.broadcastTerritoryLost(territoryId),
     });
 
     this.waveSystem = new WaveSystem(
@@ -235,8 +221,14 @@ export class WorldScene extends Phaser.Scene {
         getIslands: () => this.islands,
         getConstructedBuildings: () => this.constructedBuildings,
         destroyConstructedBuilding: (buildingId: string) => this.destroyConstructedBuilding(buildingId),
-        updateConstructedBuildingHpBar: (buildingId: string) => this.updateConstructedBuildingHpBar(buildingId),
-        getConstructedVisualContainer: (buildingId: string) => this.constructedVisuals.get(buildingId)?.container,
+        updateConstructedBuildingHpBar: (buildingId: string) =>
+          this.updateConstructedBuildingHpBar(buildingId),
+        onBuildingDamaged: () => {
+          this.saveWorldState();
+          this.emitWorldStateToReact();
+        },
+        getConstructedVisualContainer: (buildingId: string) =>
+          this.constructedBuildingRenderer.getContainer(buildingId),
         showFloatingText: (x, y, text, color) => this.showFloatingText(x, y, text, color),
         shakeObject: (target) => this.shakeObject(target),
         playExplosionAt: (x, y) => this.playExplosionAt(x, y),
@@ -248,7 +240,7 @@ export class WorldScene extends Phaser.Scene {
           };
           EventBus.emit('inventory-updated', this.inventory);
         },
-        broadcastWaveSpawn: (isBossWave) => this.broadcastWaveSpawn(isBossWave),
+        broadcastWaveSpawn: (isBossWave) => this.multiplayerSync?.broadcastWaveSpawn(isBossWave),
       },
       this.coreGemSystem
     );
@@ -257,7 +249,7 @@ export class WorldScene extends Phaser.Scene {
       {
         scene: this,
         getConstructedBuildings: () => this.constructedBuildings,
-        getConstructedVisuals: () => this.constructedVisuals,
+        getConstructedVisuals: () => this.constructedBuildingRenderer.getVisuals(),
         showFloatingText: (x, y, text, color) => this.showFloatingText(x, y, text, color),
         playExplosionAt: (x, y) => this.playExplosionAt(x, y),
       },
@@ -341,6 +333,10 @@ export class WorldScene extends Phaser.Scene {
     // 14. Expose Debug / Test API on window for automated verification
     this.exposeTestHook();
 
+    // 14.5. Ensure clean teardown of EventBus & network channels on scene shutdown/destroy
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupScene());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanupScene());
+
     // 15. Notify React scene is ready & emit initial states
     EventBus.emit('scene-ready', this);
     this.emitWorldStateToReact();
@@ -348,6 +344,25 @@ export class WorldScene extends Phaser.Scene {
 
     // 16. Living Isles: 오프라인 정산, 스냅샷 복원 및 비동기 수비대 배치
     void this.livingWorldCoordinator.initialize();
+  }
+
+  private cleanupScene(): void {
+    if (this.isCleanedUp) return;
+    this.isCleanedUp = true;
+
+    for (const unbind of this.unbindEventBus) {
+      unbind();
+    }
+    this.unbindEventBus = [];
+
+    this.waveSystem?.destroy();
+    this.coreGemSystem?.clearAllVisuals();
+    this.constructedBuildingRenderer?.clear();
+    this.multiplayerSync?.destroy();
+  }
+
+  private isSceneAlive(): boolean {
+    return !this.isCleanedUp && Boolean(this.sys && this.add && this.scene?.isActive());
   }
 
   private exposeTestHook() {
@@ -414,11 +429,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawTerrainDecorations() {
+    if (!this.isSceneAlive()) return;
     this.terrainRenderer.renderTerritoryOverlays(this.islands, this.inventory);
     this.drawOuterPerimeterWarning();
   }
 
   private drawOuterPerimeterWarning() {
+    if (!this.isSceneAlive()) return;
     const ig = this.invasionGraphics;
     ig.clear();
 
@@ -433,6 +450,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawExpansionAltars() {
+    if (!this.isSceneAlive()) return;
     this.altarCardsContainer.removeAll(true);
 
     for (const isl of this.islands) {
@@ -630,207 +648,15 @@ export class WorldScene extends Phaser.Scene {
    * 플레이어가 건설한 건물(방어 타워, 성벽/나무 방책, 기본건물, 특수건물) 스폰
    */
   private spawnAllConstructedBuildings() {
-    this.constructedVisuals.forEach((cv) => {
-      cv.colliders?.forEach((col) => col.destroy());
-      cv.container.destroy();
-    });
-    this.constructedVisuals.clear();
-    this.wallColliders?.clear(true, true);
-
-    for (const cb of this.constructedBuildings) {
-      const isl = this.islands.find((i) => i.id === cb.territoryId);
-      if (isl && isl.unlocked) {
-        this.spawnConstructedBuildingVisual(cb);
-      }
-    }
+    this.constructedBuildingRenderer.spawnAll(this.constructedBuildings, this.islands);
   }
 
   private spawnConstructedBuildingVisual(cb: ConstructedBuilding) {
-    const bp = getBlueprint(cb.type);
-    const container = this.add.container(cb.x, cb.y);
-    container.setDepth(ySortDepth(cb.y, 30));
-    const colliders: Phaser.Physics.Arcade.Sprite[] = [];
-
-    if (cb.category === 'wall') {
-      const isHorizontal = cb.slotIndex === 0 || cb.slotIndex === 1;
-      const isWood = cb.type === 'wood_wall';
-
-      if (isWood) {
-        // Tiny Swords 나무 목책 (Palisade) 스프라이트 렌더링
-        if (isHorizontal) {
-          // [북쪽 / 남쪽 외곽 방책선] - 마을 외곽을 완벽하게 감싸도록 양 모서리(-268, +268)까지 연장
-          // 중앙 수평 게이트 (가로 통로용 문, 128x64 비율 유지)
-          const gate = this.add.image(0, 0, 'woodPalisadeGate');
-          gate.setDisplaySize(128, 64);
-          gate.setDepth(2);
-          container.add(gate);
-
-          // 좌측 수평 방책 날개 (중심: -164, 너비: 208 -> 게이트 및 코너와 2px 오버랩 밀폐)
-          const leftWing = this.add.image(-164, 0, 'woodPalisadeH');
-          leftWing.setDisplaySize(208, 64);
-          leftWing.setDepth(1);
-          container.add(leftWing);
-
-          // 우측 수평 방책 날개 (중심: 164, 너비: 208 -> 게이트 및 코너와 2px 오버랩 밀폐)
-          const rightWing = this.add.image(164, 0, 'woodPalisadeH');
-          rightWing.setDisplaySize(208, 64);
-          rightWing.setDepth(1);
-          container.add(rightWing);
-
-          // 좌/우 모서리 연결 코너 기둥 (64x64 정밀 모서리 기둥)
-          const leftCorner = this.add.image(-268, 0, 'woodPalisadeCorner');
-          leftCorner.setDisplaySize(64, 64);
-          leftCorner.setDepth(3);
-          container.add(leftCorner);
-
-          const rightCorner = this.add.image(268, 0, 'woodPalisadeCorner');
-          rightCorner.setDisplaySize(64, 64);
-          rightCorner.setDepth(3);
-          container.add(rightCorner);
-        } else if (cb.slotIndex === 2 || cb.slotIndex === 3) {
-          // [동쪽 / 서쪽 외곽 방책선] - 상단 코너(-298)부터 하단 코너(+238)까지 틈새 0px 결합
-          // 중앙 세로 게이트 (Wood_Palisade_Gate_V: 56x128 원본 -> 폭 64, 높이 128로 세로 방책과 폭 일치)
-          const gate = this.add.image(0, 0, 'woodPalisadeGateV');
-          gate.setDisplaySize(64, 128);
-          gate.setDepth(2);
-          container.add(gate);
-
-          // 상단 수직 방책 날개 (y: -298 ~ -64 -> 중심: -178, 높이: 242로 상단 코너 및 게이트와 4px 오버랩)
-          const topWing = this.add.image(0, -178, 'woodPalisadeV');
-          topWing.setDisplaySize(64, 242);
-          topWing.setDepth(1);
-          container.add(topWing);
-
-          // 하단 수직 방책 날개 (y: +64 ~ +238 -> 중심: 148, 높이: 182로 게이트 및 하단 코너와 4px 오버랩)
-          const bottomWing = this.add.image(0, 148, 'woodPalisadeV');
-          bottomWing.setDisplaySize(64, 182);
-          bottomWing.setDepth(1);
-          container.add(bottomWing);
-        } else {
-          // 내부 슬롯에 지어진 단일 방책 요새
-          const palisade = this.add.image(0, -10, 'woodPalisade');
-          palisade.setDisplaySize(128, 128);
-          container.add(palisade);
-        }
-      } else {
-        // 석조 성벽(stone_wall) 바리케이드 그래픽스 시각화 (중앙 성문 통로 + 양 날개 성벽)
-        const wallGraphics = this.add.graphics();
-        const mainColor = 0x64748b;
-        const borderColor = 0xe2e8f0;
-
-        if (isHorizontal) {
-          // 좌/우 날개 석벽 ([-300, -44], [+44, +300])
-          wallGraphics.fillStyle(mainColor, 0.94);
-          wallGraphics.lineStyle(2.5, borderColor, 0.95);
-          wallGraphics.fillRoundedRect(-300, -15, 256, 30, 6);
-          wallGraphics.strokeRoundedRect(-300, -15, 256, 30, 6);
-          wallGraphics.fillRoundedRect(44, -15, 256, 30, 6);
-          wallGraphics.strokeRoundedRect(44, -15, 256, 30, 6);
-
-          // 중앙 석조 성문 기둥 및 통로 바닥 문턱
-          wallGraphics.fillStyle(0x334155, 0.55);
-          wallGraphics.fillRoundedRect(-44, -8, 88, 16, 3);
-          wallGraphics.fillStyle(0x94a3b8, 1);
-          wallGraphics.fillRoundedRect(-54, -18, 14, 36, 4);
-          wallGraphics.strokeRoundedRect(-54, -18, 14, 36, 4);
-          wallGraphics.fillRoundedRect(40, -18, 14, 36, 4);
-          wallGraphics.strokeRoundedRect(40, -18, 14, 36, 4);
-
-          for (let px = -280; px <= 280; px += 28) {
-            if (Math.abs(px) < 56) continue;
-            wallGraphics.fillStyle(0x94a3b8, 1);
-            wallGraphics.fillCircle(px, 0, 5);
-          }
-        } else {
-          // 상/하 날개 석벽 ([-298, -44], [+44, +238])
-          wallGraphics.fillStyle(mainColor, 0.94);
-          wallGraphics.lineStyle(2.5, borderColor, 0.95);
-          wallGraphics.fillRoundedRect(-15, -298, 30, 254, 6);
-          wallGraphics.strokeRoundedRect(-15, -298, 30, 254, 6);
-          wallGraphics.fillRoundedRect(-15, 44, 30, 194, 6);
-          wallGraphics.strokeRoundedRect(-15, 44, 30, 194, 6);
-
-          // 중앙 석조 성문 기둥 및 통로 바닥 문턱
-          wallGraphics.fillStyle(0x334155, 0.55);
-          wallGraphics.fillRoundedRect(-8, -44, 16, 88, 3);
-          wallGraphics.fillStyle(0x94a3b8, 1);
-          wallGraphics.fillRoundedRect(-18, -54, 36, 14, 4);
-          wallGraphics.strokeRoundedRect(-18, -54, 36, 14, 4);
-          wallGraphics.fillRoundedRect(-18, 40, 36, 14, 4);
-          wallGraphics.strokeRoundedRect(-18, 40, 36, 14, 4);
-
-          for (let py = -280; py <= 220; py += 28) {
-            if (Math.abs(py) < 56) continue;
-            wallGraphics.fillStyle(0x94a3b8, 1);
-            wallGraphics.fillCircle(0, py, 5);
-          }
-        }
-        container.add(wallGraphics);
-      }
-
-      // 벽체 구간 Static Collider 생성 (중앙 Gate 통로 영역은 비워두어 문으로만 출입 가능)
-      const wallBoxes = getWallCollisionBoxes(cb);
-      for (const box of wallBoxes) {
-        const wallCol = this.physics.add.staticSprite(
-          box.x + box.w / 2,
-          box.y + box.h / 2,
-          ''
-        );
-        wallCol.setVisible(false);
-        wallCol.body.setSize(box.w, box.h);
-        this.wallColliders?.add(wallCol);
-        colliders.push(wallCol);
-      }
-    } else {
-      // 방어 타워 / 기본건물 / 특수건물 스프라이트
-      const img = this.add.image(0, -20, bp.spriteKey);
-      const size = cb.category === 'tower' ? 110 : 120;
-      const height = cb.category === 'tower' ? 170 : 150;
-      img.setDisplaySize(size, height);
-      if (cb.type === 'magic_tower') img.setTint(0xc084fc);
-      if (cb.type === 'special_goldmine') img.setTint(0xfde047);
-      container.add(img);
-
-      // 방어 타워 사거리 링 표시 (은은한 원)
-      if (cb.category === 'tower' && bp.range) {
-        const rangeRing = this.add.graphics();
-        rangeRing.lineStyle(1, cb.type === 'magic_tower' ? 0xc084fc : 0x38bdf8, 0.18);
-        rangeRing.strokeCircle(0, 0, bp.range);
-        container.add(rangeRing);
-      }
-    }
-
-    // Slim HP Gauge Bar only (building name/number labels removed for clean visual UI)
-    const hpBar = this.add.graphics();
-    container.add(hpBar);
-
-    this.constructedVisuals.set(cb.id, {
-      building: cb,
-      container,
-      hpBar,
-      lastFireTime: 0,
-      colliders,
-    });
-
-    this.updateConstructedBuildingHpBar(cb.id);
+    this.constructedBuildingRenderer.spawnOne(cb);
   }
 
   private updateConstructedBuildingHpBar(buildingId: string) {
-    const cv = this.constructedVisuals.get(buildingId);
-    if (!cv) return;
-
-    const cb = cv.building;
-    const ratio = Math.max(0, Math.min(1, cb.hp / Math.max(1, cb.maxHp)));
-    const barW = 64;
-    const barH = 6;
-    const barX = -barW / 2;
-    const barY = cb.category === 'wall' ? -28 : -52;
-
-    cv.hpBar.clear();
-    cv.hpBar.fillStyle(0x0f172a, 0.88);
-    cv.hpBar.fillRoundedRect(barX - 2, barY - 2, barW + 4, barH + 4, 3);
-    cv.hpBar.fillStyle(ratio > 0.5 ? 0x4ade80 : ratio > 0.25 ? 0xfacc15 : 0xef4444, 1);
-    cv.hpBar.fillRect(barX, barY, Math.max(2, barW * ratio), barH);
+    this.constructedBuildingRenderer.updateHpBar(buildingId);
   }
 
   private isGoldMineUnlocked(): boolean {
@@ -1211,8 +1037,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private getCurrentPlayerTerritory(): Island {
-    const gx = Math.round(this.playerSprite.x / TERRITORY_STEP);
-    const gy = Math.round(this.playerSprite.y / TERRITORY_STEP);
+    const gx = Math.round((this.playerSprite.x - 320) / TERRITORY_STEP);
+    const gy = Math.round((this.playerSprite.y - 320) / TERRITORY_STEP);
     return (
       this.islands.find((i) => i.gridX === gx && i.gridY === gy && i.unlocked) ||
       this.islands.find((i) => i.unlocked) ||
@@ -1220,86 +1046,102 @@ export class WorldScene extends Phaser.Scene {
     );
   }
 
+  private registerEventBus<TArgs extends unknown[]>(
+    event: string,
+    fn: (...args: TArgs) => void
+  ): void {
+    EventBus.on(event, fn);
+    this.unbindEventBus.push(() => EventBus.off(event, fn));
+  }
+
   private setupEventBus() {
-    EventBus.on('set-player-profile', (data: { name: string; color: PlayerColor }) => {
+    this.registerEventBus('set-player-profile', (data: { name: string; color: PlayerColor }) => {
+      if (!this.isSceneAlive()) return;
       this.playerName = data.name;
       this.playerColor = data.color;
       this.playerNameTag.setText(this.playerName);
       this.playPlayerAnimation(this.currentAction);
     });
 
-    EventBus.on('set-zoom', (newZoom: number) => {
+    this.registerEventBus('set-zoom', (newZoom: number) => {
+      if (!this.isSceneAlive()) return;
       this.targetZoom = newZoom;
     });
 
-    EventBus.on('set-inventory', (newInv: Inventory) => {
-      this.inventory = newInv;
+    this.registerEventBus('set-inventory', (newInv: Inventory) => {
+      if (!this.isSceneAlive()) return;
+      this.inventory = { ...newInv };
       this.drawTerrainDecorations();
       this.drawExpansionAltars();
     });
 
-    EventBus.on('joystick-move', (vector: { x: number; y: number }) => {
+    this.registerEventBus('joystick-move', (vector: { x: number; y: number }) => {
+      if (!this.isSceneAlive()) return;
       this.joystickVector = vector;
     });
 
-    EventBus.on('trigger-interact', () => {
+    this.registerEventBus('trigger-interact', () => {
+      if (!this.isSceneAlive()) return;
       this.tryInteract();
     });
 
     // 마을 발전 (점령지 -> 마을 -> 중소마을 -> 큰마을 -> 소도시 -> 중소도시 -> 대도시)
-    EventBus.on('upgrade-village', (territoryId: number) => {
+    this.registerEventBus('upgrade-village', (territoryId: number) => {
+      if (!this.isSceneAlive()) return;
       this.handleUpgradeVillage(territoryId, true);
     });
 
     // 건물 건설 (방어 타워, 성벽, 기본건물, 특수건물)
-    EventBus.on(
+    this.registerEventBus(
       'construct-building',
       (data: { territoryId: number; type: ConstructableType; slotIndex?: number }) => {
-        this.handleConstructBuilding(data.territoryId, data.type, data.slotIndex, true);
-      }
-    );
-
-    EventBus.on(
-      'BUILDING_PLACED',
-      (data: { territoryId: number; type: ConstructableType; slotIndex?: number }) => {
+        if (!this.isSceneAlive()) return;
         this.handleConstructBuilding(data.territoryId, data.type, data.slotIndex, true);
       }
     );
 
     // 코어 보석 및 성벽 수리
-    EventBus.on('repair-territory-core', (territoryId: number) => {
-      this.coreGemSystem.repairCore(territoryId);
+    this.registerEventBus('repair-territory-core', (territoryId: number) => {
+      if (!this.isSceneAlive()) return;
+      this.handleRepairCore(territoryId);
     });
 
     // 웨이브 즉시 호출 & 타이머 배속 제어 (30분 일반 웨이브 / 60분 보스 웨이브 검증용 치트)
-    EventBus.on('trigger-regular-wave', () => {
+    this.registerEventBus('trigger-regular-wave', () => {
+      if (!this.isSceneAlive()) return;
       this.waveSystem.triggerRegularWave();
     });
 
-    EventBus.on('trigger-boss-wave', () => {
+    this.registerEventBus('trigger-boss-wave', () => {
+      if (!this.isSceneAlive()) return;
       this.waveSystem.triggerBossWave();
     });
 
-    EventBus.on('summon-early-wave', (data: { isBossWave: boolean }) => {
+    this.registerEventBus('summon-early-wave', (data: { isBossWave: boolean }) => {
+      if (!this.isSceneAlive()) return;
       this.waveSystem.summonEarlyWave(Boolean(data?.isBossWave));
     });
 
-    EventBus.on('reduce-wave-cooldown', (seconds: number) => {
+    this.registerEventBus('reduce-wave-cooldown', (seconds: number) => {
+      if (!this.isSceneAlive()) return;
       this.waveSystem.reduceCooldown(seconds);
     });
 
-    EventBus.on('set-wave-timescale', (scale: number) => {
+    this.registerEventBus('set-wave-timescale', (scale: number) => {
+      if (!this.isSceneAlive()) return;
       this.waveSystem.setTimeScale(scale);
     });
 
-    EventBus.on(
+    this.registerEventBus(
       'damage-territory-core',
       (data: { territoryId: number; damage: number }) => {
+        if (!this.isSceneAlive()) return;
         this.coreGemSystem.damageTerritoryCore(data.territoryId, data.damage, '마물 침공 테스트', true);
       }
     );
 
-    EventBus.on('add-test-resources', () => {
+    this.registerEventBus('add-test-resources', () => {
+      if (!this.isSceneAlive()) return;
       this.inventory = {
         wood: this.inventory.wood + 500,
         stone: this.inventory.stone + 500,
@@ -1325,17 +1167,23 @@ export class WorldScene extends Phaser.Scene {
     const isl = this.islands.find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return false;
 
-    const check = BuildingSystem.checkUpgrade(isl, this.inventory);
-    if (!check.canUpgrade) {
-      const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-      this.showFloatingText(cPos.x, cPos.y - 60, check.reason || '마을 승급 불가', '#f87171');
+    if (isl.villageTier >= 6) {
+      if (isLocalTrigger) {
+        const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+        this.showFloatingText(cPos.x, cPos.y - 60, '이미 최고 단계(대도시)에 도달했습니다.', '#f87171');
+      }
       return false;
     }
 
-    const nextTier = check.nextTier!;
-    const nextCfg = VILLAGE_TIER_CONFIGS[nextTier];
-
+    let nextTier = (isl.villageTier + 1) as VillageTier;
     if (isLocalTrigger) {
+      const check = BuildingSystem.checkUpgrade(isl, this.inventory);
+      if (!check.canUpgrade || !check.nextTier) {
+        const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+        this.showFloatingText(cPos.x, cPos.y - 60, check.reason || '마을 승급 불가', '#f87171');
+        return false;
+      }
+      nextTier = check.nextTier;
       this.inventory = {
         wood: this.inventory.wood - check.costWood,
         stone: this.inventory.stone - check.costStone,
@@ -1343,6 +1191,8 @@ export class WorldScene extends Phaser.Scene {
       };
       EventBus.emit('inventory-updated', this.inventory);
     }
+
+    const nextCfg = VILLAGE_TIER_CONFIGS[nextTier];
 
     isl.villageTier = nextTier;
     isl.coreMaxHp = nextCfg.coreMaxHp;
@@ -1366,7 +1216,7 @@ export class WorldScene extends Phaser.Scene {
     EventBus.emit('game-alert', msg);
 
     if (isLocalTrigger) {
-      this.broadcastVillageUpgrade(territoryId, nextTier);
+      this.multiplayerSync?.broadcastVillageUpgrade(territoryId, nextTier);
     }
     return true;
   }
@@ -1427,7 +1277,7 @@ export class WorldScene extends Phaser.Scene {
     );
 
     if (isLocal) {
-      this.broadcastBuildingConstructed(newBuilding);
+      this.multiplayerSync?.broadcastBuildingConstructed(newBuilding);
       this.waveSystem.reduceCooldown(ACTIVE_WAVE_ACCELERATION_CONFIG.buildCooldownReductionSec);
     }
     return true;
@@ -1436,11 +1286,14 @@ export class WorldScene extends Phaser.Scene {
   private handleRepairCore(territoryId: number) {
     const isl = this.islands.find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return;
-    if (isl.coreHp >= isl.coreMaxHp) {
+    const hasDamagedBuilding = this.constructedBuildings.some(
+      (cb) => cb.territoryId === territoryId && cb.hp < cb.maxHp
+    );
+    if (isl.coreHp >= isl.coreMaxHp && !hasDamagedBuilding) {
       this.showFloatingText(
         getTerritoryCorePos(isl.gridX, isl.gridY).x,
         getTerritoryCorePos(isl.gridX, isl.gridY).y - 60,
-        '💎 코어 보석이 이미 최대 체력입니다!',
+        '💎 코어 보석과 방책이 이미 최대 체력입니다!',
         '#38bdf8'
       );
       return;
@@ -1518,127 +1371,37 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private setupMultiplayer() {
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      this.localBus = new BroadcastChannel('tiny_isles_multiplayer');
-      this.localBus.onmessage = (event) => {
-        const { data } = event;
-        if (!data || data.senderId === this.playerId) return;
-        if (data.type === 'player_move') {
-          this.handleRemotePlayerMove(data.payload);
-        } else if (data.type === 'hit') {
-          const { entityId, damage, hitBy } = data.payload;
-          this.handleRemoteHit(entityId, damage, hitBy);
-        } else if (data.type === 'island_unlocked') {
-          const { islandId, unlockedBy } = data.payload;
-          this.unlockIslandLocally(islandId, unlockedBy, false);
-        } else if (data.type === 'village_upgraded') {
-          const { territoryId } = data.payload;
-          this.handleUpgradeVillage(territoryId, false);
-        } else if (data.type === 'building_constructed') {
-          const cb: ConstructedBuilding = data.payload;
-          if (!this.constructedBuildings.some((b) => b.id === cb.id)) {
-            this.constructedBuildings.push(cb);
-            this.spawnConstructedBuildingVisual(cb);
-            this.saveWorldState();
-            this.emitWorldStateToReact();
-          }
-        } else if (data.type === 'wave_spawned') {
-          this.spawnMonsterWave(data.payload.isBossWave, false);
-        } else if (data.type === 'territory_lost') {
-          this.loseTerritoryByCoreDestruction(data.payload.territoryId, '마물 군단', false);
+    this.multiplayerSync = new MultiplayerSyncController({
+      scene: this,
+      getPlayerId: () => this.playerId,
+      getPlayerName: () => this.playerName,
+      getPlayerColor: () => this.playerColor,
+      getLocalPlayerState: () => ({
+        x: this.playerSprite.x,
+        y: this.playerSprite.y,
+        direction: this.currentDirection,
+        action: this.currentAction,
+      }),
+      onOnlineCountChanged: (count) => this.waveSystem.setOnlineCount(count),
+      onRemoteEntityHit: (entityId, damage, hitByName) =>
+        this.handleRemoteHit(entityId, damage, hitByName),
+      onRemoteIslandUnlocked: (islandId, unlockedBy) =>
+        this.unlockIslandLocally(islandId, unlockedBy, false),
+      onRemoteVillageUpgraded: (territoryId) =>
+        this.handleUpgradeVillage(territoryId, false),
+      onRemoteBuildingConstructed: (cb) => {
+        if (cb && !this.constructedBuildings.some((b) => b.id === cb.id)) {
+          this.constructedBuildings.push(cb);
+          this.spawnConstructedBuildingVisual(cb);
+          this.saveWorldState();
+          this.emitWorldStateToReact();
         }
-      };
-    }
-
-    const roomId = 'tiny_isles_global_hub';
-    const channel = supabase.channel(roomId, {
-      config: {
-        broadcast: { self: false },
-        presence: { key: this.playerId },
       },
+      onRemoteWaveSpawned: (isBossWave) => this.spawnMonsterWave(isBossWave, false),
+      onRemoteTerritoryLost: (territoryId, reason) =>
+        this.loseTerritoryByCoreDestruction(territoryId, reason, false),
     });
-    this.supabaseChannel = channel;
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const presenceState = channel.presenceState();
-        const count = Math.max(1, Object.keys(presenceState).length);
-        this.waveSystem.setOnlineCount(count);
-        EventBus.emit('online-count-changed', count);
-      })
-      .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
-        this.removeRemotePlayer(key);
-      })
-      .on('broadcast', { event: 'player_move' }, ({ payload }: { payload: any }) => {
-        if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
-        this.handleRemotePlayerMove(payload);
-      })
-      .on(
-        'broadcast',
-        { event: 'entity_hit' },
-        ({ payload }: { payload: { entityId: string; damage: number; hitBy: string; eventId?: string; senderId?: string } }) => {
-          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
-          const { entityId, damage, hitBy } = payload;
-          this.handleRemoteHit(entityId, damage, hitBy);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'island_unlocked' },
-        ({ payload }: { payload: { islandId: number; unlockedBy: string; eventId?: string; senderId?: string } }) => {
-          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
-          const { islandId, unlockedBy } = payload;
-          this.unlockIslandLocally(islandId, unlockedBy, false);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'village_upgraded' },
-        ({ payload }: { payload: { territoryId: number; tier: VillageTier; eventId?: string; senderId?: string } }) => {
-          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
-          this.handleUpgradeVillage(payload.territoryId, false);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'building_constructed' },
-        ({ payload }: { payload: { building: ConstructedBuilding; eventId?: string; senderId?: string } }) => {
-          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
-          const cb: ConstructedBuilding = payload.building;
-          if (cb && !this.constructedBuildings.some((b) => b.id === cb.id)) {
-            this.constructedBuildings.push(cb);
-            this.spawnConstructedBuildingVisual(cb);
-            this.saveWorldState();
-            this.emitWorldStateToReact();
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'wave_spawned' },
-        ({ payload }: { payload: { isBossWave: boolean; eventId?: string; senderId?: string } }) => {
-          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
-          this.spawnMonsterWave(payload.isBossWave, false);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'territory_lost' },
-        ({ payload }: { payload: { territoryId: number; reason?: string; eventId?: string; senderId?: string } }) => {
-          if (!serverSync.isValidIncomingEvent(payload.eventId, payload.senderId, this.playerId)) return;
-          this.loseTerritoryByCoreDestruction(payload.territoryId, payload.reason || '마물 군단', false);
-        }
-      )
-      .subscribe(async (status: string) => {
-        if (status === 'SUBSCRIBED') {
-          this.isSubscribed = true;
-          await channel.track({
-            name: this.playerName,
-            color: this.playerColor,
-            joinedAt: Date.now(),
-          });
-        }
-      });
+    this.multiplayerSync.setup();
   }
 
   update(time: number, delta: number) {
@@ -1749,10 +1512,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    if (time - this.lastBroadcastTime > 60) {
-      this.lastBroadcastTime = time;
-      this.broadcastPlayerMove();
-    }
+    this.multiplayerSync?.maybeBroadcastPlayerMove(time);
   }
 
   private destroyConstructedBuilding(buildingId: string) {
@@ -1761,12 +1521,9 @@ export class WorldScene extends Phaser.Scene {
     const removed = this.constructedBuildings[idx];
     this.constructedBuildings.splice(idx, 1);
 
-    const cv = this.constructedVisuals.get(buildingId);
-    if (cv) {
+    if (this.constructedBuildingRenderer.getContainer(buildingId)) {
       this.playExplosionAt(removed.x, removed.y);
-      cv.colliders?.forEach((col) => col.destroy());
-      cv.container.destroy();
-      this.constructedVisuals.delete(buildingId);
+      this.constructedBuildingRenderer.removeVisual(buildingId);
     }
 
     sound.playBreak();
@@ -1797,6 +1554,7 @@ export class WorldScene extends Phaser.Scene {
       }
 
       // 기본건물 & 특수건물 효과
+      let healStateDirty = false;
       for (const cb of this.constructedBuildings) {
         const isl = this.islands.find((i) => i.id === cb.territoryId && i.unlocked);
         if (!isl) continue;
@@ -1814,21 +1572,29 @@ export class WorldScene extends Phaser.Scene {
           if (isl.coreHp < isl.coreMaxHp) {
             isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 6);
             this.updateCoreGemVisual(isl.id);
+            healStateDirty = true;
           }
         } else if (cb.type === 'special_sanctuary') {
           // 성소: 코어 보석 및 성벽 회복
           if (isl.coreHp < isl.coreMaxHp) {
             isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 20);
             this.updateCoreGemVisual(isl.id);
+            healStateDirty = true;
           }
           for (const other of this.constructedBuildings) {
             if (other.territoryId === isl.id && other.hp < other.maxHp) {
               other.hp = Math.min(other.maxHp, other.hp + 35);
               this.updateConstructedBuildingHpBar(other.id);
+              healStateDirty = true;
             }
           }
           this.showFloatingText(cb.x, cb.y - 35, '✨ 성소 치유 오라', '#38bdf8');
         }
+      }
+
+      if (healStateDirty) {
+        this.saveWorldState();
+        this.emitWorldStateToReact();
       }
 
       if (totalWoodGain > 0 || totalStoneGain > 0 || totalGoldGain > 0) {
@@ -1873,8 +1639,8 @@ export class WorldScene extends Phaser.Scene {
       EventBus.emit('near-island-changed', nearLocked);
     }
 
-    const gridX = Math.round(px / TERRITORY_STEP);
-    const gridY = Math.round(py / TERRITORY_STEP);
+    const gridX = Math.round((px - 320) / TERRITORY_STEP);
+    const gridY = Math.round((py - 320) / TERRITORY_STEP);
     if (gridX !== this.lastGridPos.gridX || gridY !== this.lastGridPos.gridY) {
       this.lastGridPos = { gridX, gridY };
       EventBus.emit('player-grid-pos-changed', { gridX, gridY });
@@ -1982,7 +1748,10 @@ export class WorldScene extends Phaser.Scene {
 
       const resKey = ent.type === 'tree' ? 'wood' : ent.type === 'gold_rock' ? 'gold' : 'stone';
       const harvestAmount = 1;
-      this.inventory[resKey] += harvestAmount;
+      this.inventory = {
+        ...this.inventory,
+        [resKey]: this.inventory[resKey] + harvestAmount,
+      };
       EventBus.emit('inventory-updated', this.inventory);
 
       const icon =
@@ -1994,7 +1763,7 @@ export class WorldScene extends Phaser.Scene {
       const color = resKey === 'wood' ? '#8bc34a' : resKey === 'gold' ? '#ffd700' : '#cfd8dc';
       this.showFloatingText(ent.x + 16, ent.y, icon, color);
 
-      this.broadcastHit(ent.id, damage);
+      this.multiplayerSync?.broadcastHit(ent.id, damage);
 
       if (ent.hp <= 0) {
         sound.playBreak();
@@ -2116,7 +1885,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (isLocalTrigger) {
       serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);
-      this.broadcastUnlock(islandId, unlockedBy);
+      this.multiplayerSync?.broadcastUnlock(islandId, unlockedBy);
     }
   }
 
@@ -2155,64 +1924,6 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private handleRemotePlayerMove(data: Player) {
-    if (data.id === this.playerId) return;
-    if (!serverSync.isLatestMove(data.id, data.lastUpdated || Date.now())) return;
-
-    let visual = this.remotePlayers.get(data.id);
-    if (!visual) {
-      const container = this.add.container(data.x, data.y);
-
-      const sprite = this.add.sprite(0, 0, `${data.color}PawnIdle`);
-      sprite.setDisplaySize(128, 128);
-      container.add(sprite);
-
-      const nameTag = this.add.text(0, -42, data.name, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '12px',
-        fontStyle: 'bold',
-        color: '#f87171',
-        stroke: '#000000',
-        strokeThickness: 2.5,
-      }).setOrigin(0.5);
-      container.add(nameTag);
-
-      visual = { container, sprite, nameTag, data };
-      this.remotePlayers.set(data.id, visual);
-    }
-
-    // 고스트 텔레포트 방지: 임계치(280px) 초과 시만 Snap 순간이동, 그 외에는 부드러운 Tween 선형 보간
-    if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
-      visual.container.setPosition(data.x, data.y);
-    } else {
-      this.tweens.add({
-        targets: visual.container,
-        x: data.x,
-        y: data.y,
-        duration: 120,
-        ease: 'Linear',
-      });
-    }
-
-    visual.container.setDepth(ySortDepth(data.y, 24));
-    visual.sprite.setFlipX(data.direction === 'left');
-    visual.nameTag.setText(data.name);
-
-    const animKey = `${data.color}_${data.action}`;
-    if (this.anims.exists(animKey)) {
-      visual.sprite.play(animKey, true);
-    }
-  }
-
-  private removeRemotePlayer(id: string) {
-    serverSync.removePlayerCache(id);
-    const visual = this.remotePlayers.get(id);
-    if (visual) {
-      visual.container.destroy();
-      this.remotePlayers.delete(id);
-    }
-  }
-
   private handleRemoteHit(entityId: string, damage: number, _hitByName: string) {
     const visual = this.entityVisuals.get(entityId);
     if (!visual) return;
@@ -2227,123 +1938,6 @@ export class WorldScene extends Phaser.Scene {
     if (visual.entity.hp <= 0) {
       sound.playBreak();
       this.removeAndRespawnEntity(visual.entity);
-    }
-  }
-
-  private broadcastPlayerMove() {
-    const payload: Player = {
-      id: this.playerId,
-      name: this.playerName,
-      x: Math.round(this.playerSprite.x),
-      y: Math.round(this.playerSprite.y),
-      direction: this.currentDirection,
-      action: this.currentAction,
-      color: this.playerColor,
-      lastUpdated: Date.now(),
-    };
-
-    if (this.localBus) {
-      this.localBus.postMessage({
-        type: 'player_move',
-        senderId: this.playerId,
-        payload,
-      });
-    }
-
-    if (this.supabaseChannel && this.isSubscribed) {
-      serverSync.broadcast(this.supabaseChannel, 'player_move', payload, this.playerId);
-    }
-  }
-
-  private broadcastHit(entityId: string, damage: number) {
-    const payload = { entityId, damage, hitBy: this.playerName };
-    if (this.localBus) {
-      this.localBus.postMessage({
-        type: 'hit',
-        senderId: this.playerId,
-        payload,
-      });
-    }
-    if (this.supabaseChannel && this.isSubscribed) {
-      this.supabaseChannel.send({
-        type: 'broadcast',
-        event: 'entity_hit',
-        payload,
-      });
-    }
-  }
-
-  private broadcastUnlock(islandId: number, unlockedBy: string) {
-    const payload = { islandId, unlockedBy };
-    if (this.localBus) {
-      this.localBus.postMessage({
-        type: 'island_unlocked',
-        senderId: this.playerId,
-        payload,
-      });
-    }
-    if (this.supabaseChannel && this.isSubscribed) {
-      this.supabaseChannel.send({
-        type: 'broadcast',
-        event: 'island_unlocked',
-        payload,
-      });
-    }
-  }
-
-  private broadcastVillageUpgrade(territoryId: number, tier: VillageTier) {
-    const payload = { territoryId, tier };
-    if (this.localBus) {
-      this.localBus.postMessage({
-        type: 'village_upgraded',
-        senderId: this.playerId,
-        payload,
-      });
-    }
-    if (this.supabaseChannel && this.isSubscribed) {
-      serverSync.broadcast(this.supabaseChannel, 'village_upgraded', payload, this.playerId);
-    }
-  }
-
-  private broadcastBuildingConstructed(building: ConstructedBuilding) {
-    const payload = { building };
-    if (this.localBus) {
-      this.localBus.postMessage({
-        type: 'building_constructed',
-        senderId: this.playerId,
-        payload: building,
-      });
-    }
-    if (this.supabaseChannel && this.isSubscribed) {
-      serverSync.broadcast(this.supabaseChannel, 'building_constructed', payload, this.playerId);
-    }
-  }
-
-  private broadcastWaveSpawn(isBossWave: boolean) {
-    const payload = { isBossWave };
-    if (this.localBus) {
-      this.localBus.postMessage({
-        type: 'wave_spawned',
-        senderId: this.playerId,
-        payload,
-      });
-    }
-    if (this.supabaseChannel && this.isSubscribed) {
-      serverSync.broadcast(this.supabaseChannel, 'wave_spawned', payload, this.playerId);
-    }
-  }
-
-  private broadcastTerritoryLost(territoryId: number) {
-    const payload = { territoryId, reason: '마물 군단' };
-    if (this.localBus) {
-      this.localBus.postMessage({
-        type: 'territory_lost',
-        senderId: this.playerId,
-        payload,
-      });
-    }
-    if (this.supabaseChannel && this.isSubscribed) {
-      serverSync.broadcast(this.supabaseChannel, 'territory_lost', payload, this.playerId);
     }
   }
 }

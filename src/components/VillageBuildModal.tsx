@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { BuildingCategory, ConstructableType, ConstructedBuilding, Inventory, Island } from '../types/game';
 import { CONSTRUCTABLE_BLUEPRINTS, VILLAGE_TIER_CONFIGS } from '../game/constants';
 import { BuildingSystem } from '../game/BuildingSystem';
-import { EventBus } from '../game/phaser/EventBus';
 import { Hammer, Heart, ArrowUpCircle } from 'lucide-react';
 
 interface VillageBuildModalProps {
@@ -73,7 +72,6 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
     const check = BuildingSystem.checkBuild(curTerritory, type, inventory, constructedBuildings, selectedSlotIndex ?? undefined);
     if (!check.canBuild) return;
     const finalSlot = check.slotIndex!;
-    EventBus.emit('BUILDING_PLACED', { territoryId: curTerritory.id, type, slotIndex: finalSlot });
     onConstructBuilding(curTerritory.id, type, finalSlot);
     setSelectedSlotIndex(null);
   };

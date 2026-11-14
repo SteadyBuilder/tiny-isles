@@ -103,3 +103,16 @@ export function distanceToCollisionBox(px: number, py: number, box: CollisionBox
   const clampedY = Math.max(box.y, Math.min(py, box.y + box.h));
   return Math.hypot(px - clampedX, py - clampedY);
 }
+
+/**
+ * Nearest point on (or inside) an axis-aligned `CollisionBox` from `(px, py)` and distance.
+ */
+export function nearestPointOnCollisionBox(
+  px: number,
+  py: number,
+  box: CollisionBox
+): { x: number; y: number; dist: number } {
+  const x = Math.max(box.x, Math.min(px, box.x + box.w));
+  const y = Math.max(box.y, Math.min(py, box.y + box.h));
+  return { x, y, dist: Math.hypot(px - x, py - y) };
+}

@@ -73,13 +73,45 @@ export class LivingWorldCoordinator {
         savedWorld.bossWaveCount
       );
 
+      let baseIslands = this.ctx.getIslands();
+      let baseBuildings = this.ctx.getConstructedBuildings();
+      const localUnlockedCount = baseIslands.filter((i) => i.unlocked).length;
+
+      // 다른 기기/새 세션에서 서버 월드 스냅샷을 불러온 경우 영지 및 건물 상태 동기화
+      if (
+        localUnlockedCount <= 1 &&
+        Array.isArray(savedWorld.unlockedIslandIds) &&
+        savedWorld.unlockedIslandIds.length > 1
+      ) {
+        baseIslands = baseIslands.map((isl) => {
+          const isUnlocked = savedWorld.unlockedIslandIds.includes(isl.id) || isl.id === 0;
+          const tier = isUnlocked
+            ? (savedWorld.villageTiers?.[isl.id] ?? isl.villageTier)
+            : 0;
+          const maxHp = isl.id === 0 && tier < 2 ? 350 : isl.coreMaxHp;
+          const coreHp =
+            isUnlocked && savedWorld.coreHps?.[isl.id] !== undefined
+              ? savedWorld.coreHps[isl.id]
+              : isl.coreHp;
+          return { ...isl, unlocked: isUnlocked, villageTier: tier, coreMaxHp: maxHp, coreHp };
+        });
+        if (Array.isArray(savedWorld.constructedBuildings)) {
+          baseBuildings = savedWorld.constructedBuildings;
+        }
+        this.ctx.applyOfflineWorldUpdate(baseIslands, baseBuildings, {
+          wood: 0,
+          stone: 0,
+          gold: 0,
+        });
+      }
+
       const resolution = resolveOfflinePeriod({
         lastActiveAtIso: savedWorld.lastActiveAt,
         nowMs: Date.now(),
         baseWaveCount: savedWorld.waveCount,
         baseBossWaveCount: savedWorld.bossWaveCount,
-        islands: this.ctx.getIslands(),
-        constructedBuildings: this.ctx.getConstructedBuildings(),
+        islands: baseIslands,
+        constructedBuildings: baseBuildings,
         garrisons,
       });
 

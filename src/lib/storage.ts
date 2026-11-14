@@ -139,9 +139,9 @@ export const storage = {
   loadConstructedBuildings: (): ConstructedBuilding[] => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
-      if (data) {
+      if (data !== null) {
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -230,6 +230,8 @@ export const storage = {
       localStorage.removeItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
       localStorage.removeItem(STORAGE_KEYS.CORE_HPS);
       localStorage.removeItem(STORAGE_KEYS.ZOOM);
+      localStorage.removeItem('tiny_isles_world_sync_state');
+      localStorage.removeItem('tiny_isles_garrisons');
     } catch (e) {
       console.warn('Failed to reset storage:', e);
     }
