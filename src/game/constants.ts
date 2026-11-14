@@ -1,6 +1,5 @@
 import {
   Island,
-  TerritoryCore,
   ConstructedBuilding,
 } from '../types/game';
 import {
@@ -131,15 +130,6 @@ export function getInitialConstructedBuildings(): ConstructedBuilding[] {
     },
   ];
 }
-
-// Central Territory Core definition (Heart of the central village)
-export const CENTRAL_CORE: TerritoryCore = {
-  x: 320,
-  y: 350,
-  level: 2,
-  name: '중심 마을 코어 보석 (Core Gem)',
-  islandId: 0,
-};
 
 /**
  * 점령한 땅 외곽 영지 및 외곽 진입 좌표 계산

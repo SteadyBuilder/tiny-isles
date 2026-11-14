@@ -126,14 +126,6 @@ export interface ConstructedBuilding {
   slotIndex: number;
 }
 
-export interface TerritoryCore {
-  x: number;
-  y: number;
-  level: number;
-  name: string;
-  islandId: number;
-}
-
 export interface Island {
   id: number;
   gridX: number; // e.g. 0, 1, -1
@@ -239,27 +231,6 @@ export interface OfflineResolutionReport {
   homeCoreMaxHp: number;
   activeGarrisonsHelped: number;
   summaryMessage: string;
-}
-
-export interface FloatingText {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  color: string;
-  alpha: number;
-  vy: number;
-}
-
-export interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  color: string;
-  size: number;
-  life: number;
-  maxLife: number;
 }
 
 export interface ServerIslandRecord {
