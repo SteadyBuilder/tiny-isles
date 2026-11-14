@@ -1,3 +1,4 @@
+import Phaser from 'phaser';
 import { ConstructedBuilding } from '../../types/game';
 import { getBlueprint } from '../constants';
 import { DEPTH } from '../depthLayers';

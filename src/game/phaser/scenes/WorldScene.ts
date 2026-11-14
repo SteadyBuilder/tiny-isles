@@ -116,6 +116,7 @@ export class WorldScene extends Phaser.Scene {
   private targetZoom = 1.0;
   private lastGridPos = { gridX: 0, gridY: 0 };
   private lastNearIsland: Island | null = null;
+  private lastInvasionSignature = '';
   private lastInteractTime = 0;
   private unbindEventBus: Array<() => void> = [];
   private unbindWebGLGuard: (() => void) | null = null;
@@ -131,6 +132,7 @@ export class WorldScene extends Phaser.Scene {
 
   init(data?: { playerName?: string; playerColor?: PlayerColor; zoom?: number }) {
     this.isCleanedUp = false;
+    this.lastInvasionSignature = '';
     this.unbindEventBus = [];
     this.playerId = storage.getPlayerId();
     const profile = storage.loadProfile();
@@ -515,6 +517,13 @@ export class WorldScene extends Phaser.Scene {
 
   private drawOuterPerimeterWarning() {
     if (!this.isSceneAlive()) return;
+    const signature = this.islands
+      .filter((i) => i.unlocked)
+      .map((i) => i.id)
+      .join(',');
+    if (signature === this.lastInvasionSignature) return;
+    this.lastInvasionSignature = signature;
+
     const ig = this.invasionGraphics;
     ig.clear();
 
@@ -1911,9 +1920,12 @@ export class WorldScene extends Phaser.Scene {
 
   private shakeObject(target: Phaser.GameObjects.Container) {
     if (!target || !target.scene || !this.isSceneAlive()) return;
+    const wasTweening = this.tweens.isTweening(target);
+    const existingBaseX = wasTweening
+      ? (target.getData('shakeBaseX') as number | undefined)
+      : undefined;
     this.tweens.killTweensOf(target);
 
-    const existingBaseX = target.getData('shakeBaseX') as number | undefined;
     const baseX = typeof existingBaseX === 'number' ? existingBaseX : target.x;
     target.setData('shakeBaseX', baseX);
     target.x = baseX;
@@ -1926,6 +1938,7 @@ export class WorldScene extends Phaser.Scene {
       repeat: 3,
       onComplete: () => {
         if (target.scene) {
+          target.setData('shakeBaseX', undefined);
           target.x = baseX;
         }
       },

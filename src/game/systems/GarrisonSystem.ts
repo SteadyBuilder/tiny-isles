@@ -1,3 +1,4 @@
+import Phaser from 'phaser';
 import { GARRISON_CONFIG } from '../../data/worldRules';
 import { GarrisonUnit } from '../../types/game';
 import { DEPTH, ySortDepth } from '../depthLayers';
