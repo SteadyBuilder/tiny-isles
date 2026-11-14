@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import confetti from 'canvas-confetti';
 import { GameEventPayloads, GameEvents } from '../../events/gameEvents';
 import {
-  TERRITORY_STEP,
   INITIAL_ISLANDS,
   VILLAGE_TIER_CONFIGS,
   getTerritoryCorePos,
@@ -14,14 +13,13 @@ import {
   ConstructedBuilding,
   Inventory,
   Island,
-  PlayerAction,
   PlayerColor,
   VillageTier,
 } from '../../../types/game';
 import { sound } from '../../../lib/sound';
 import { storage } from '../../../lib/storage';
 import { serverSync } from '../../../lib/serverSync';
-import { WaveSystem, MonsterVisual } from '../../systems/WaveSystem';
+import { WaveSystem } from '../../systems/WaveSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
@@ -29,30 +27,23 @@ import { LivingWorldCoordinator } from '../../systems/LivingWorldCoordinator';
 import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../../data/worldRules';
 import { GOLD_MINE_BIOME_CONFIG } from '../../../data/biomes';
 import { WORLD_BOUNDS } from '../../worldBounds';
-import { DEPTH, ySortDepth } from '../../depthLayers';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
-import {
-  EntityVisual,
-  ResourceEntityRenderer,
-} from '../renderers/ResourceEntityRenderer';
+import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
+import { PlayerMovementController } from '../controllers/PlayerMovementController';
+import { PlayerInteractionController } from '../controllers/PlayerInteractionController';
 import { attachWebGLContextGuard } from '../utils/webglContextGuard';
 
 export class WorldScene extends Phaser.Scene {
-  // Player
-  private playerSprite!: Phaser.Physics.Arcade.Sprite;
-  private playerNameTag!: Phaser.GameObjects.Text;
-  private playerIndicator!: Phaser.GameObjects.Text;
+  // Player Profile
   private playerColor: PlayerColor = 'blue';
   private playerName: string = '수호자';
   private playerId: string = '';
-  private currentAction: PlayerAction = 'idle';
-  private currentDirection: 'left' | 'right' = 'right';
 
   // World Data
   private islands: Island[] = [];
@@ -69,6 +60,8 @@ export class WorldScene extends Phaser.Scene {
   private resourceEntityRenderer!: ResourceEntityRenderer;
   private effectsRenderer!: WorldEffectsRenderer;
   private multiplayerSync!: MultiplayerSyncController;
+  private playerMovement!: PlayerMovementController;
+  private playerInteraction!: PlayerInteractionController;
 
   // Constructed Buildings
   private constructedBuildings: ConstructedBuilding[] = [];
@@ -80,24 +73,9 @@ export class WorldScene extends Phaser.Scene {
   private terrainRenderer!: TerrainRenderer;
   private altarRenderer!: ExpansionAltarRenderer;
 
-  // Controls & Inputs
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private wasdKeys!: { [key: string]: Phaser.Input.Keyboard.Key };
-  private spaceKey!: Phaser.Input.Keyboard.Key;
-  private eKey!: Phaser.Input.Keyboard.Key;
-  private bKey!: Phaser.Input.Keyboard.Key;
-  private joystickVector = { x: 0, y: 0 };
-  private mouseTarget: { x: number; y: number; active: boolean } = { x: 0, y: 0, active: false };
-  private touchIndicator!: Phaser.GameObjects.Image;
-  private touchTargetObj: { x: number; y: number } | null = null;
-  private isActionHolding = false;
-
   // Inventory & State Cache
   private inventory: Inventory = { wood: 30, stone: 20, gold: 10 };
-  private targetZoom = 1.0;
-  private lastGridPos = { gridX: 0, gridY: 0 };
-  private lastNearIsland: Island | null = null;
-  private lastInteractTime = 0;
+  private initialZoom = 1.0;
   private unbindEventBus: Array<() => void> = [];
   private unbindWebGLGuard: (() => void) | null = null;
   private saveWorldTimer: ReturnType<typeof setTimeout> | null = null;
@@ -116,7 +94,7 @@ export class WorldScene extends Phaser.Scene {
     const profile = storage.loadProfile();
     this.playerName = data?.playerName || profile.name || '수호자';
     this.playerColor = data?.playerColor || profile.color || 'blue';
-    this.targetZoom = data?.zoom || storage.loadZoom() || 1.0;
+    this.initialZoom = data?.zoom || storage.loadZoom() || 1.0;
     this.inventory = storage.loadInventory();
   }
 
@@ -262,18 +240,8 @@ export class WorldScene extends Phaser.Scene {
         getPlayerId: () => this.playerId,
         getPlayerName: () => this.playerName,
         getPlayerColor: () => this.playerColor,
-        getPlayerPosition: () => ({
-          x: this.playerSprite?.x ?? 320,
-          y: this.playerSprite?.y ?? 350,
-        }),
-        getCurrentTerritoryId: () => {
-          const px = this.playerSprite?.x ?? 320;
-          const py = this.playerSprite?.y ?? 350;
-          const gx = Math.round((px - 320) / TERRITORY_STEP);
-          const gy = Math.round((py - 320) / TERRITORY_STEP);
-          const found = this.islands.find((i) => i.unlocked && i.gridX === gx && i.gridY === gy);
-          return found ? found.id : 0;
-        },
+        getPlayerPosition: () => this.playerMovement?.getPosition() ?? { x: 320, y: 350 },
+        getCurrentTerritoryId: () => this.playerMovement?.getCurrentTerritory().id ?? 0,
         getIslands: () => this.islands,
         getConstructedBuildings: () => this.constructedBuildings,
         applyOfflineWorldUpdate: (updatedIslands, updatedBuildings, passiveGain) => {
@@ -307,17 +275,74 @@ export class WorldScene extends Phaser.Scene {
     // 7. Spawn Resource Entities
     this.spawnAllEntities();
 
-    // 8. Create Local Player
-    this.createPlayer();
+    // 8. Initialize Player Interaction & Movement Controllers
+    this.playerInteraction = new PlayerInteractionController({
+      scene: this,
+      getPlayerPosition: () => this.playerMovement.getPosition(),
+      getPlayerName: () => this.playerName,
+      getCurrentAction: () => this.playerMovement.getCurrentAction(),
+      playPlayerAnimation: (action) => this.playerMovement.playAnimation(action),
+      markInteractTime: (now) => this.playerMovement.markInteractTime(now),
+      getIslands: () => this.islands,
+      getInventory: () => this.inventory,
+      spendInventory: (wood, stone, gold) => {
+        this.inventory = {
+          wood: this.inventory.wood - wood,
+          stone: this.inventory.stone - stone,
+          gold: this.inventory.gold - gold,
+        };
+        GameEvents.emit('inventory-updated', this.inventory);
+      },
+      addHarvestedResource: (resKey, amount) => {
+        this.inventory = {
+          ...this.inventory,
+          [resKey]: this.inventory[resKey] + amount,
+        };
+        GameEvents.emit('inventory-updated', this.inventory);
+      },
+      getMonsterVisuals: () => this.waveSystem.getMonsterVisuals(),
+      damageMonster: (monsterId, damage, attackerName) =>
+        this.waveSystem.damageMonster(monsterId, damage, attackerName),
+      findNearestEntityVisual: (x, y, maxDist) =>
+        this.resourceEntityRenderer.findNearestVisual(x, y, maxDist),
+      updateEntityHpBar: (entityId) => this.resourceEntityRenderer.updateHpBar(entityId),
+      removeAndRespawnEntity: (ent) => this.resourceEntityRenderer.removeAndRespawn(ent),
+      reduceWaveCooldown: (seconds) => this.waveSystem.reduceCooldown(seconds),
+      broadcastEntityHit: (entityId, damage) => this.multiplayerSync?.broadcastHit(entityId, damage),
+      unlockIslandLocally: (islandId, unlockedBy, isLocalTrigger) =>
+        this.unlockIslandLocally(islandId, unlockedBy, isLocalTrigger),
+      updateCoreGemVisual: (territoryId) => this.updateCoreGemVisual(territoryId),
+      saveWorldState: (immediate = false) => this.saveWorldState(immediate),
+      emitWorldStateToReact: (immediate = false) => this.emitWorldStateToReact(immediate),
+      shakeObject: (target) => this.shakeObject(target),
+      showFloatingText: (x, y, text, color) => this.showFloatingText(x, y, text, color),
+    });
+
+    this.playerMovement = new PlayerMovementController({
+      scene: this,
+      getPlayerName: () => this.playerName,
+      getPlayerColor: () => this.playerColor,
+      getInitialZoom: () => this.initialZoom,
+      getBuildingColliders: () => this.territoryStructureRenderer.getBuildingColliders(),
+      getWallColliders: () => this.wallColliders,
+      getWaterColliders: () => this.terrainRenderer.getWaterColliders(),
+      getIslands: () => this.islands,
+      getMonsterVisuals: () => this.waveSystem.getMonsterVisuals(),
+      findNearestEntityVisual: (x, y, maxDist) =>
+        this.resourceEntityRenderer.findNearestVisual(x, y, maxDist),
+      onInteract: () => this.playerInteraction.tryInteract(),
+    });
+
+    this.playerMovement.createPlayer();
 
     // 9. Create Ambient Drifting Clouds
     this.createClouds();
 
-    // 10. Camera Setup
-    this.setupCamera();
+    // 10. Camera & Pointer Setup
+    this.playerMovement.setupCamera();
 
     // 11. Controls & Input Listeners
-    this.setupInputs();
+    this.playerMovement.setupInputs();
 
     // 12. EventBus Listeners (Bridge with React)
     this.setupEventBus();
@@ -388,6 +413,7 @@ export class WorldScene extends Phaser.Scene {
     this.unbindWebGLGuard?.();
     this.unbindWebGLGuard = null;
 
+    this.playerMovement?.destroy();
     this.livingWorldCoordinator?.destroy();
     this.waveSystem?.destroy();
     this.coreGemSystem?.clearAllVisuals();
@@ -559,253 +585,8 @@ export class WorldScene extends Phaser.Scene {
     this.resourceEntityRenderer.spawnAll();
   }
 
-  private createPlayer() {
-    const startX = 320;
-    const startY = 430;
-
-    this.playerSprite = this.physics.add.sprite(startX, startY, `${this.playerColor}PawnIdle`);
-    this.playerSprite.setDisplaySize(128, 128);
-    this.playerSprite.setCollideWorldBounds(true);
-    this.playerSprite.setSize(36, 24);
-    this.playerSprite.setOffset(78, 96);
-
-    this.physics.add.collider(
-      this.playerSprite,
-      this.territoryStructureRenderer.getBuildingColliders()
-    );
-    if (this.wallColliders) {
-      this.physics.add.collider(this.playerSprite, this.wallColliders);
-    }
-    this.physics.add.collider(this.playerSprite, this.terrainRenderer.getWaterColliders());
-
-    this.playerNameTag = this.add.text(startX, startY - 42, this.playerName, {
-      fontFamily: 'Pretendard, sans-serif',
-      fontSize: '12px',
-      fontStyle: 'bold',
-      color: '#38bdf8',
-      stroke: '#000000',
-      strokeThickness: 2.5,
-    }).setOrigin(0.5);
-
-    this.playerIndicator = this.add.text(startX, startY - 54, '▼', {
-      fontFamily: 'sans-serif',
-      fontSize: '10px',
-      fontStyle: 'bold',
-      color: '#fde047',
-      stroke: '#000000',
-      strokeThickness: 1.5,
-    }).setOrigin(0.5);
-
-    this.playPlayerAnimation('idle');
-  }
-
   private createClouds() {
     this.effectsRenderer.createClouds();
-  }
-
-  private setupCamera() {
-    this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
-    this.cameras.main.setZoom(this.targetZoom);
-    // Camera bounds follow the full expanded world (all 21 territories), not just the central 3x3
-    this.cameras.main.setBounds(WORLD_BOUNDS.min, WORLD_BOUNDS.min, WORLD_BOUNDS.width, WORLD_BOUNDS.width);
-
-    this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: unknown, _deltaX: number, deltaY: number) => {
-      const step = 0.12;
-      const next = deltaY < 0 ? this.targetZoom + step : this.targetZoom - step;
-      this.targetZoom = Math.min(2.0, Math.max(0.5, Number(next.toFixed(2))));
-      GameEvents.emit('zoom-changed', this.targetZoom);
-    });
-
-    this.touchIndicator = this.add
-      .image(0, 0, 'cursorTarget')
-      .setVisible(false)
-      .setDepth(DEPTH.TOUCH_INDICATOR)
-      .setScale(0.35)
-      .setAlpha(0.85);
-
-    const handlePointerAction = (pointer: Phaser.Input.Pointer) => {
-      if (pointer.rightButtonDown()) return;
-
-      const p1 = this.input.pointer1;
-      const p2 = this.input.pointer2;
-      if (p1?.isDown && p2?.isDown) {
-        this.mouseTarget.active = false;
-        this.touchIndicator.setVisible(false);
-        return;
-      }
-
-      const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-
-      // 1. Check if user touched an active Monster
-      let touchedMonster: MonsterVisual | null = null;
-      let minMonDist = 65;
-      this.waveSystem.getMonsterVisuals().forEach((mv) => {
-        const d = Math.hypot(worldPoint.x - mv.monster.x, worldPoint.y - mv.monster.y);
-        if (d < minMonDist) {
-          minMonDist = d;
-          touchedMonster = mv;
-        }
-      });
-
-      if (touchedMonster) {
-        const tm = touchedMonster as MonsterVisual;
-        const distFromPlayer = Math.hypot(
-          this.playerSprite.x - tm.monster.x,
-          this.playerSprite.y - tm.monster.y
-        );
-        this.touchTargetObj = { x: tm.monster.x, y: tm.monster.y };
-        if (distFromPlayer < 115) {
-          this.mouseTarget.active = false;
-          this.tryInteract();
-        } else {
-          this.mouseTarget = { x: tm.monster.x, y: tm.monster.y, active: true };
-        }
-        return;
-      }
-
-      // 2. Check if user touched an Entity, Core Gem, or Territory Altar
-      const touchedEntity = this.resourceEntityRenderer.findNearestVisual(
-        worldPoint.x,
-        worldPoint.y,
-        55
-      );
-
-      let touchedCoreIsl: Island | null = null;
-      for (const isl of this.islands) {
-        if (isl.unlocked) {
-          const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-          if (Math.hypot(worldPoint.x - cPos.x, worldPoint.y - cPos.y) < 60) {
-            touchedCoreIsl = isl;
-            break;
-          }
-        }
-      }
-
-      let touchedIslandSign: Island | null = null;
-      for (const isl of this.islands) {
-        if (!isl.unlocked) {
-          const origin = getIslandOrigin(isl.gridX, isl.gridY);
-          const signX = origin.x + 320;
-          const signY = origin.y + 320;
-          if (Math.hypot(worldPoint.x - signX, worldPoint.y - signY) < 75) {
-            touchedIslandSign = isl;
-            break;
-          }
-        }
-      }
-
-      const px = this.playerSprite.x;
-      const py = this.playerSprite.y;
-
-      if (touchedEntity || touchedCoreIsl || touchedIslandSign) {
-        let targetX = 0;
-        let targetY = 0;
-        if (touchedEntity) {
-          targetX = (touchedEntity as EntityVisual).entity.x + 16;
-          targetY = (touchedEntity as EntityVisual).entity.y + 16;
-        } else if (touchedCoreIsl) {
-          const cPos = getTerritoryCorePos(touchedCoreIsl.gridX, touchedCoreIsl.gridY);
-          targetX = cPos.x;
-          targetY = cPos.y;
-          GameEvents.emit('open-village-modal', touchedCoreIsl.id);
-        } else if (touchedIslandSign) {
-          const orig = getIslandOrigin(touchedIslandSign.gridX, touchedIslandSign.gridY);
-          targetX = orig.x + 320;
-          targetY = orig.y + 320;
-        }
-
-        const distFromPlayer = Math.hypot(px - targetX, py - targetY);
-        this.touchTargetObj = { x: targetX, y: targetY };
-
-        this.touchIndicator.setPosition(targetX, targetY).setVisible(true).setAlpha(1).setScale(0.45);
-
-        if (distFromPlayer < 100) {
-          this.mouseTarget.active = false;
-          this.tryInteract();
-        } else {
-          this.mouseTarget = { x: targetX, y: targetY, active: true };
-        }
-      } else {
-        this.touchTargetObj = null;
-        this.mouseTarget = { x: worldPoint.x, y: worldPoint.y, active: true };
-        this.touchIndicator.setPosition(worldPoint.x, worldPoint.y).setVisible(true).setAlpha(0.9).setScale(0.42);
-      }
-    };
-
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      handlePointerAction(pointer);
-    });
-
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      const p1 = this.input.pointer1;
-      const p2 = this.input.pointer2;
-      if (p1?.isDown && p2?.isDown) {
-        this.mouseTarget.active = false;
-        this.touchIndicator.setVisible(false);
-        return;
-      }
-
-      if (pointer.isDown && !this.touchTargetObj) {
-        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        this.mouseTarget = { x: worldPoint.x, y: worldPoint.y, active: true };
-        this.touchIndicator.setPosition(worldPoint.x, worldPoint.y).setVisible(true);
-      }
-    });
-  }
-
-  private setupInputs() {
-    if (this.input.keyboard) {
-      this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasdKeys = {
-        W: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-        A: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-        S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-        D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-      };
-      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-      this.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-      this.bKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.B);
-
-      this.spaceKey.on('down', () => this.tryInteract());
-      this.eKey.on('down', () => this.tryInteract());
-      this.bKey.on('down', () => {
-        const curIsl = this.getCurrentPlayerTerritory();
-        GameEvents.emit('open-village-modal', curIsl.id);
-      });
-    }
-
-    const handlePlayerAction = () => {
-      this.tryInteract();
-    };
-    const handleActionStart = () => {
-      this.isActionHolding = true;
-    };
-    const handleActionStop = () => {
-      this.isActionHolding = false;
-    };
-    window.addEventListener('player-action', handlePlayerAction);
-    window.addEventListener('player-action-start', handleActionStart);
-    window.addEventListener('player-action-stop', handleActionStop);
-    GameEvents.on('player-action-start', handleActionStart);
-    GameEvents.on('player-action-stop', handleActionStop);
-
-    this.events.once('shutdown', () => {
-      window.removeEventListener('player-action', handlePlayerAction);
-      window.removeEventListener('player-action-start', handleActionStart);
-      window.removeEventListener('player-action-stop', handleActionStop);
-      GameEvents.off('player-action-start', handleActionStart);
-      GameEvents.off('player-action-stop', handleActionStop);
-    });
-  }
-
-  private getCurrentPlayerTerritory(): Island {
-    const gx = Math.round((this.playerSprite.x - 320) / TERRITORY_STEP);
-    const gy = Math.round((this.playerSprite.y - 320) / TERRITORY_STEP);
-    return (
-      this.islands.find((i) => i.gridX === gx && i.gridY === gy && i.unlocked) ||
-      this.islands.find((i) => i.unlocked) ||
-      this.islands[0]
-    );
   }
 
   private registerEventBus<K extends keyof GameEventPayloads>(
@@ -821,13 +602,12 @@ export class WorldScene extends Phaser.Scene {
       if (!this.isSceneAlive()) return;
       this.playerName = data.name;
       this.playerColor = data.color;
-      this.playerNameTag.setText(this.playerName);
-      this.playPlayerAnimation(this.currentAction);
+      this.playerMovement.refreshProfileVisuals();
     });
 
     this.registerEventBus('set-zoom', (newZoom: number) => {
       if (!this.isSceneAlive()) return;
-      this.targetZoom = newZoom;
+      this.playerMovement.setTargetZoom(newZoom);
     });
 
     this.registerEventBus('set-inventory', (newInv: Inventory) => {
@@ -839,12 +619,12 @@ export class WorldScene extends Phaser.Scene {
 
     this.registerEventBus('joystick-move', (vector: { x: number; y: number }) => {
       if (!this.isSceneAlive()) return;
-      this.joystickVector = vector;
+      this.playerMovement.setJoystickVector(vector);
     });
 
     this.registerEventBus('trigger-interact', () => {
       if (!this.isSceneAlive()) return;
-      this.tryInteract();
+      this.playerInteraction.tryInteract();
     });
 
     // 마을 발전 (점령지 -> 마을 -> 중소마을 -> 큰마을 -> 소도시 -> 중소도시 -> 대도시)
@@ -912,9 +692,10 @@ export class WorldScene extends Phaser.Scene {
       GameEvents.emit('inventory-updated', this.inventory);
       this.drawTerrainDecorations();
       this.drawExpansionAltars();
+      const { x, y } = this.playerMovement.getPosition();
       this.showFloatingText(
-        this.playerSprite.x,
-        this.playerSprite.y - 50,
+        x,
+        y - 50,
         '🎁 테스트 자원 지급! (+🪵500 +🪨500 +🪙500)',
         '#fde047'
       );
@@ -1132,12 +913,7 @@ export class WorldScene extends Phaser.Scene {
       getPlayerId: () => this.playerId,
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
-      getLocalPlayerState: () => ({
-        x: this.playerSprite.x,
-        y: this.playerSprite.y,
-        direction: this.currentDirection,
-        action: this.currentAction,
-      }),
+      getLocalPlayerState: () => this.playerMovement.getState(),
       onOnlineCountChanged: (count) => this.waveSystem.setOnlineCount(count),
       onHostStatusChanged: (isHost) => {
         this.waveSystem.setHostMode(isHost);
@@ -1195,91 +971,8 @@ export class WorldScene extends Phaser.Scene {
     // 3. Update Territory Passive Resource Gains & Sanctuary/House Buffs
     this.updatePassives(delta);
 
-    // 4. Process Local Player Movement
-    const speed = 250;
-    let vx = 0;
-    let vy = 0;
-
-    if (this.cursors.left.isDown || this.wasdKeys.A?.isDown) vx -= 1;
-    if (this.cursors.right.isDown || this.wasdKeys.D?.isDown) vx += 1;
-    if (this.cursors.up.isDown || this.wasdKeys.W?.isDown) vy -= 1;
-    if (this.cursors.down.isDown || this.wasdKeys.S?.isDown) vy += 1;
-
-    if (Math.abs(this.joystickVector.x) > 0.05 || Math.abs(this.joystickVector.y) > 0.05) {
-      vx += this.joystickVector.x;
-      vy += this.joystickVector.y;
-      this.mouseTarget.active = false;
-    }
-
-    if (vx !== 0 || vy !== 0) {
-      this.mouseTarget.active = false;
-    }
-
-    if (this.mouseTarget.active) {
-      const dist = Phaser.Math.Distance.Between(
-        this.playerSprite.x,
-        this.playerSprite.y,
-        this.mouseTarget.x,
-        this.mouseTarget.y
-      );
-
-      if (this.touchTargetObj && dist < 90) {
-        this.mouseTarget.active = false;
-        this.touchTargetObj = null;
-        this.touchIndicator.setVisible(false);
-        this.tryInteract();
-      } else if (dist <= 14) {
-        this.mouseTarget.active = false;
-        this.touchIndicator.setVisible(false);
-      } else {
-        vx = (this.mouseTarget.x - this.playerSprite.x) / dist;
-        vy = (this.mouseTarget.y - this.playerSprite.y) / dist;
-      }
-    }
-
-    if (vx !== 0 || vy !== 0) {
-      const len = Math.hypot(vx, vy);
-      const factor = Math.min(1, len);
-      this.playerSprite.setVelocity(
-        (vx / len) * speed * factor,
-        (vy / len) * speed * factor
-      );
-
-      if (vx < 0) this.currentDirection = 'left';
-      else if (vx > 0) this.currentDirection = 'right';
-      this.playerSprite.setFlipX(this.currentDirection === 'left');
-
-      if (this.currentAction !== 'axe' && this.currentAction !== 'pickaxe') {
-        this.playPlayerAnimation('run');
-      }
-    } else {
-      this.playerSprite.setVelocity(0, 0);
-      if (this.currentAction === 'run') {
-        this.playPlayerAnimation('idle');
-      }
-    }
-
-    // Synchronize Player Visuals & Depth sorting
-    const px = this.playerSprite.x;
-    const py = this.playerSprite.y;
-    this.playerSprite.setDepth(ySortDepth(py, 24));
-    this.playerNameTag.setPosition(px, py - 42).setDepth(ySortDepth(py, 30));
-    this.playerIndicator.setPosition(px, py - 54).setDepth(ySortDepth(py, 30));
-
-    // Continuous interaction when Space, E or Mobile Action Button is held
-    const isHoldInput =
-      this.spaceKey?.isDown || this.eKey?.isDown || this.isActionHolding;
-    if (isHoldInput && time - this.lastInteractTime >= 240) {
-      this.tryInteract();
-    }
-
-    // Smooth Camera Zoom
-    const currentCamZoom = this.cameras.main.zoom;
-    if (Math.abs(currentCamZoom - this.targetZoom) > 0.005) {
-      this.cameras.main.setZoom(Phaser.Math.Linear(currentCamZoom, this.targetZoom, 0.1));
-    }
-
-    this.checkTerritoryAndGridUpdates();
+    // 4. Process Local Player Movement, Camera Zoom & Territory Tracking
+    this.playerMovement.update(time);
 
     this.effectsRenderer.updateClouds();
 
@@ -1377,186 +1070,6 @@ export class WorldScene extends Phaser.Scene {
         GameEvents.emit('inventory-updated', this.inventory);
       }
     }
-  }
-
-  private playPlayerAnimation(action: PlayerAction) {
-    this.currentAction = action;
-    const animKey = `${this.playerColor}_${action}`;
-    if (this.anims.exists(animKey)) {
-      this.playerSprite.play(animKey, true);
-    }
-  }
-
-  private checkTerritoryAndGridUpdates() {
-    const px = this.playerSprite.x;
-    const py = this.playerSprite.y;
-
-    let nearLocked: Island | null = null;
-    for (const isl of this.islands) {
-      if (!isl.unlocked) {
-        const origin = getIslandOrigin(isl.gridX, isl.gridY);
-        const signX = origin.x + 320;
-        const signY = origin.y + 320;
-        const dist = Math.hypot(px - signX, py - signY);
-        if (dist < 260) {
-          nearLocked = isl;
-          break;
-        }
-      }
-    }
-
-    if (nearLocked?.id !== this.lastNearIsland?.id) {
-      this.lastNearIsland = nearLocked;
-      GameEvents.emit('near-island-changed', nearLocked);
-    }
-
-    const gridX = Math.round((px - 320) / TERRITORY_STEP);
-    const gridY = Math.round((py - 320) / TERRITORY_STEP);
-    if (gridX !== this.lastGridPos.gridX || gridY !== this.lastGridPos.gridY) {
-      this.lastGridPos = { gridX, gridY };
-      GameEvents.emit('player-grid-pos-changed', { gridX, gridY });
-    }
-  }
-
-  private tryInteract() {
-    this.lastInteractTime = this.time.now;
-    const px = this.playerSprite.x;
-    const py = this.playerSprite.y;
-
-    // 1. 마물 직접 타격 (전투 최우선!)
-    let nearestMonster: MonsterVisual | null = null;
-    let minMonDist = 115;
-    for (const mv of this.waveSystem.getMonsterVisuals().values()) {
-      const d = Math.hypot(px - mv.monster.x, py - mv.monster.y);
-      if (d < minMonDist) {
-        minMonDist = d;
-        nearestMonster = mv;
-      }
-    }
-
-    if (nearestMonster) {
-      this.playPlayerAnimation('axe');
-      this.time.delayedCall(260, () => {
-        if (this.currentAction === 'axe') this.playPlayerAnimation('idle');
-      });
-      sound.playChop();
-      this.waveSystem.damageMonster(nearestMonster.monster.id, 35, this.playerName);
-      return;
-    }
-
-    // 2. 미점령 영지 개척 제단 확인 (땅을 넓혀가며 자원을 확보)
-    for (const isl of this.islands) {
-      if (!isl.unlocked) {
-        const origin = getIslandOrigin(isl.gridX, isl.gridY);
-        const signX = origin.x + 320;
-        const signY = origin.y + 320;
-        const dist = Math.hypot(px - signX, py - signY);
-
-        if (dist < 260) {
-          if (
-            this.inventory.wood >= isl.costWood &&
-            this.inventory.stone >= isl.costStone &&
-            this.inventory.gold >= isl.costGold
-          ) {
-            this.inventory = {
-              wood: this.inventory.wood - isl.costWood,
-              stone: this.inventory.stone - isl.costStone,
-              gold: this.inventory.gold - isl.costGold,
-            };
-            GameEvents.emit('inventory-updated', this.inventory);
-            this.unlockIslandLocally(isl.id, this.playerName, true);
-            return;
-          } else {
-            this.showFloatingText(
-              signX,
-              signY - 40,
-              `자원 부족! (🪵${isl.costWood} 🪨${isl.costStone}${isl.costGold > 0 ? ` 🪙${isl.costGold}` : ''})`,
-              '#ff5252'
-            );
-            return;
-          }
-        }
-      }
-    }
-
-    // 3. 자원 엔티티 채집 (맵 전역 야외 필드에서 점령 여부와 무관하게 채집 가능)
-    const nearestVisual = this.resourceEntityRenderer.findNearestVisual(px, py, 95);
-
-    if (nearestVisual) {
-      const ent = nearestVisual.entity;
-
-      if (ent.type === 'sheep') {
-        sound.playClick();
-        this.shakeObject(nearestVisual.container);
-        this.showFloatingText(ent.x + 16, ent.y - 20, '🐑 음메에~ ❤️', '#f472b6');
-        return;
-      }
-
-      const toolAction: PlayerAction = ent.type === 'tree' ? 'axe' : 'pickaxe';
-      this.playPlayerAnimation(toolAction);
-      this.time.delayedCall(280, () => {
-        if (this.currentAction === toolAction) {
-          this.playPlayerAnimation('idle');
-        }
-      });
-
-      const damage = 1;
-      ent.hp -= damage;
-      this.shakeObject(nearestVisual.container);
-      this.resourceEntityRenderer.updateHpBar(ent.id);
-
-      if (ent.type === 'tree') sound.playChop();
-      else sound.playMine();
-
-      const resKey = ent.type === 'tree' ? 'wood' : ent.type === 'gold_rock' ? 'gold' : 'stone';
-      const harvestAmount = 1;
-      this.inventory = {
-        ...this.inventory,
-        [resKey]: this.inventory[resKey] + harvestAmount,
-      };
-      GameEvents.emit('inventory-updated', this.inventory);
-
-      const icon =
-        resKey === 'wood'
-          ? `🪵 +${harvestAmount}`
-          : resKey === 'gold'
-          ? `🪙 +${harvestAmount}`
-          : `🪨 +${harvestAmount}`;
-      const color = resKey === 'wood' ? '#8bc34a' : resKey === 'gold' ? '#ffd700' : '#cfd8dc';
-      this.showFloatingText(ent.x + 16, ent.y, icon, color);
-
-      this.multiplayerSync?.broadcastHit(ent.id, damage);
-
-      if (ent.hp <= 0) {
-        sound.playBreak();
-        this.resourceEntityRenderer.removeAndRespawn(ent);
-        this.waveSystem.reduceCooldown(ACTIVE_WAVE_ACCELERATION_CONFIG.gatherCooldownReductionSec);
-      }
-      return;
-    }
-
-    // 4. 점령한 땅의 코어 보석 근처에서 상호작용 시 코어 회복 및 마을/건설 창 열기
-    for (const isl of this.islands) {
-      if (!isl.unlocked) continue;
-      const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-      if (Math.hypot(px - cPos.x, py - cPos.y) < 95) {
-        sound.playUnlock();
-        if (isl.coreHp < isl.coreMaxHp) {
-          isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 15);
-          this.updateCoreGemVisual(isl.id);
-          this.saveWorldState(false);
-          this.emitWorldStateToReact(false);
-        }
-        this.showFloatingText(cPos.x, cPos.y - 60, `💎 [${isl.name}] 마을/건설 관리`, '#38bdf8');
-        GameEvents.emit('open-village-modal', isl.id);
-        return;
-      }
-    }
-
-    this.playPlayerAnimation('axe');
-    this.time.delayedCall(280, () => {
-      if (this.currentAction === 'axe') this.playPlayerAnimation('idle');
-    });
   }
 
   public unlockIslandLocally(islandId: number, unlockedBy: string, isLocalTrigger: boolean) {
