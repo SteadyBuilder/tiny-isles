@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { createPhaserConfig } from './phaser/config';
-import { EventBus } from './phaser/EventBus';
+import { GameEvents } from './events/gameEvents';
 import {
   ConstructedBuilding,
   Inventory,
@@ -117,7 +117,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       onUpdateInventoryRef.current(() => newInv);
     };
 
-    const handleUnlockedIslands = (ids: number[], total: number) => {
+    const handleUnlockedIslands = ({ ids, total }: { ids: number[]; total: number }) => {
       onUnlockedIslandIdsChangeRef.current?.(ids);
       onUnlockedCountChangeRef.current?.(ids.length, total);
     };
@@ -162,36 +162,36 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       setOnlineCountRef.current(count);
     };
 
-    EventBus.on('load-progress', handleProgress);
-    EventBus.on('load-complete', handleComplete);
-    EventBus.on('inventory-updated', handleInventoryUpdated);
-    EventBus.on('unlocked-islands', handleUnlockedIslands);
-    EventBus.on('territories-updated', handleTerritoriesUpdated);
-    EventBus.on('constructed-buildings-updated', handleConstructedBuildingsUpdated);
-    EventBus.on('wave-state-updated', handleWaveStateUpdated);
-    EventBus.on('offline-report-ready', handleOfflineReportReady);
-    EventBus.on('open-village-modal', handleOpenVillageModal);
-    EventBus.on('game-alert', handleGameAlert);
-    EventBus.on('near-island-changed', handleNearIsland);
-    EventBus.on('player-grid-pos-changed', handleGridPos);
-    EventBus.on('zoom-changed', handleZoomChanged);
-    EventBus.on('online-count-changed', handleOnlineCount);
+    GameEvents.on('load-progress', handleProgress);
+    GameEvents.on('load-complete', handleComplete);
+    GameEvents.on('inventory-updated', handleInventoryUpdated);
+    GameEvents.on('unlocked-islands', handleUnlockedIslands);
+    GameEvents.on('territories-updated', handleTerritoriesUpdated);
+    GameEvents.on('constructed-buildings-updated', handleConstructedBuildingsUpdated);
+    GameEvents.on('wave-state-updated', handleWaveStateUpdated);
+    GameEvents.on('offline-report-ready', handleOfflineReportReady);
+    GameEvents.on('open-village-modal', handleOpenVillageModal);
+    GameEvents.on('game-alert', handleGameAlert);
+    GameEvents.on('near-island-changed', handleNearIsland);
+    GameEvents.on('player-grid-pos-changed', handleGridPos);
+    GameEvents.on('zoom-changed', handleZoomChanged);
+    GameEvents.on('online-count-changed', handleOnlineCount);
 
     return () => {
-      EventBus.off('load-progress', handleProgress);
-      EventBus.off('load-complete', handleComplete);
-      EventBus.off('inventory-updated', handleInventoryUpdated);
-      EventBus.off('unlocked-islands', handleUnlockedIslands);
-      EventBus.off('territories-updated', handleTerritoriesUpdated);
-      EventBus.off('constructed-buildings-updated', handleConstructedBuildingsUpdated);
-      EventBus.off('wave-state-updated', handleWaveStateUpdated);
-      EventBus.off('offline-report-ready', handleOfflineReportReady);
-      EventBus.off('open-village-modal', handleOpenVillageModal);
-      EventBus.off('game-alert', handleGameAlert);
-      EventBus.off('near-island-changed', handleNearIsland);
-      EventBus.off('player-grid-pos-changed', handleGridPos);
-      EventBus.off('zoom-changed', handleZoomChanged);
-      EventBus.off('online-count-changed', handleOnlineCount);
+      GameEvents.off('load-progress', handleProgress);
+      GameEvents.off('load-complete', handleComplete);
+      GameEvents.off('inventory-updated', handleInventoryUpdated);
+      GameEvents.off('unlocked-islands', handleUnlockedIslands);
+      GameEvents.off('territories-updated', handleTerritoriesUpdated);
+      GameEvents.off('constructed-buildings-updated', handleConstructedBuildingsUpdated);
+      GameEvents.off('wave-state-updated', handleWaveStateUpdated);
+      GameEvents.off('offline-report-ready', handleOfflineReportReady);
+      GameEvents.off('open-village-modal', handleOpenVillageModal);
+      GameEvents.off('game-alert', handleGameAlert);
+      GameEvents.off('near-island-changed', handleNearIsland);
+      GameEvents.off('player-grid-pos-changed', handleGridPos);
+      GameEvents.off('zoom-changed', handleZoomChanged);
+      GameEvents.off('online-count-changed', handleOnlineCount);
 
       game.destroy(true);
       gameRef.current = null;
@@ -199,22 +199,22 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   }, []);
 
   useEffect(() => {
-    EventBus.emit('set-player-profile', { name: playerName, color: playerColor });
+    GameEvents.emit('set-player-profile', { name: playerName, color: playerColor });
   }, [playerName, playerColor]);
 
   useEffect(() => {
-    EventBus.emit('set-zoom', zoom);
+    GameEvents.emit('set-zoom', zoom);
   }, [zoom]);
 
   useEffect(() => {
-    EventBus.emit('set-inventory', inventory);
+    GameEvents.emit('set-inventory', inventory);
   }, [inventory]);
 
   useEffect(() => {
     let animId: number;
     const pollJoystick = () => {
       if (joystickRef?.current) {
-        EventBus.emit('joystick-move', joystickRef.current);
+        GameEvents.emit('joystick-move', joystickRef.current);
       }
       animId = requestAnimationFrame(pollJoystick);
     };

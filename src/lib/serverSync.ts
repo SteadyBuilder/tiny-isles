@@ -1,3 +1,4 @@
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import {
   ConstructedBuilding,
@@ -83,7 +84,12 @@ export const serverSync = {
   },
 
   // --- 2. Realtime Broadcast 멀티플레이어 동기화 ---
-  broadcast: (channel: any, event: string, payload: any, senderId: string) => {
+  broadcast: <T extends object>(
+    channel: RealtimeChannel | null,
+    event: string,
+    payload: T,
+    senderId: string
+  ) => {
     if (!channel) return;
     const eventId = `${event}_${senderId}_${Date.now()}`;
     channel.send({

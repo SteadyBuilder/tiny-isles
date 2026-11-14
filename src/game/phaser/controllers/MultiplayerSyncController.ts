@@ -10,7 +10,7 @@ import {
 import { supabase } from '../../../lib/supabase';
 import { serverSync } from '../../../lib/serverSync';
 import { ySortDepth } from '../../depthLayers';
-import { EventBus } from '../EventBus';
+import { GameEvents } from '../../events/gameEvents';
 import { electHostFromPresence, PresenceEntryMeta } from './HostAuthorityHelper';
 
 interface RemotePlayerVisual {
@@ -142,7 +142,7 @@ export class MultiplayerSyncController {
           this.ctx.onHostStatusChanged?.(isHost);
         }
         this.ctx.onOnlineCountChanged(onlineCount);
-        EventBus.emit('online-count-changed', onlineCount);
+        GameEvents.emit('online-count-changed', onlineCount);
       })
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
         this.removeRemotePlayer(key);

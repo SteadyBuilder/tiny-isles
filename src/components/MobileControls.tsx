@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Island } from '../types/game';
 import { Sparkles, Swords } from 'lucide-react';
-import { EventBus } from '../game/phaser/EventBus';
+import { GameEvents } from '../game/events/gameEvents';
 import {
   GESTURE_BLOCK_PROPS,
   attachGestureBlock,
@@ -49,7 +49,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     actionPointerIdRef.current = null;
     setIsActionActive(false);
     if (actionIntervalRef.current) { clearInterval(actionIntervalRef.current); actionIntervalRef.current = null; }
-    EventBus.emit('player-action-stop');
+    GameEvents.emit('player-action-stop');
   }, []);
 
   const startActionHold = useCallback((e: React.PointerEvent | React.TouchEvent) => {
@@ -58,7 +58,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
     setIsActionActive(true);
     onAction();
-    EventBus.emit('player-action-start');
+    GameEvents.emit('player-action-start');
   }, [onAction]);
 
   const resetJoystick = useCallback(() => {
@@ -111,7 +111,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         e.preventDefault();
         const dist = getTouchDistance(touches[0], touches[1]);
         const nextZoom = Math.min(2.0, Math.max(0.5, Number((pinchStartZoomRef.current * (dist / pinchDistRef.current)).toFixed(2))));
-        EventBus.emit('set-zoom', nextZoom);
+        GameEvents.emit('set-zoom', nextZoom);
         onZoomChange?.(nextZoom);
       }
     };

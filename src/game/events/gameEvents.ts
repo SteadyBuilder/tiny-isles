@@ -30,7 +30,7 @@ export interface GameEventPayloads {
   'core-damaged': { territoryId: number; currentHp: number; maxHp: number };
   'territory-lost': { territoryId: number; name: string };
   'territories-updated': Island[];
-  'unlocked-islands': [ids: number[], total: number];
+  'unlocked-islands': { ids: number[]; total: number };
   'near-island-changed': Island | null;
   'open-village-modal': number; // territoryId
 

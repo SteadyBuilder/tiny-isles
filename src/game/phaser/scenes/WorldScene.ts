@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import confetti from 'canvas-confetti';
-import { EventBus } from '../EventBus';
+import { GameEventPayloads, GameEvents } from '../../events/gameEvents';
 import {
   TERRITORY_STEP,
   INITIAL_ISLANDS,
@@ -246,7 +246,7 @@ export class WorldScene extends Phaser.Scene {
             stone: this.inventory.stone + stone,
             gold: this.inventory.gold + gold,
           };
-          EventBus.emit('inventory-updated', this.inventory);
+          GameEvents.emit('inventory-updated', this.inventory);
         },
         broadcastWaveSpawn: (isBossWave) => this.multiplayerSync?.broadcastWaveSpawn(isBossWave),
         broadcastMonstersSync: (monsters, waveCount, bossWaveCount) =>
@@ -305,7 +305,7 @@ export class WorldScene extends Phaser.Scene {
               stone: this.inventory.stone + passiveGain.stone,
               gold: this.inventory.gold + passiveGain.gold,
             };
-            EventBus.emit('inventory-updated', this.inventory);
+            GameEvents.emit('inventory-updated', this.inventory);
           }
           this.spawnAllTerritoryCores();
           this.spawnAllConstructedBuildings();
@@ -374,7 +374,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // 15. Notify React scene is ready & emit initial states
-    EventBus.emit('scene-ready', this);
+    GameEvents.emit('scene-ready', this);
     this.emitWorldStateToReact(true);
     this.emitWaveStateToReact();
 
@@ -454,7 +454,7 @@ export class WorldScene extends Phaser.Scene {
           this.handleConstructBuilding(territoryId, type, slotIndex, true),
         setInventory: (inv: Inventory) => {
           this.inventory = { ...inv };
-          EventBus.emit('inventory-updated', this.inventory);
+          GameEvents.emit('inventory-updated', this.inventory);
           this.drawTerrainDecorations();
           this.drawExpansionAltars();
         },
@@ -482,9 +482,9 @@ export class WorldScene extends Phaser.Scene {
 
   private emitWorldStateNow() {
     const unlockedIds = this.islands.filter((i) => i.unlocked).map((i) => i.id);
-    EventBus.emit('unlocked-islands', unlockedIds, this.islands.length);
-    EventBus.emit('territories-updated', [...this.islands]);
-    EventBus.emit('constructed-buildings-updated', [...this.constructedBuildings]);
+    GameEvents.emit('unlocked-islands', { ids: unlockedIds, total: this.islands.length });
+    GameEvents.emit('territories-updated', [...this.islands]);
+    GameEvents.emit('constructed-buildings-updated', [...this.constructedBuildings]);
   }
 
   private emitWaveStateToReact() {
@@ -894,7 +894,7 @@ export class WorldScene extends Phaser.Scene {
       const step = 0.12;
       const next = deltaY < 0 ? this.targetZoom + step : this.targetZoom - step;
       this.targetZoom = Math.min(2.0, Math.max(0.5, Number(next.toFixed(2))));
-      EventBus.emit('zoom-changed', this.targetZoom);
+      GameEvents.emit('zoom-changed', this.targetZoom);
     });
 
     this.touchIndicator = this.add
@@ -992,7 +992,7 @@ export class WorldScene extends Phaser.Scene {
           const cPos = getTerritoryCorePos(touchedCoreIsl.gridX, touchedCoreIsl.gridY);
           targetX = cPos.x;
           targetY = cPos.y;
-          EventBus.emit('open-village-modal', touchedCoreIsl.id);
+          GameEvents.emit('open-village-modal', touchedCoreIsl.id);
         } else if (touchedIslandSign) {
           const orig = getIslandOrigin(touchedIslandSign.gridX, touchedIslandSign.gridY);
           targetX = orig.x + 320;
@@ -1055,7 +1055,7 @@ export class WorldScene extends Phaser.Scene {
       this.eKey.on('down', () => this.tryInteract());
       this.bKey.on('down', () => {
         const curIsl = this.getCurrentPlayerTerritory();
-        EventBus.emit('open-village-modal', curIsl.id);
+        GameEvents.emit('open-village-modal', curIsl.id);
       });
     }
 
@@ -1071,15 +1071,15 @@ export class WorldScene extends Phaser.Scene {
     window.addEventListener('player-action', handlePlayerAction);
     window.addEventListener('player-action-start', handleActionStart);
     window.addEventListener('player-action-stop', handleActionStop);
-    EventBus.on('player-action-start', handleActionStart);
-    EventBus.on('player-action-stop', handleActionStop);
+    GameEvents.on('player-action-start', handleActionStart);
+    GameEvents.on('player-action-stop', handleActionStop);
 
     this.events.once('shutdown', () => {
       window.removeEventListener('player-action', handlePlayerAction);
       window.removeEventListener('player-action-start', handleActionStart);
       window.removeEventListener('player-action-stop', handleActionStop);
-      EventBus.off('player-action-start', handleActionStart);
-      EventBus.off('player-action-stop', handleActionStop);
+      GameEvents.off('player-action-start', handleActionStart);
+      GameEvents.off('player-action-stop', handleActionStop);
     });
   }
 
@@ -1093,12 +1093,12 @@ export class WorldScene extends Phaser.Scene {
     );
   }
 
-  private registerEventBus<TArgs extends unknown[]>(
-    event: string,
-    fn: (...args: TArgs) => void
+  private registerEventBus<K extends keyof GameEventPayloads>(
+    event: K,
+    fn: (payload: GameEventPayloads[K]) => void
   ): void {
-    EventBus.on(event, fn);
-    this.unbindEventBus.push(() => EventBus.off(event, fn));
+    GameEvents.on(event, fn);
+    this.unbindEventBus.push(() => GameEvents.off(event, fn));
   }
 
   private setupEventBus() {
@@ -1194,7 +1194,7 @@ export class WorldScene extends Phaser.Scene {
         stone: this.inventory.stone + 500,
         gold: this.inventory.gold + 500,
       };
-      EventBus.emit('inventory-updated', this.inventory);
+      GameEvents.emit('inventory-updated', this.inventory);
       this.drawTerrainDecorations();
       this.drawExpansionAltars();
       this.showFloatingText(
@@ -1236,7 +1236,7 @@ export class WorldScene extends Phaser.Scene {
         stone: this.inventory.stone - check.costStone,
         gold: this.inventory.gold - check.costGold,
       };
-      EventBus.emit('inventory-updated', this.inventory);
+      GameEvents.emit('inventory-updated', this.inventory);
     }
 
     const nextCfg = VILLAGE_TIER_CONFIGS[nextTier];
@@ -1260,7 +1260,7 @@ export class WorldScene extends Phaser.Scene {
         ? `🏡 [${isl.name}]에 새로운 '개척마을'을 세웠습니다!`
         : `🎉 [${isl.name}]이(가) '${nextCfg.name}'(으)로 발전했습니다! (코어 HP ${isl.coreMaxHp}, 슬롯 ${nextCfg.maxBuildings}개)`;
     this.showFloatingText(cPos.x, cPos.y - 75, msg, '#4ade80');
-    EventBus.emit('game-alert', msg);
+    GameEvents.emit('game-alert', msg);
 
     if (isLocalTrigger) {
       this.multiplayerSync?.broadcastVillageUpgrade(territoryId, nextTier);
@@ -1306,7 +1306,7 @@ export class WorldScene extends Phaser.Scene {
         stone: this.inventory.stone - bp.costStone,
         gold: this.inventory.gold - bp.costGold,
       };
-      EventBus.emit('inventory-updated', this.inventory);
+      GameEvents.emit('inventory-updated', this.inventory);
     }
 
     const newBuilding = BuildingSystem.createConstructedBuilding(isl, type, finalSlotIndex);
@@ -1361,7 +1361,7 @@ export class WorldScene extends Phaser.Scene {
       wood: this.inventory.wood - 5,
       stone: this.inventory.stone - 5,
     };
-    EventBus.emit('inventory-updated', this.inventory);
+    GameEvents.emit('inventory-updated', this.inventory);
 
     isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 100);
     // 영지 내 성벽/방책도 함께 수리
@@ -1452,7 +1452,7 @@ export class WorldScene extends Phaser.Scene {
       },
       onRemoteWaveSpawned: (isBossWave) => {
         sound.playBreak();
-        EventBus.emit(
+        GameEvents.emit(
           'game-alert',
           isBossWave
             ? '👹 외곽 영지에서 보스 군단 침공이 시작되었습니다!'
@@ -1671,7 +1671,7 @@ export class WorldScene extends Phaser.Scene {
           stone: this.inventory.stone + totalStoneGain,
           gold: this.inventory.gold + totalGoldGain,
         };
-        EventBus.emit('inventory-updated', this.inventory);
+        GameEvents.emit('inventory-updated', this.inventory);
       }
     }
   }
@@ -1704,14 +1704,14 @@ export class WorldScene extends Phaser.Scene {
 
     if (nearLocked?.id !== this.lastNearIsland?.id) {
       this.lastNearIsland = nearLocked;
-      EventBus.emit('near-island-changed', nearLocked);
+      GameEvents.emit('near-island-changed', nearLocked);
     }
 
     const gridX = Math.round((px - 320) / TERRITORY_STEP);
     const gridY = Math.round((py - 320) / TERRITORY_STEP);
     if (gridX !== this.lastGridPos.gridX || gridY !== this.lastGridPos.gridY) {
       this.lastGridPos = { gridX, gridY };
-      EventBus.emit('player-grid-pos-changed', { gridX, gridY });
+      GameEvents.emit('player-grid-pos-changed', { gridX, gridY });
     }
   }
 
@@ -1760,7 +1760,7 @@ export class WorldScene extends Phaser.Scene {
               stone: this.inventory.stone - isl.costStone,
               gold: this.inventory.gold - isl.costGold,
             };
-            EventBus.emit('inventory-updated', this.inventory);
+            GameEvents.emit('inventory-updated', this.inventory);
             this.unlockIslandLocally(isl.id, this.playerName, true);
             return;
           } else {
@@ -1820,7 +1820,7 @@ export class WorldScene extends Phaser.Scene {
         ...this.inventory,
         [resKey]: this.inventory[resKey] + harvestAmount,
       };
-      EventBus.emit('inventory-updated', this.inventory);
+      GameEvents.emit('inventory-updated', this.inventory);
 
       const icon =
         resKey === 'wood'
@@ -1854,7 +1854,7 @@ export class WorldScene extends Phaser.Scene {
           this.emitWorldStateToReact(false);
         }
         this.showFloatingText(cPos.x, cPos.y - 60, `💎 [${isl.name}] 마을/건설 관리`, '#38bdf8');
-        EventBus.emit('open-village-modal', isl.id);
+        GameEvents.emit('open-village-modal', isl.id);
         return;
       }
     }
@@ -1918,7 +1918,7 @@ export class WorldScene extends Phaser.Scene {
     const gm = GOLD_MINE_BIOME_CONFIG;
     confetti({ particleCount: 130, spread: 95, origin: { y: 0.55 } });
     this.showFloatingText(gm.centerX, gm.centerY - 40, `⛏️ ${gm.announcementText}`, '#fde047');
-    EventBus.emit('game-alert', gm.announcementText);
+    GameEvents.emit('game-alert', gm.announcementText);
   }
 
   public unlockIslandLocally(islandId: number, unlockedBy: string, isLocalTrigger: boolean) {
@@ -1949,7 +1949,7 @@ export class WorldScene extends Phaser.Scene {
     if (islandId === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId) {
       this.spawnGoldMineClusterAndAnnounce();
     } else {
-      EventBus.emit('game-alert', msg);
+      GameEvents.emit('game-alert', msg);
     }
 
     if (isLocalTrigger) {

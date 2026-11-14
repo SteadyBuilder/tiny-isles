@@ -21,7 +21,7 @@ import {
   INITIAL_ISLANDS,
   REGULAR_WAVE_INTERVAL_SEC,
 } from './game/constants';
-import { EventBus } from './game/phaser/EventBus';
+import { GameEvents } from './game/events/gameEvents';
 
 export function App() {
   const playerIdRef = useRef<string>(storage.getPlayerId());
@@ -234,11 +234,11 @@ export function App() {
         onResetGame={handleResetGame}
         onOpenMinimap={() => setShowMinimapModal(true)}
         onOpenVillageModal={handleOpenVillageModalForCurrent}
-        onTriggerRegularWave={() => EventBus.emit('trigger-regular-wave')}
-        onTriggerBossWave={() => EventBus.emit('trigger-boss-wave')}
-        onSummonEarlyWave={() => EventBus.emit('summon-early-wave', { isBossWave: false })}
-        onChangeTimeScale={(scale) => EventBus.emit('set-wave-timescale', scale)}
-        onAddTestResources={() => EventBus.emit('add-test-resources')}
+        onTriggerRegularWave={() => GameEvents.emit('trigger-regular-wave')}
+        onTriggerBossWave={() => GameEvents.emit('trigger-boss-wave')}
+        onSummonEarlyWave={() => GameEvents.emit('summon-early-wave', { isBossWave: false })}
+        onChangeTimeScale={(scale) => GameEvents.emit('set-wave-timescale', scale)}
+        onAddTestResources={() => GameEvents.emit('add-test-resources')}
       />
 
       <PhaserGame
@@ -293,11 +293,11 @@ export function App() {
         onSelectTerritory={setSelectedTerritoryId}
         constructedBuildings={constructedBuildings}
         inventory={inventory}
-        onUpgradeVillage={(territoryId) => EventBus.emit('upgrade-village', territoryId)}
+        onUpgradeVillage={(territoryId) => GameEvents.emit('upgrade-village', territoryId)}
         onConstructBuilding={(territoryId, type: ConstructableType, slotIndex?: number) =>
-          EventBus.emit('construct-building', { territoryId, type, slotIndex })
+          GameEvents.emit('construct-building', { territoryId, type, slotIndex })
         }
-        onRepairCore={(territoryId) => EventBus.emit('repair-territory-core', territoryId)}
+        onRepairCore={(territoryId) => GameEvents.emit('repair-territory-core', territoryId)}
       />
 
       <OfflineReportModal

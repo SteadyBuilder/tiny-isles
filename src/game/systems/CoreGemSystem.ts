@@ -1,6 +1,6 @@
 import { ConstructedBuilding, Island } from '../../types/game';
 import { getTerritoryCorePos, VILLAGE_TIER_CONFIGS } from '../constants';
-import { EventBus } from '../phaser/EventBus';
+import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
 
 export interface CoreGemVisualRef {
@@ -130,8 +130,8 @@ export class CoreGemSystem {
 
       const lostMsg = `💔 [땅 상실!] ${attackerName}의 공격으로 '${isl.name}'의 코어 보석이 부숴져 땅을 잃었습니다! 마물들이 중심부를 향해 진격합니다!`;
       this.ctx.showFloatingText(cPos.x, cPos.y - 70, `💔 코어 보석 파괴! [${isl.name} 상실]`, '#ef4444');
-      EventBus.emit('game-alert', lostMsg);
-      EventBus.emit('territory-lost', { territoryId, name: isl.name });
+      GameEvents.emit('game-alert', lostMsg);
+      GameEvents.emit('territory-lost', { territoryId, name: isl.name });
 
       if (isLocalTrigger && this.ctx.broadcastTerritoryLost) {
         this.ctx.broadcastTerritoryLost(territoryId);
@@ -151,7 +151,7 @@ export class CoreGemSystem {
 
       const msg = `⚠️ 중심 마을 코어 보석이 파괴 위기에 처해 긴급 결계가 발동했습니다! (코어 체력 50% 복구)`;
       this.ctx.showFloatingText(cPos.x, cPos.y - 70, msg, '#f59e0b');
-      EventBus.emit('game-alert', msg);
+      GameEvents.emit('game-alert', msg);
     }
   }
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { PlayerColor } from '../types/game';
 import { sound, SoundSettings } from '../lib/sound';
-import { EventBus } from '../game/phaser/EventBus';
+import { GameEvents } from '../game/events/gameEvents';
 
 interface HudSettingsModalProps {
   isOpen: boolean;
@@ -168,7 +168,7 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
               <button
                 key={z}
                 onClick={() => {
-                  EventBus.emit('set-zoom', z);
+                  GameEvents.emit('set-zoom', z);
                 }}
                 className="py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-200 active:scale-95 transition"
               >

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EventBus } from '../EventBus';
+import { GameEvents } from '../../events/gameEvents';
 
 export interface WebGLContextGuardOptions {
   scene: Phaser.Scene;
@@ -26,7 +26,7 @@ export function attachWebGLContextGuard(options: WebGLContextGuardOptions): () =
       wasPhysicsPaused = scene.physics.world.isPaused;
       scene.physics.pause();
     }
-    EventBus.emit(
+    GameEvents.emit(
       'game-alert',
       '⚠️ 그래픽(WebGL) 컨텍스트가 일시 중단되었습니다. 복구 중입니다...'
     );
@@ -37,7 +37,7 @@ export function attachWebGLContextGuard(options: WebGLContextGuardOptions): () =
       scene.physics.resume();
     }
     onRestored?.();
-    EventBus.emit('game-alert', '✅ 그래픽(WebGL) 렌더링이 정상 복구되었습니다.');
+    GameEvents.emit('game-alert', '✅ 그래픽(WebGL) 렌더링이 정상 복구되었습니다.');
   };
 
   renderer.on(Phaser.Renderer.Events.LOSE_WEBGL, handleLost);

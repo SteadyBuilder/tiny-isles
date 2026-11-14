@@ -13,7 +13,7 @@ import {
 } from '../../types/game';
 import { worldStateSync } from '../../lib/worldStateSync';
 import { resolveOfflinePeriod } from '../utils/offlineResolver';
-import { EventBus } from '../phaser/EventBus';
+import { GameEvents } from '../events/gameEvents';
 import { GarrisonSystem } from './GarrisonSystem';
 import { WaveSystem } from './WaveSystem';
 
@@ -76,7 +76,7 @@ export class LivingWorldCoordinator {
     if (this.disposed) return;
 
     this.garrisonSystem.setGarrisons(garrisons);
-    EventBus.emit('garrisons-updated', garrisons);
+    GameEvents.emit('garrisons-updated', garrisons);
 
     if (savedWorld) {
       this.waveSystem.syncCountsFromWorldState(
@@ -154,7 +154,7 @@ export class LivingWorldCoordinator {
   }
 
   private emitOfflineReport(report: OfflineResolutionReport) {
-    EventBus.emit('offline-report-ready', report);
+    GameEvents.emit('offline-report-ready', report);
   }
 
   public update(delta: number) {

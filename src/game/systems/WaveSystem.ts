@@ -10,7 +10,7 @@ import {
   REGULAR_WAVE_INTERVAL_SEC,
 } from '../constants';
 import { ACTIVE_WAVE_ACCELERATION_CONFIG, WORLD_CLOCK_CONFIG } from '../../data/worldRules';
-import { EventBus } from '../phaser/EventBus';
+import { GameEvents } from '../events/gameEvents';
 import { ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
 import {
@@ -92,11 +92,11 @@ export class WaveSystem {
   }
 
   private setupListeners() {
-    EventBus.on('territory-lost', this.onTerritoryLost);
+    GameEvents.on('territory-lost', this.onTerritoryLost);
   }
 
   public destroy(): void {
-    EventBus.off('territory-lost', this.onTerritoryLost);
+    GameEvents.off('territory-lost', this.onTerritoryLost);
     for (const mv of this.monsters.values()) {
       mv.container.destroy();
     }
@@ -206,7 +206,7 @@ export class WaveSystem {
       }
     }
     this.waveState.activeBoss = bossInfo;
-    EventBus.emit('wave-state-updated', { ...this.waveState });
+    GameEvents.emit('wave-state-updated', { ...this.waveState });
   }
 
   public update(time: number, delta: number) {
@@ -456,7 +456,7 @@ export class WaveSystem {
 
     this.waveState.lastWaveMessage = alertMsg;
     sound.playBreak();
-    EventBus.emit('game-alert', alertMsg);
+    GameEvents.emit('game-alert', alertMsg);
     this.emitWaveState();
 
     if (isLocalTrigger && this.ctx.broadcastWaveSpawn) {

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EventBus } from '../EventBus';
+import { GameEvents } from '../../events/gameEvents';
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -9,11 +9,11 @@ export class PreloadScene extends Phaser.Scene {
   preload() {
     // Loading progress events
     this.load.on('progress', (value: number) => {
-      EventBus.emit('load-progress', value);
+      GameEvents.emit('load-progress', value);
     });
 
     this.load.on('complete', () => {
-      EventBus.emit('load-complete');
+      GameEvents.emit('load-complete');
     });
 
     // Player Spritesheets (192x192, 6 frames each)
