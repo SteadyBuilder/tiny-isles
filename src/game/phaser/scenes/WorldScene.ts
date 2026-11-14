@@ -12,7 +12,6 @@ import { BuildingSystem } from '../../BuildingSystem';
 import {
   ConstructableType,
   ConstructedBuilding,
-  Entity,
   Inventory,
   Island,
   PlayerAction,
@@ -28,32 +27,21 @@ import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
 import { LivingWorldCoordinator } from '../../systems/LivingWorldCoordinator';
 import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../../data/worldRules';
-import {
-  GOLD_MINE_BIOME_CONFIG,
-  RESOURCE_DISTRIBUTION_CONFIG,
-} from '../../../data/biomes';
+import { GOLD_MINE_BIOME_CONFIG } from '../../../data/biomes';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { DEPTH, ySortDepth } from '../../depthLayers';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
-import {
-  generateGoldMineClusterEntities,
-  generateWorldResourceEntities,
-  pickRespawnSpot,
-} from '../../world/ResourceDistributionSystem';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
+import {
+  EntityVisual,
+  ResourceEntityRenderer,
+} from '../renderers/ResourceEntityRenderer';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 import { attachWebGLContextGuard } from '../utils/webglContextGuard';
-
-interface EntityVisual {
-  entity: Entity;
-  container: Phaser.GameObjects.Container;
-  sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
-  hpBar?: Phaser.GameObjects.Graphics;
-}
 
 export class WorldScene extends Phaser.Scene {
   // Player
@@ -69,7 +57,6 @@ export class WorldScene extends Phaser.Scene {
   // World Data
   private islands: Island[] = [];
   private wallColliders: Phaser.Physics.Arcade.StaticGroup | null = null;
-  private entityVisuals = new Map<string, EntityVisual>();
 
   // Subsystems & Controllers (SRP Modular Architecture)
   private coreGemSystem!: CoreGemSystem;
@@ -79,6 +66,7 @@ export class WorldScene extends Phaser.Scene {
   private livingWorldCoordinator!: LivingWorldCoordinator;
   private constructedBuildingRenderer!: ConstructedBuildingRenderer;
   private territoryStructureRenderer!: TerritoryStructureRenderer;
+  private resourceEntityRenderer!: ResourceEntityRenderer;
   private effectsRenderer!: WorldEffectsRenderer;
   private multiplayerSync!: MultiplayerSyncController;
 
@@ -182,23 +170,26 @@ export class WorldScene extends Phaser.Scene {
     this.spawnAllBuildings();
     this.spawnAllConstructedBuildings();
 
-    // 4. Territory Expansion Altars Renderer
+    // 4. Territory Expansion Altars & Resource Entity Renderers
     this.altarRenderer = new ExpansionAltarRenderer(this);
     this.drawExpansionAltars();
+    this.resourceEntityRenderer = new ResourceEntityRenderer({
+      scene: this,
+      terrainMap: this.terrainMap,
+      isSceneAlive: () => this.isSceneAlive(),
+      getIslands: () => this.islands,
+      getConstructedBuildings: () => this.constructedBuildings,
+      shakeObject: (target) => this.shakeObject(target),
+      showFloatingText: (x, y, text, color) => this.showFloatingText(x, y, text, color),
+    });
 
     // 5. Initialize Core Systems (Modular AI-Friendly Architecture)
     this.coreGemSystem = new CoreGemSystem({
       getIslands: () => this.islands,
       getConstructedBuildings: () => this.constructedBuildings,
       removeConstructedBuilding: (buildingId: string) => this.destroyConstructedBuilding(buildingId),
-      removeEntityVisualsForIsland: (islandId: number) => {
-        for (const [entId, ev] of this.entityVisuals.entries()) {
-          if (ev.entity.islandId === islandId) {
-            ev.container.destroy();
-            this.entityVisuals.delete(entId);
-          }
-        }
-      },
+      removeEntityVisualsForIsland: (islandId: number) =>
+        this.resourceEntityRenderer.removeForIsland(islandId),
       showFloatingText: (x, y, text, color) => this.showFloatingText(x, y, text, color),
       shakeObject: (target) => this.shakeObject(target),
       playExplosionAt: (x, y) => this.playExplosionAt(x, y),
@@ -402,6 +393,7 @@ export class WorldScene extends Phaser.Scene {
     this.coreGemSystem?.clearAllVisuals();
     this.territoryStructureRenderer?.destroy();
     this.constructedBuildingRenderer?.clear();
+    this.resourceEntityRenderer?.destroy();
     this.altarRenderer?.destroy();
     this.terrainRenderer?.destroy();
     this.effectsRenderer?.destroy();
@@ -417,7 +409,7 @@ export class WorldScene extends Phaser.Scene {
       (window as unknown as Record<string, unknown>).__GAME_DEBUG__ = {
         getIslands: () => this.islands,
         getConstructedBuildings: () => this.constructedBuildings,
-        getEntities: () => Array.from(this.entityVisuals.values()).map((ev) => ev.entity),
+        getEntities: () => this.resourceEntityRenderer.getEntities(),
         getTerrainSummary: () => ({
           cols: this.terrainMap.cols,
           rows: this.terrainMap.rows,
@@ -563,113 +555,8 @@ export class WorldScene extends Phaser.Scene {
     this.constructedBuildingRenderer.updateHpBar(buildingId);
   }
 
-  private isGoldMineUnlocked(): boolean {
-    return this.islands.some(
-      (i) => i.id === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId && i.unlocked
-    );
-  }
-
   private spawnAllEntities() {
-    this.entityVisuals.forEach((ev) => ev.container.destroy());
-    this.entityVisuals.clear();
-
-    const allEntities = generateWorldResourceEntities(
-      this.terrainMap,
-      this.islands,
-      WORLD_BOUNDS,
-      this.constructedBuildings,
-      this.isGoldMineUnlocked()
-    );
-
-    for (const ent of allEntities) {
-      this.spawnEntity(ent);
-    }
-  }
-
-  private spawnEntity(ent: Entity) {
-    const container = this.add.container(ent.x, ent.y);
-    let entDepthBias = 16;
-    if (ent.type === 'rock' || ent.type === 'gold_rock') entDepthBias = 20;
-    container.setDepth(ySortDepth(ent.y, entDepthBias));
-
-    let sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
-
-    if (ent.type === 'tree') {
-      const isTree3 = ent.id.includes('2') || ent.id.includes('4');
-      const key = isTree3 ? 'tree3' : 'tree';
-      const animKey = isTree3 ? 'tree3_anim' : 'tree_anim';
-      const drawH = isTree3 ? 150 : 185;
-
-      const treeSprite = this.add.sprite(16, 40 - drawH / 2, key);
-      treeSprite.setDisplaySize(145, drawH);
-      if (this.anims.exists(animKey)) {
-        treeSprite.play(animKey);
-      }
-      sprite = treeSprite;
-    } else if (ent.type === 'rock') {
-      const isRock2 = ent.id.includes('2') || ent.id.includes('5');
-      const rockKey = isRock2 ? 'rock2' : 'rock1';
-
-      const rockImg = this.add.image(32, 16, rockKey);
-      rockImg.setDisplaySize(64, 64);
-      sprite = rockImg;
-    } else if (ent.type === 'gold_rock') {
-      const useVariant2 = ent.id.includes('2') || ent.id.includes('4') || ent.id.includes('6');
-      const goldKey =
-        useVariant2 && this.textures.exists('goldResource2')
-          ? 'goldResource2'
-          : 'goldResource';
-      if (this.textures.exists(goldKey)) {
-        const goldImg = this.add.image(32, 14, goldKey);
-        goldImg.setDisplaySize(96, 96);
-        sprite = goldImg;
-      } else {
-        const rockImg = this.add.image(32, 16, 'rock2');
-        rockImg.setDisplaySize(64, 64);
-        rockImg.setTint(0xffd700);
-        sprite = rockImg;
-      }
-    } else {
-      const sheepSprite = this.add.sprite(32, 24, 'sheep');
-      sheepSprite.setDisplaySize(96, 96);
-      if (this.anims.exists('sheep_anim')) {
-        sheepSprite.play('sheep_anim');
-      }
-      sprite = sheepSprite;
-    }
-
-    container.add(sprite);
-
-    const hpBar = this.add.graphics();
-    container.add(hpBar);
-
-    this.entityVisuals.set(ent.id, {
-      entity: ent,
-      container,
-      sprite,
-      hpBar,
-    });
-
-    this.updateEntityHpBar(ent.id);
-  }
-
-  private updateEntityHpBar(entityId: string) {
-    const visual = this.entityVisuals.get(entityId);
-    if (!visual || !visual.hpBar) return;
-
-    visual.hpBar.clear();
-    const ent = visual.entity;
-    if (ent.hp < ent.maxHp && ent.type !== 'sheep') {
-      const barW = 40;
-      const barH = 5;
-      const barX = 16 - barW / 2;
-      const barY = -12;
-
-      visual.hpBar.fillStyle(0x000000, 0.6);
-      visual.hpBar.fillRect(barX, barY, barW, barH);
-      visual.hpBar.fillStyle(0x4caf50, 1);
-      visual.hpBar.fillRect(barX, barY, (ent.hp / ent.maxHp) * barW, barH);
-    }
+    this.resourceEntityRenderer.spawnAll();
   }
 
   private createPlayer() {
@@ -777,15 +664,11 @@ export class WorldScene extends Phaser.Scene {
       }
 
       // 2. Check if user touched an Entity, Core Gem, or Territory Altar
-      let touchedEntity: EntityVisual | null = null;
-      let minEntDist = 55;
-      this.entityVisuals.forEach((ev) => {
-        const d = Math.hypot(worldPoint.x - (ev.entity.x + 16), worldPoint.y - (ev.entity.y + 16));
-        if (d < minEntDist) {
-          minEntDist = d;
-          touchedEntity = ev;
-        }
-      });
+      const touchedEntity = this.resourceEntityRenderer.findNearestVisual(
+        worldPoint.x,
+        worldPoint.y,
+        55
+      );
 
       let touchedCoreIsl: Island | null = null;
       for (const isl of this.islands) {
@@ -1597,23 +1480,14 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // 3. 자원 엔티티 채집 (맵 전역 야외 필드에서 점령 여부와 무관하게 채집 가능)
-    let nearestVisual: EntityVisual | null = null;
-    let minDist = 95;
-
-    this.entityVisuals.forEach((ev) => {
-      const dist = Math.hypot(px - (ev.entity.x + 16), py - (ev.entity.y + 16));
-      if (dist < minDist) {
-        minDist = dist;
-        nearestVisual = ev;
-      }
-    });
+    const nearestVisual = this.resourceEntityRenderer.findNearestVisual(px, py, 95);
 
     if (nearestVisual) {
-      const ent = (nearestVisual as EntityVisual).entity;
+      const ent = nearestVisual.entity;
 
       if (ent.type === 'sheep') {
         sound.playClick();
-        this.shakeObject((nearestVisual as EntityVisual).container);
+        this.shakeObject(nearestVisual.container);
         this.showFloatingText(ent.x + 16, ent.y - 20, '🐑 음메에~ ❤️', '#f472b6');
         return;
       }
@@ -1628,8 +1502,8 @@ export class WorldScene extends Phaser.Scene {
 
       const damage = 1;
       ent.hp -= damage;
-      this.shakeObject((nearestVisual as EntityVisual).container);
-      this.updateEntityHpBar(ent.id);
+      this.shakeObject(nearestVisual.container);
+      this.resourceEntityRenderer.updateHpBar(ent.id);
 
       if (ent.type === 'tree') sound.playChop();
       else sound.playMine();
@@ -1655,7 +1529,7 @@ export class WorldScene extends Phaser.Scene {
 
       if (ent.hp <= 0) {
         sound.playBreak();
-        this.removeAndRespawnEntity(ent);
+        this.resourceEntityRenderer.removeAndRespawn(ent);
         this.waveSystem.reduceCooldown(ACTIVE_WAVE_ACCELERATION_CONFIG.gatherCooldownReductionSec);
       }
       return;
@@ -1685,62 +1559,6 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private removeAndRespawnEntity(ent: Entity) {
-    const visual = this.entityVisuals.get(ent.id);
-    if (visual) {
-      visual.container.destroy();
-      this.entityVisuals.delete(ent.id);
-    }
-
-    this.time.delayedCall(RESOURCE_DISTRIBUTION_CONFIG.respawnDelayMs, () => {
-      if (!this.isSceneAlive()) return;
-      const activeEntities = Array.from(this.entityVisuals.values()).map((ev) => ev.entity);
-      const nextSpot = pickRespawnSpot(
-        ent.type,
-        activeEntities,
-        this.terrainMap,
-        this.islands,
-        WORLD_BOUNDS,
-        this.constructedBuildings,
-        {
-          goldMineUnlocked: this.isGoldMineUnlocked(),
-          zoneTag: ent.zoneTag,
-        }
-      );
-      if (nextSpot) {
-        ent.x = nextSpot.x;
-        ent.y = nextSpot.y;
-        ent.type = nextSpot.type;
-        ent.hp = nextSpot.maxHp;
-        ent.maxHp = nextSpot.maxHp;
-        ent.zoneTag = nextSpot.zoneTag;
-        this.spawnEntity(ent);
-      }
-    });
-  }
-
-  private spawnGoldMineClusterAndAnnounce() {
-    const activeEntities = Array.from(this.entityVisuals.values()).map((ev) => ev.entity);
-    const hasCluster = activeEntities.some((e) => e.zoneTag === 'gold_mine');
-    if (!hasCluster) {
-      const mineNodes = generateGoldMineClusterEntities(
-        this.terrainMap,
-        this.islands,
-        WORLD_BOUNDS,
-        activeEntities,
-        this.constructedBuildings
-      );
-      for (const node of mineNodes) {
-        this.spawnEntity(node);
-      }
-    }
-
-    const gm = GOLD_MINE_BIOME_CONFIG;
-    confetti({ particleCount: 130, spread: 95, origin: { y: 0.55 } });
-    this.showFloatingText(gm.centerX, gm.centerY - 40, `⛏️ ${gm.announcementText}`, '#fde047');
-    GameEvents.emit('game-alert', gm.announcementText);
-  }
-
   public unlockIslandLocally(islandId: number, unlockedBy: string, isLocalTrigger: boolean) {
     const target = this.islands.find((i) => i.id === islandId);
     if (!target || target.unlocked) return;
@@ -1767,7 +1585,7 @@ export class WorldScene extends Phaser.Scene {
     this.showFloatingText(origin.x + 320, origin.y + 240, msg, '#ffd700');
 
     if (islandId === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId) {
-      this.spawnGoldMineClusterAndAnnounce();
+      this.resourceEntityRenderer.spawnGoldMineClusterAndAnnounce();
     } else {
       GameEvents.emit('game-alert', msg);
     }
@@ -1787,19 +1605,6 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private handleRemoteHit(entityId: string, damage: number, _hitByName: string) {
-    const visual = this.entityVisuals.get(entityId);
-    if (!visual) return;
-
-    visual.entity.hp -= damage;
-    this.shakeObject(visual.container);
-    this.updateEntityHpBar(entityId);
-
-    if (visual.entity.type === 'tree') sound.playChop();
-    else sound.playMine();
-
-    if (visual.entity.hp <= 0) {
-      sound.playBreak();
-      this.removeAndRespawnEntity(visual.entity);
-    }
+    this.resourceEntityRenderer.handleRemoteHit(entityId, damage);
   }
 }
