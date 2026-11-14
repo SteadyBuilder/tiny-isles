@@ -42,13 +42,13 @@ export class ConstructedBuildingRenderer {
     for (const cb of buildings) {
       const isl = islands.find((i) => i.id === cb.territoryId);
       if (isl && isl.unlocked) {
-        this.spawnOne(cb);
+        this.spawnOne(cb, false);
       }
     }
     this.wallColliders.refresh();
   }
 
-  public spawnOne(cb: ConstructedBuilding): void {
+  public spawnOne(cb: ConstructedBuilding, refreshColliders = true): void {
     const bp = getBlueprint(cb.type);
     const container = this.scene.add.container(cb.x, cb.y);
     container.setDepth(ySortDepth(cb.y, 30));
@@ -70,10 +70,13 @@ export class ConstructedBuildingRenderer {
           ''
         );
         wallCol.setVisible(false);
-        wallCol.body.setSize(box.w, box.h);
+        wallCol.setDisplaySize(box.w, box.h);
         wallCol.refreshBody();
         this.wallColliders.add(wallCol);
         colliders.push(wallCol);
+      }
+      if (refreshColliders && colliders.length > 0) {
+        this.wallColliders.refresh();
       }
     } else {
       const img = this.scene.add.image(0, -20, bp.spriteKey);
@@ -127,7 +130,10 @@ export class ConstructedBuildingRenderer {
   public removeVisual(buildingId: string): void {
     const cv = this.visuals.get(buildingId);
     if (!cv) return;
-    cv.colliders?.forEach((col) => col.destroy());
+    if (cv.colliders && cv.colliders.length > 0) {
+      cv.colliders.forEach((col) => this.wallColliders.remove(col, true, true));
+      this.wallColliders.refresh();
+    }
     cv.container.destroy();
     this.visuals.delete(buildingId);
   }

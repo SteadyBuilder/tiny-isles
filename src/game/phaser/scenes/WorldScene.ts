@@ -695,7 +695,7 @@ export class WorldScene extends Phaser.Scene {
         ''
       );
       colliderSprite.setVisible(false);
-      colliderSprite.body.setSize(box.w, box.h);
+      colliderSprite.setDisplaySize(box.w, box.h);
       colliderSprite.refreshBody();
       this.buildingColliders?.add(colliderSprite);
     }
