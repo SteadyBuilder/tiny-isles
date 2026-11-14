@@ -125,7 +125,8 @@ export class TowerDefenseSystem {
       duration: 220,
       ease: 'Linear',
       onComplete: () => {
-        proj.destroy();
+        if (proj.scene) proj.destroy();
+        if (!scene.sys || !scene.scene?.isActive()) return;
 
         // 적중 파티클 스파크 연출
         this.playHitSpark(targetMv.monster.x, targetMv.monster.y, source.type === 'magic_tower');
@@ -141,6 +142,7 @@ export class TowerDefenseSystem {
    */
   private playSlashEffect(x1: number, y1: number, x2: number, y2: number) {
     const scene = this.ctx.scene;
+    if (!scene.sys || !scene.scene?.isActive()) return;
     const slash = scene.add.graphics();
     slash.setDepth(DEPTH.SLASH);
 
@@ -158,7 +160,9 @@ export class TowerDefenseSystem {
       scaleX: 1.4,
       scaleY: 1.4,
       duration: 180,
-      onComplete: () => slash.destroy(),
+      onComplete: () => {
+        if (slash.scene) slash.destroy();
+      },
     });
   }
 
@@ -167,6 +171,7 @@ export class TowerDefenseSystem {
    */
   private playHitSpark(x: number, y: number, isMagic: boolean) {
     const scene = this.ctx.scene;
+    if (!scene.sys || !scene.scene?.isActive()) return;
     const spark = scene.add.graphics();
     spark.setDepth(DEPTH.SPARK);
     spark.fillStyle(isMagic ? 0xc084fc : 0xfde047, 0.85);
@@ -181,7 +186,9 @@ export class TowerDefenseSystem {
       targets: spark,
       alpha: 0,
       duration: 160,
-      onComplete: () => spark.destroy(),
+      onComplete: () => {
+        if (spark.scene) spark.destroy();
+      },
     });
   }
 }

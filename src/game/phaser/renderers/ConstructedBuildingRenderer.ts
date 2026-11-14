@@ -45,6 +45,7 @@ export class ConstructedBuildingRenderer {
         this.spawnOne(cb);
       }
     }
+    this.wallColliders.refresh();
   }
 
   public spawnOne(cb: ConstructedBuilding): void {
@@ -70,6 +71,7 @@ export class ConstructedBuildingRenderer {
         );
         wallCol.setVisible(false);
         wallCol.body.setSize(box.w, box.h);
+        wallCol.refreshBody();
         this.wallColliders.add(wallCol);
         colliders.push(wallCol);
       }

@@ -43,6 +43,7 @@ export class LivingWorldCoordinator {
   private worldSnapshotAccumMs = 0;
   private garrisonSyncAccumMs = 0;
   private initialized = false;
+  private disposed = false;
 
   constructor(
     ctx: ILivingWorldContext,
@@ -54,8 +55,12 @@ export class LivingWorldCoordinator {
     this.garrisonSystem = garrisonSystem;
   }
 
+  public destroy(): void {
+    this.disposed = true;
+  }
+
   public async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized || this.disposed) return;
     this.initialized = true;
 
     const localPlayerId = this.ctx.getPlayerId();
@@ -63,6 +68,8 @@ export class LivingWorldCoordinator {
       worldStateSync.fetchWorldState(),
       worldStateSync.fetchGarrisons(localPlayerId),
     ]);
+
+    if (this.disposed) return;
 
     this.garrisonSystem.setGarrisons(garrisons);
     EventBus.emit('garrisons-updated', garrisons);
@@ -129,6 +136,7 @@ export class LivingWorldCoordinator {
       }
     }
 
+    if (this.disposed) return;
     await this.persistAllSnapshots();
   }
 
@@ -137,7 +145,7 @@ export class LivingWorldCoordinator {
   }
 
   public update(delta: number) {
-    if (!this.initialized) return;
+    if (!this.initialized || this.disposed) return;
 
     this.worldSnapshotAccumMs += delta;
     this.garrisonSyncAccumMs += delta;

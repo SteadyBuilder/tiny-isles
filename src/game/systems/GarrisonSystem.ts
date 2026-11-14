@@ -42,6 +42,8 @@ export class GarrisonSystem {
     }
     this.visuals.clear();
 
+    if (!this.ctx.scene.sys || !this.ctx.scene.scene?.isActive()) return;
+
     const limited = units.slice(0, GARRISON_CONFIG.maxActiveGarrisons);
     for (const unit of limited) {
       const spriteKey = unit.color === 'red' ? 'redPawnIdle' : 'bluePawnIdle';
@@ -160,6 +162,7 @@ export class GarrisonSystem {
 
   private fireGarrisonStrike(ref: GarrisonVisualRef, targetMv: MonsterVisual) {
     const scene = this.ctx.scene;
+    if (!scene.sys || !scene.scene?.isActive()) return;
     const targetId = targetMv.monster.id;
     const startX = ref.sprite.x;
     const startY = ref.sprite.y - 16;
@@ -181,7 +184,8 @@ export class GarrisonSystem {
       y: targetMv.monster.y - 10,
       duration: 180,
       onComplete: () => {
-        proj.destroy();
+        if (proj.scene) proj.destroy();
+        if (!scene.sys || !scene.scene?.isActive()) return;
         this.waveSystem.damageMonster(
           targetId,
           GARRISON_CONFIG.baseAttack,

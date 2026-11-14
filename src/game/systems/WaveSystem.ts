@@ -429,8 +429,6 @@ export class WaveSystem {
     if (!mv) return;
 
     mv.monster.hp = Math.max(0, mv.monster.hp - damage);
-    this.ctx.shakeObject(mv.container);
-    MonsterVisualManager.updateHpBar(mv);
 
     this.ctx.showFloatingText(
       mv.monster.x,
@@ -438,6 +436,12 @@ export class WaveSystem {
       `-${damage}`,
       mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
     );
+
+    if (mv.monster.hp > 0) {
+      this.ctx.shakeObject(mv.container);
+      MonsterVisualManager.updateHpBar(mv);
+      return;
+    }
 
     if (mv.monster.hp <= 0) {
       const deadM = mv.monster;

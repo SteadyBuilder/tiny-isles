@@ -225,56 +225,6 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     };
   }, [joystickRef]);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    let touchStartDist: number | null = null;
-    let touchStartZoom = zoom;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        touchStartDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        touchStartZoom = zoom;
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        const curDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        if (touchStartDist && touchStartDist > 0) {
-          const factor = curDist / touchStartDist;
-          const next = Math.min(2.0, Math.max(0.5, Number((touchStartZoom * factor).toFixed(2))));
-          EventBus.emit('set-zoom', next);
-          onZoomChangeRef.current?.(next);
-        }
-      }
-    };
-
-    const handleTouchEnd = () => {
-      touchStartDist = null;
-    };
-
-    el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: false });
-    el.addEventListener('touchend', handleTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-
-    return () => {
-      el.removeEventListener('touchstart', handleTouchStart);
-      el.removeEventListener('touchmove', handleTouchMove);
-      el.removeEventListener('touchend', handleTouchEnd);
-      el.removeEventListener('touchcancel', handleTouchEnd);
-    };
-  }, [zoom]);
-
   return (
     <div className="relative w-full h-full">
       {loading && (

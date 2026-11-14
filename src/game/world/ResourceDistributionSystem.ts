@@ -192,6 +192,23 @@ function buildSectors(
   return sectors;
 }
 
+const sectorCache = new WeakMap<WorldTerrainMap, { key: string; sectors: SectorInfo[] }>();
+
+function getOrBuildSectors(
+  terrain: WorldTerrainMap,
+  territories: ReadonlyArray<TerritoryGridRef>,
+  bounds: WorldBounds
+): SectorInfo[] {
+  const key = `${bounds.min}:${bounds.max}:${territories.map((t) => `${t.gridX},${t.gridY}`).join(';')}`;
+  const cached = sectorCache.get(terrain);
+  if (cached && cached.key === key) {
+    return cached.sectors;
+  }
+  const sectors = buildSectors(terrain, territories, bounds);
+  sectorCache.set(terrain, { key, sectors });
+  return sectors;
+}
+
 function rebalanceGeneralGoldCount(entities: Entity[], targetGoldCount: number): void {
   const cfg = RESOURCE_DISTRIBUTION_CONFIG;
   const goldIndices: number[] = [];
@@ -285,7 +302,7 @@ export function generateWorldResourceEntities(
 ): Entity[] {
   const cfg = RESOURCE_DISTRIBUTION_CONFIG;
   const seed = TERRAIN_GENERATION_CONFIG.seed;
-  const sectors = buildSectors(terrain, territories, bounds);
+  const sectors = getOrBuildSectors(terrain, territories, bounds);
   const entities: Entity[] = [];
   let seq = 0;
 
@@ -378,7 +395,7 @@ export function pickRespawnSpot(
     }
   }
 
-  const sectors = buildSectors(terrain, territories, bounds);
+  const sectors = getOrBuildSectors(terrain, territories, bounds);
   if (sectors.length === 0) return null;
 
   const sectorCounts = new Map<string, number>();

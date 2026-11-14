@@ -104,9 +104,11 @@ export class TerrainRenderer {
   private scene: Phaser.Scene;
   private terrain: WorldTerrainMap;
   private chunkImages: Phaser.GameObjects.Image[] = [];
+  private chunkTexKeys: string[] = [];
   private overlayGraphics: Phaser.GameObjects.Graphics;
   private goldMineSealText: Phaser.GameObjects.Text | null = null;
   private waterColliders: Phaser.Physics.Arcade.StaticGroup;
+  private lastOverlaySignature = '';
 
   constructor(scene: Phaser.Scene, terrain: WorldTerrainMap) {
     this.scene = scene;
@@ -248,12 +250,23 @@ export class TerrainRenderer {
           .setOrigin(0, 0)
           .setDepth(DEPTH.BACKGROUND);
         this.chunkImages.push(chunkImg);
+        this.chunkTexKeys.push(texKey);
       }
     }
 
     // Silence unused-import warning if helper is consumed externally
     void chunkPx;
     void getTerrainCellAtWorld;
+  }
+
+  public refreshChunksOnContextRestore(): void {
+    for (const texKey of this.chunkTexKeys) {
+      if (!this.scene.textures.exists(texKey)) continue;
+      const tex = this.scene.textures.get(texKey);
+      if (tex instanceof Phaser.Textures.CanvasTexture) {
+        tex.refresh();
+      }
+    }
   }
 
   public buildWaterColliders(): void {
@@ -274,7 +287,27 @@ export class TerrainRenderer {
     this.waterColliders.refresh();
   }
 
-  public renderTerritoryOverlays(islands: ReadonlyArray<Island>, inventory: Inventory): void {
+  public renderTerritoryOverlays(
+    islands: ReadonlyArray<Island>,
+    inventory: Inventory,
+    force = false
+  ): void {
+    const signature = islands
+      .map((isl) => {
+        const canAfford =
+          !isl.unlocked &&
+          inventory.wood >= isl.costWood &&
+          inventory.stone >= isl.costStone &&
+          inventory.gold >= isl.costGold;
+        return `${isl.id}:${isl.unlocked ? `1:${isl.villageTier}` : `0:${canAfford ? 1 : 0}`}`;
+      })
+      .join('|');
+
+    if (!force && signature === this.lastOverlaySignature) {
+      return;
+    }
+    this.lastOverlaySignature = signature;
+
     const g = this.overlayGraphics;
     g.clear();
 
@@ -362,5 +395,17 @@ export class TerrainRenderer {
       img.destroy();
     }
     this.chunkImages = [];
+    this.chunkTexKeys = [];
+  }
+
+  public destroy(): void {
+    this.clearChunks();
+    this.overlayGraphics?.destroy();
+    if (this.goldMineSealText) {
+      this.goldMineSealText.destroy();
+      this.goldMineSealText = null;
+    }
+    this.waterColliders?.clear(true, true);
+    this.lastOverlaySignature = '';
   }
 }

@@ -45,8 +45,10 @@ import {
   pickRespawnSpot,
 } from '../../world/ResourceDistributionSystem';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
+import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
+import { attachWebGLContextGuard } from '../utils/webglContextGuard';
 
 interface EntityVisual {
   entity: Entity;
@@ -54,6 +56,8 @@ interface EntityVisual {
   sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
   hpBar?: Phaser.GameObjects.Graphics;
 }
+
+const MAX_ACTIVE_FLOATING_TEXTS = 24;
 
 export class WorldScene extends Phaser.Scene {
   // Player
@@ -91,8 +95,8 @@ export class WorldScene extends Phaser.Scene {
   // Procedural Terrain & Graphics Layers
   private terrainMap!: WorldTerrainMap;
   private terrainRenderer!: TerrainRenderer;
+  private altarRenderer!: ExpansionAltarRenderer;
   private invasionGraphics!: Phaser.GameObjects.Graphics;
-  private altarCardsContainer!: Phaser.GameObjects.Container;
   private clouds: { sprite: Phaser.GameObjects.Image; speed: number }[] = [];
 
   // Controls & Inputs
@@ -105,8 +109,6 @@ export class WorldScene extends Phaser.Scene {
   private mouseTarget: { x: number; y: number; active: boolean } = { x: 0, y: 0, active: false };
   private touchIndicator!: Phaser.GameObjects.Image;
   private touchTargetObj: { x: number; y: number } | null = null;
-  private pinchStartDist: number | null = null;
-  private pinchStartZoom: number = 1.0;
   private isActionHolding = false;
 
   // Inventory & State Cache
@@ -116,6 +118,11 @@ export class WorldScene extends Phaser.Scene {
   private lastNearIsland: Island | null = null;
   private lastInteractTime = 0;
   private unbindEventBus: Array<() => void> = [];
+  private unbindWebGLGuard: (() => void) | null = null;
+  private saveWorldTimer: ReturnType<typeof setTimeout> | null = null;
+  private emitWorldTimer: ReturnType<typeof setTimeout> | null = null;
+  private hasPendingSaveWorld = false;
+  private activeFloatingTexts: Phaser.GameObjects.Text[] = [];
   private isCleanedUp = false;
 
   constructor() {
@@ -183,9 +190,8 @@ export class WorldScene extends Phaser.Scene {
     this.spawnAllBuildings();
     this.spawnAllConstructedBuildings();
 
-    // 4. Territory Expansion Altars Container
-    this.altarCardsContainer = this.add.container(0, 0);
-    this.altarCardsContainer.setDepth(DEPTH.ALTAR_CARDS);
+    // 4. Territory Expansion Altars Renderer
+    this.altarRenderer = new ExpansionAltarRenderer(this);
     this.drawExpansionAltars();
 
     // 5. Initialize Core Systems (Modular AI-Friendly Architecture)
@@ -204,8 +210,8 @@ export class WorldScene extends Phaser.Scene {
       showFloatingText: (x, y, text, color) => this.showFloatingText(x, y, text, color),
       shakeObject: (target) => this.shakeObject(target),
       playExplosionAt: (x, y) => this.playExplosionAt(x, y),
-      saveWorldState: () => this.saveWorldState(),
-      emitWorldState: () => this.emitWorldStateToReact(),
+      saveWorldState: (immediate = false) => this.saveWorldState(immediate),
+      emitWorldState: (immediate = false) => this.emitWorldStateToReact(immediate),
       refreshTerritoryDecorations: () => {
         this.drawTerrainDecorations();
         this.drawExpansionAltars();
@@ -224,8 +230,8 @@ export class WorldScene extends Phaser.Scene {
         updateConstructedBuildingHpBar: (buildingId: string) =>
           this.updateConstructedBuildingHpBar(buildingId),
         onBuildingDamaged: () => {
-          this.saveWorldState();
-          this.emitWorldStateToReact();
+          this.saveWorldState(false);
+          this.emitWorldStateToReact(false);
         },
         getConstructedVisualContainer: (buildingId: string) =>
           this.constructedBuildingRenderer.getContainer(buildingId),
@@ -283,6 +289,7 @@ export class WorldScene extends Phaser.Scene {
         getIslands: () => this.islands,
         getConstructedBuildings: () => this.constructedBuildings,
         applyOfflineWorldUpdate: (updatedIslands, updatedBuildings, passiveGain) => {
+          if (!this.isSceneAlive()) return;
           this.islands = updatedIslands;
           this.constructedBuildings = updatedBuildings;
           if (passiveGain.wood > 0 || passiveGain.stone > 0 || passiveGain.gold > 0) {
@@ -298,8 +305,8 @@ export class WorldScene extends Phaser.Scene {
           this.drawTerrainDecorations();
           this.drawExpansionAltars();
           this.spawnAllBuildings();
-          this.saveWorldState();
-          this.emitWorldStateToReact();
+          this.saveWorldState(true);
+          this.emitWorldStateToReact(true);
         },
       },
       this.waveSystem,
@@ -333,13 +340,21 @@ export class WorldScene extends Phaser.Scene {
     // 14. Expose Debug / Test API on window for automated verification
     this.exposeTestHook();
 
-    // 14.5. Ensure clean teardown of EventBus & network channels on scene shutdown/destroy
+    // 14.5. WebGL context loss/restore guard & clean teardown on shutdown/destroy
+    this.unbindWebGLGuard = attachWebGLContextGuard({
+      scene: this,
+      onRestored: () => {
+        if (this.isSceneAlive()) {
+          this.terrainRenderer?.refreshChunksOnContextRestore();
+        }
+      },
+    });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupScene());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanupScene());
 
     // 15. Notify React scene is ready & emit initial states
     EventBus.emit('scene-ready', this);
-    this.emitWorldStateToReact();
+    this.emitWorldStateToReact(true);
     this.emitWaveStateToReact();
 
     // 16. Living Isles: 오프라인 정산, 스냅샷 복원 및 비동기 수비대 배치
@@ -348,6 +363,19 @@ export class WorldScene extends Phaser.Scene {
 
   private cleanupScene(): void {
     if (this.isCleanedUp) return;
+
+    if (this.saveWorldTimer) {
+      clearTimeout(this.saveWorldTimer);
+      this.saveWorldTimer = null;
+    }
+    if (this.emitWorldTimer) {
+      clearTimeout(this.emitWorldTimer);
+      this.emitWorldTimer = null;
+    }
+    if (this.hasPendingSaveWorld) {
+      this.persistWorldStateNow();
+    }
+
     this.isCleanedUp = true;
 
     for (const unbind of this.unbindEventBus) {
@@ -355,10 +383,23 @@ export class WorldScene extends Phaser.Scene {
     }
     this.unbindEventBus = [];
 
+    this.unbindWebGLGuard?.();
+    this.unbindWebGLGuard = null;
+
+    this.livingWorldCoordinator?.destroy();
     this.waveSystem?.destroy();
     this.coreGemSystem?.clearAllVisuals();
     this.constructedBuildingRenderer?.clear();
+    this.altarRenderer?.destroy();
+    this.terrainRenderer?.destroy();
     this.multiplayerSync?.destroy();
+
+    for (const ft of this.activeFloatingTexts) {
+      if (ft.scene) {
+        ft.destroy();
+      }
+    }
+    this.activeFloatingTexts = [];
   }
 
   private isSceneAlive(): boolean {
@@ -400,7 +441,25 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private emitWorldStateToReact() {
+  private emitWorldStateToReact(immediate = true) {
+    if (immediate) {
+      if (this.emitWorldTimer) {
+        clearTimeout(this.emitWorldTimer);
+        this.emitWorldTimer = null;
+      }
+      this.emitWorldStateNow();
+      return;
+    }
+
+    if (this.emitWorldTimer) return;
+    this.emitWorldTimer = setTimeout(() => {
+      this.emitWorldTimer = null;
+      if (!this.isSceneAlive()) return;
+      this.emitWorldStateNow();
+    }, 350);
+  }
+
+  private emitWorldStateNow() {
     const unlockedIds = this.islands.filter((i) => i.unlocked).map((i) => i.id);
     EventBus.emit('unlocked-islands', unlockedIds, this.islands.length);
     EventBus.emit('territories-updated', [...this.islands]);
@@ -411,7 +470,27 @@ export class WorldScene extends Phaser.Scene {
     this.waveSystem.emitWaveState();
   }
 
-  private saveWorldState() {
+  private saveWorldState(immediate = true) {
+    if (immediate) {
+      if (this.saveWorldTimer) {
+        clearTimeout(this.saveWorldTimer);
+        this.saveWorldTimer = null;
+      }
+      this.persistWorldStateNow();
+      return;
+    }
+
+    this.hasPendingSaveWorld = true;
+    if (this.saveWorldTimer) return;
+    this.saveWorldTimer = setTimeout(() => {
+      this.saveWorldTimer = null;
+      if (!this.isSceneAlive()) return;
+      this.persistWorldStateNow();
+    }, 1200);
+  }
+
+  private persistWorldStateNow() {
+    this.hasPendingSaveWorld = false;
     const unlockedIds = this.islands.filter((i) => i.unlocked).map((i) => i.id);
     storage.saveUnlockedIslands(unlockedIds);
 
@@ -451,58 +530,7 @@ export class WorldScene extends Phaser.Scene {
 
   private drawExpansionAltars() {
     if (!this.isSceneAlive()) return;
-    this.altarCardsContainer.removeAll(true);
-
-    for (const isl of this.islands) {
-      if (isl.unlocked) continue;
-
-      const origin = getIslandOrigin(isl.gridX, isl.gridY);
-      const signX = origin.x + 320;
-      const signY = origin.y + 320;
-
-      const canAfford =
-        this.inventory.wood >= isl.costWood &&
-        this.inventory.stone >= isl.costStone &&
-        this.inventory.gold >= isl.costGold;
-
-      const card = this.add.container(signX, signY);
-
-      // Shadow
-      const shadow = this.add.graphics();
-      shadow.fillStyle(0x000000, 0.32);
-      shadow.fillEllipse(0, 32, 130, 26);
-      card.add(shadow);
-
-      // Compact 2-Line Icon Badge Card
-      const bg = this.add.graphics();
-      bg.fillStyle(0x0f172a, 0.9);
-      bg.fillRoundedRect(-84, -34, 168, 62, 12);
-      bg.lineStyle(canAfford ? 2.5 : 1.5, canAfford ? 0x4ade80 : 0xfbbf24, 1);
-      bg.strokeRoundedRect(-84, -34, 168, 62, 12);
-      card.add(bg);
-
-      // Row 1: Territory Flag #ID
-      const headerStr = `🚩 #${isl.id} 건설 부지`;
-      const nameText = this.add.text(0, -16, headerStr, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-      }).setOrigin(0.5);
-      card.add(nameText);
-
-      // Row 2: Resource Icons + Costs + [E] Action Badge when affordable
-      const costStr = `🪵${isl.costWood}  🪨${isl.costStone}${isl.costGold > 0 ? `  🪙${isl.costGold}` : ''}${canAfford ? '  [E]' : ''}`;
-      const costText = this.add.text(0, 9, costStr, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '12px',
-        fontStyle: 'bold',
-        color: canAfford ? '#86efac' : '#fde047',
-      }).setOrigin(0.5);
-      card.add(costText);
-
-      this.altarCardsContainer.add(card);
-    }
+    this.altarRenderer.render(this.islands, this.inventory);
   }
 
   /**
@@ -640,8 +668,10 @@ export class WorldScene extends Phaser.Scene {
       );
       colliderSprite.setVisible(false);
       colliderSprite.body.setSize(box.w, box.h);
+      colliderSprite.refreshBody();
       this.buildingColliders?.add(colliderSprite);
     }
+    this.buildingColliders?.refresh();
   }
 
   /**
@@ -852,8 +882,6 @@ export class WorldScene extends Phaser.Scene {
       const p1 = this.input.pointer1;
       const p2 = this.input.pointer2;
       if (p1?.isDown && p2?.isDown) {
-        this.pinchStartDist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
-        this.pinchStartZoom = this.targetZoom;
         this.mouseTarget.active = false;
         this.touchIndicator.setVisible(false);
         return;
@@ -969,13 +997,8 @@ export class WorldScene extends Phaser.Scene {
       const p1 = this.input.pointer1;
       const p2 = this.input.pointer2;
       if (p1?.isDown && p2?.isDown) {
-        const curDist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
-        if (this.pinchStartDist && this.pinchStartDist > 0) {
-          const factor = curDist / this.pinchStartDist;
-          const next = Math.min(2.0, Math.max(0.5, Number((this.pinchStartZoom * factor).toFixed(2))));
-          this.targetZoom = next;
-          EventBus.emit('zoom-changed', this.targetZoom);
-        }
+        this.mouseTarget.active = false;
+        this.touchIndicator.setVisible(false);
         return;
       }
 
@@ -984,10 +1007,6 @@ export class WorldScene extends Phaser.Scene {
         this.mouseTarget = { x: worldPoint.x, y: worldPoint.y, active: true };
         this.touchIndicator.setPosition(worldPoint.x, worldPoint.y).setVisible(true);
       }
-    });
-
-    this.input.on('pointerup', () => {
-      this.pinchStartDist = null;
     });
   }
 
@@ -1528,8 +1547,8 @@ export class WorldScene extends Phaser.Scene {
 
     sound.playBreak();
     this.showFloatingText(removed.x, removed.y - 40, `💥 ${removed.name} 파괴됨!`, '#ef4444');
-    this.saveWorldState();
-    this.emitWorldStateToReact();
+    this.saveWorldState(false);
+    this.emitWorldStateToReact(false);
   }
 
   /**
@@ -1593,8 +1612,8 @@ export class WorldScene extends Phaser.Scene {
       }
 
       if (healStateDirty) {
-        this.saveWorldState();
-        this.emitWorldStateToReact();
+        this.saveWorldState(false);
+        this.emitWorldStateToReact(false);
       }
 
       if (totalWoodGain > 0 || totalStoneGain > 0 || totalGoldGain > 0) {
@@ -1782,8 +1801,8 @@ export class WorldScene extends Phaser.Scene {
         if (isl.coreHp < isl.coreMaxHp) {
           isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 15);
           this.updateCoreGemVisual(isl.id);
-          this.saveWorldState();
-          this.emitWorldStateToReact();
+          this.saveWorldState(false);
+          this.emitWorldStateToReact(false);
         }
         this.showFloatingText(cPos.x, cPos.y - 60, `💎 [${isl.name}] 마을/건설 관리`, '#38bdf8');
         EventBus.emit('open-village-modal', isl.id);
@@ -1805,6 +1824,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.time.delayedCall(RESOURCE_DISTRIBUTION_CONFIG.respawnDelayMs, () => {
+      if (!this.isSceneAlive()) return;
       const activeEntities = Array.from(this.entityVisuals.values()).map((ev) => ev.entity);
       const nextSpot = pickRespawnSpot(
         ent.type,
@@ -1890,20 +1910,39 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private shakeObject(target: Phaser.GameObjects.Container) {
-    const startX = target.x;
+    if (!target || !target.scene || !this.isSceneAlive()) return;
+    this.tweens.killTweensOf(target);
+
+    const existingBaseX = target.getData('shakeBaseX') as number | undefined;
+    const baseX = typeof existingBaseX === 'number' ? existingBaseX : target.x;
+    target.setData('shakeBaseX', baseX);
+    target.x = baseX;
+
     this.tweens.add({
       targets: target,
-      x: startX + 6,
+      x: baseX + 6,
       duration: 40,
       yoyo: true,
       repeat: 3,
       onComplete: () => {
-        target.x = startX;
+        if (target.scene) {
+          target.x = baseX;
+        }
       },
     });
   }
 
   private showFloatingText(x: number, y: number, text: string, color: string) {
+    if (!this.isSceneAlive()) return;
+
+    while (this.activeFloatingTexts.length >= MAX_ACTIVE_FLOATING_TEXTS) {
+      const oldest = this.activeFloatingTexts.shift();
+      if (oldest && oldest.scene) {
+        this.tweens.killTweensOf(oldest);
+        oldest.destroy();
+      }
+    }
+
     const ft = this.add.text(x, y, text, {
       fontFamily: 'Pretendard, sans-serif',
       fontSize: '14px',
@@ -1913,6 +1952,7 @@ export class WorldScene extends Phaser.Scene {
       strokeThickness: 3,
     }).setOrigin(0.5);
     ft.setDepth(DEPTH.FLOATING_TEXT);
+    this.activeFloatingTexts.push(ft);
 
     this.tweens.add({
       targets: ft,
@@ -1920,7 +1960,15 @@ export class WorldScene extends Phaser.Scene {
       alpha: 0,
       duration: 1300,
       ease: 'Cubic.easeOut',
-      onComplete: () => ft.destroy(),
+      onComplete: () => {
+        const idx = this.activeFloatingTexts.indexOf(ft);
+        if (idx !== -1) {
+          this.activeFloatingTexts.splice(idx, 1);
+        }
+        if (ft.scene) {
+          ft.destroy();
+        }
+      },
     });
   }
 

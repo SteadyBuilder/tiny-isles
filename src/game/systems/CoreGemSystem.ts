@@ -20,8 +20,8 @@ export interface ICoreGemSystemContext {
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   playExplosionAt: (x: number, y: number) => void;
-  saveWorldState: () => void;
-  emitWorldState: () => void;
+  saveWorldState: (immediate?: boolean) => void;
+  emitWorldState: (immediate?: boolean) => void;
   refreshTerritoryDecorations: () => void;
   broadcastTerritoryLost?: (territoryId: number) => void;
 }
@@ -89,8 +89,8 @@ export class CoreGemSystem {
       this.loseTerritory(territoryId, attackerName, isLocalTrigger);
       return true;
     } else {
-      this.ctx.saveWorldState();
-      this.ctx.emitWorldState();
+      this.ctx.saveWorldState(false);
+      this.ctx.emitWorldState(false);
       return false;
     }
   }
@@ -124,9 +124,9 @@ export class CoreGemSystem {
         this.ctx.removeConstructedBuilding(b.id);
       }
 
-      this.ctx.saveWorldState();
+      this.ctx.saveWorldState(true);
       this.ctx.refreshTerritoryDecorations();
-      this.ctx.emitWorldState();
+      this.ctx.emitWorldState(true);
 
       const lostMsg = `💔 [땅 상실!] ${attackerName}의 공격으로 '${isl.name}'의 코어 보석이 부숴져 땅을 잃었습니다! 마물들이 중심부를 향해 진격합니다!`;
       this.ctx.showFloatingText(cPos.x, cPos.y - 70, `💔 코어 보석 파괴! [${isl.name} 상실]`, '#ef4444');
@@ -146,8 +146,8 @@ export class CoreGemSystem {
       }
       isl.coreHp = Math.round(isl.coreMaxHp * 0.5);
       this.updateCoreGemVisual(0);
-      this.ctx.saveWorldState();
-      this.ctx.emitWorldState();
+      this.ctx.saveWorldState(true);
+      this.ctx.emitWorldState(true);
 
       const msg = `⚠️ 중심 마을 코어 보석이 파괴 위기에 처해 긴급 결계가 발동했습니다! (코어 체력 50% 복구)`;
       this.ctx.showFloatingText(cPos.x, cPos.y - 70, msg, '#f59e0b');
@@ -166,8 +166,8 @@ export class CoreGemSystem {
 
     isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + healAmount);
     this.updateCoreGemVisual(territoryId);
-    this.ctx.saveWorldState();
-    this.ctx.emitWorldState();
+    this.ctx.saveWorldState(true);
+    this.ctx.emitWorldState(true);
 
     sound.playUnlock();
     const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);

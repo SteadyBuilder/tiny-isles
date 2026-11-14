@@ -59,8 +59,6 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     setIsActionActive(true);
     onAction();
     EventBus.emit('player-action-start');
-    if (actionIntervalRef.current) clearInterval(actionIntervalRef.current);
-    actionIntervalRef.current = setInterval(() => onAction(), 220);
   }, [onAction]);
 
   const resetJoystick = useCallback(() => {
