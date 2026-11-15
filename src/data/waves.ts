@@ -111,3 +111,16 @@ export const MONSTER_KILL_REWARDS = {
   regular: { wood: 5, stone: 4, gold: 5 },
   boss: { wood: 50, stone: 45, gold: 60 },
 } as const;
+
+/**
+ * 지도 외곽(WORLD_BOUNDS) 기반 웨이브 스폰 영역 설정 데이터
+ */
+export const MAP_OUTER_SPAWN_CONFIG = {
+  /** 지도 최외곽 경계선으로부터 안쪽 여백 (px) */
+  edgeMarginPx: 80,
+  /** 각 외곽 변(동·서·남·북)에서 중앙 기준 좌우/상하 랜덤 분포 반폭 (px) */
+  spreadHalfWidthPx: 2560,
+  /** 스폰 좌표 미세 랜덤 흔들림 (px) */
+  jitterPx: 35,
+} as const;
+

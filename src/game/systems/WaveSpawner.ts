@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
-import { WAVE_SPAWN_SCALING_CONFIG } from '../../data/waves';
+import { MAP_OUTER_SPAWN_CONFIG, WAVE_SPAWN_SCALING_CONFIG } from '../../data/waves';
 import { Island, Monster } from '../../types/game';
 import {
   getBossMonsterTemplate,
-  getOuterPerimeterSpawns,
   getRegularMonsterTemplates,
+  pickRandomMapEdgeSpawn,
 } from '../utils/waveUtils';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
-import { TERRITORY_CORE_REL_X } from '../constants';
+import { getTerritoryCorePos } from '../constants';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 
 export interface IWaveSpawnerContext {
@@ -28,6 +28,7 @@ export interface SpawnWaveParams {
 export interface SpawnWaveResult {
   firstTerritoryName: string;
   spawnedBossName: string;
+  bossDirectionLabel: string;
   scalingLabel: string;
 }
 
@@ -43,8 +44,7 @@ export class WaveSpawner {
 
   public spawnWave(params: SpawnWaveParams): SpawnWaveResult | null {
     const islands = this.ctx.getIslands();
-    const outerSpawns = getOuterPerimeterSpawns(islands);
-    if (outerSpawns.length === 0) return null;
+    if (islands.length === 0) return null;
 
     const monsters = this.ctx.getMonsters();
     const scaling = getDynamicScalingProfile(params.onlineCount);
@@ -66,12 +66,22 @@ export class WaveSpawner {
       initialCount + territoryBonus + waveBonus
     );
     const countToSpawn = Math.max(3, Math.round(baseCount * scaling.countMultiplier));
+    const jitterRange = MAP_OUTER_SPAWN_CONFIG.jitterPx * 2;
+    let firstTerritoryName = islands[0].name;
 
     for (let i = 0; i < countToSpawn; i++) {
-      const sp = outerSpawns[i % outerSpawns.length];
+      const sp = pickRandomMapEdgeSpawn(islands);
+      if (!sp) continue;
+      if (i === 0) {
+        firstTerritoryName = sp.territory.name;
+      }
+
       const template = regularTemplates[i % regularTemplates.length];
-      const jitterX = (Math.random() - 0.5) * 70;
-      const jitterY = (Math.random() - 0.5) * 70;
+      const jitterX = (Math.random() - 0.5) * jitterRange;
+      const jitterY = (Math.random() - 0.5) * jitterRange;
+      const spawnX = sp.spawnX + jitterX;
+      const spawnY = sp.spawnY + jitterY;
+      const targetCore = getTerritoryCorePos(sp.territory.gridX, sp.territory.gridY);
       const scaledHp = Math.round(template.hp * scaling.hpMultiplier);
       const scaledAttack = Math.round(template.attack * scaling.attackMultiplier);
 
@@ -80,49 +90,56 @@ export class WaveSpawner {
         type: template.type,
         name: template.name,
         isBoss: false,
-        x: sp.spawnX + jitterX,
-        y: sp.spawnY + jitterY,
+        x: spawnX,
+        y: spawnY,
         hp: scaledHp,
         maxHp: scaledHp,
         attack: scaledAttack,
         speed: template.speed,
         targetTerritoryId: sp.territory.id,
         spawnTerritoryId: sp.territory.id,
-        direction: sp.spawnX > TERRITORY_CORE_REL_X ? 'left' : 'right',
+        direction: spawnX > targetCore.x ? 'left' : 'right',
       };
       monsters.set(monster.id, MonsterVisualManager.create(this.ctx.scene, monster));
     }
 
     // 60분 주기 보스몬스터 출현 (src/data/waves.ts BOSS_MONSTER_TEMPLATES 기반 + 접속자 수 스케일링)
     let spawnedBossName = '';
+    let bossDirectionLabel = '';
     if (params.isBossWave) {
-      const bossSpawn = outerSpawns[0];
-      const bossTemplate = getBossMonsterTemplate(params.bossWaveCount);
-      const bossHp = Math.round(bossTemplate.hp * scaling.hpMultiplier);
-      const bossAttack = Math.round(bossTemplate.attack * scaling.attackMultiplier);
-      spawnedBossName = bossTemplate.name;
+      const bossSpawn = pickRandomMapEdgeSpawn(islands);
+      if (bossSpawn) {
+        const bossTemplate = getBossMonsterTemplate(params.bossWaveCount);
+        const bossHp = Math.round(bossTemplate.hp * scaling.hpMultiplier);
+        const bossAttack = Math.round(bossTemplate.attack * scaling.attackMultiplier);
+        const bossCore = getTerritoryCorePos(bossSpawn.territory.gridX, bossSpawn.territory.gridY);
+        spawnedBossName = bossTemplate.name;
+        bossDirectionLabel = bossSpawn.directionLabel;
+        firstTerritoryName = bossSpawn.territory.name;
 
-      const bossMonster: Monster = {
-        id: `boss_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        type: bossTemplate.type,
-        name: bossTemplate.name,
-        isBoss: true,
-        x: bossSpawn.spawnX,
-        y: bossSpawn.spawnY,
-        hp: bossHp,
-        maxHp: bossHp,
-        attack: bossAttack,
-        speed: bossTemplate.speed,
-        targetTerritoryId: bossSpawn.territory.id,
-        spawnTerritoryId: bossSpawn.territory.id,
-        direction: bossSpawn.spawnX > TERRITORY_CORE_REL_X ? 'left' : 'right',
-      };
-      monsters.set(bossMonster.id, MonsterVisualManager.create(this.ctx.scene, bossMonster));
+        const bossMonster: Monster = {
+          id: `boss_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          type: bossTemplate.type,
+          name: bossTemplate.name,
+          isBoss: true,
+          x: bossSpawn.spawnX,
+          y: bossSpawn.spawnY,
+          hp: bossHp,
+          maxHp: bossHp,
+          attack: bossAttack,
+          speed: bossTemplate.speed,
+          targetTerritoryId: bossSpawn.territory.id,
+          spawnTerritoryId: bossSpawn.territory.id,
+          direction: bossSpawn.spawnX > bossCore.x ? 'left' : 'right',
+        };
+        monsters.set(bossMonster.id, MonsterVisualManager.create(this.ctx.scene, bossMonster));
+      }
     }
 
     return {
-      firstTerritoryName: outerSpawns[0].territory.name,
+      firstTerritoryName,
       spawnedBossName,
+      bossDirectionLabel,
       scalingLabel: scaling.label,
     };
   }

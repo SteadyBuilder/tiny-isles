@@ -1,5 +1,4 @@
 import {
-  Island,
   ConstructedBuilding,
 } from '../types/game';
 import {
@@ -137,62 +136,4 @@ export function getInitialConstructedBuildings(): ConstructedBuilding[] {
       slotIndex: 4,
     },
   ];
-}
-
-/**
- * 점령한 땅 외곽 영지 및 외곽 진입 좌표 계산
- * 몬스터 웨이브는 점령한 땅의 가장 바깥쪽 외곽 경계에서 진입하여 중심부를 향해 진격합니다.
- */
-export function getOuterPerimeterSpawns(islands: Island[]): {
-  territory: Island;
-  spawnX: number;
-  spawnY: number;
-}[] {
-  const unlocked = islands.filter((i) => i.unlocked);
-  if (unlocked.length === 0) {
-    const center = islands[0];
-    const origin = getIslandOrigin(0, 0);
-    return [{ territory: center, spawnX: origin.x + TERRITORY_CORE_REL_X, spawnY: origin.y + 20 }];
-  }
-
-  const unlockedSet = new Set(unlocked.map((i) => `${i.gridX},${i.gridY}`));
-  const spawns: { territory: Island; spawnX: number; spawnY: number }[] = [];
-
-  const dirs = [
-    { dx: 0, dy: -1, relX: TERRITORY_CORE_REL_X, relY: 20 },  // 북쪽 외곽 경계
-    { dx: 0, dy: 1, relX: TERRITORY_CORE_REL_X, relY: TERRITORY_PX - 20 },  // 남쪽 외곽 경계
-    { dx: 1, dy: 0, relX: TERRITORY_PX - 20, relY: TERRITORY_CORE_REL_Y },  // 동쪽 외곽 경계
-    { dx: -1, dy: 0, relX: 20, relY: TERRITORY_CORE_REL_Y },  // 서쪽 외곽 경계
-  ];
-
-  let maxDist = 0;
-  for (const isl of unlocked) {
-    const d = Math.abs(isl.gridX) + Math.abs(isl.gridY);
-    if (d > maxDist) maxDist = d;
-  }
-
-  for (const isl of unlocked) {
-    const origin = getIslandOrigin(isl.gridX, isl.gridY);
-    for (const dir of dirs) {
-      const nx = isl.gridX + dir.dx;
-      const ny = isl.gridY + dir.dy;
-      if (!unlockedSet.has(`${nx},${ny}`)) {
-        if (unlocked.length === 1 || isl.id !== 0 || maxDist === 0) {
-          spawns.push({
-            territory: isl,
-            spawnX: origin.x + dir.relX,
-            spawnY: origin.y + dir.relY,
-          });
-        }
-      }
-    }
-  }
-
-  if (spawns.length === 0) {
-    const first = unlocked[unlocked.length - 1];
-    const origin = getIslandOrigin(first.gridX, first.gridY);
-    spawns.push({ territory: first, spawnX: origin.x + TERRITORY_CORE_REL_X, spawnY: origin.y + 20 });
-  }
-
-  return spawns;
 }

@@ -280,9 +280,10 @@ export class WaveSystem {
     if (!result) return;
 
     const bonusSuffix = isEarlySummon ? ' (조기 소환 보상 +35%)' : '';
+    const bossOrigin = result.bossDirectionLabel || '지도 외곽';
     const alertMsg = isBossWave
-      ? `👹 [${result.scalingLabel}] 외곽 영지(${result.firstTerritoryName})에서 보스 '${result.spawnedBossName}' 군단이 침공합니다!${bonusSuffix}`
-      : `🧟 [${result.scalingLabel}] 외곽 영지(${result.firstTerritoryName}) 경계에서 마물 웨이브가 진입했습니다!${bonusSuffix}`;
+      ? `👹 [${result.scalingLabel}] ${bossOrigin}에서 보스 '${result.spawnedBossName}' 군단이 동·서·남·북으로 침공합니다!${bonusSuffix}`
+      : `🧟 [${result.scalingLabel}] 지도 외곽(동·서·남·북)에서 마물 웨이브가 진격을 시작했습니다!${bonusSuffix}`;
 
     this.waveState.lastWaveMessage = alertMsg;
     sound.playBreak();

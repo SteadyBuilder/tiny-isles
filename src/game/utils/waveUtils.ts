@@ -1,11 +1,20 @@
 import { Island, MonsterType } from '../../types/game';
-import { getIslandOrigin, getTerritoryCorePos } from '../constants';
-import { BOSS_MONSTER_TEMPLATES, REGULAR_MONSTER_TEMPLATES } from '../../data/waves';
+import { getTerritoryCorePos } from '../constants';
+import { WORLD_BOUNDS, WorldBounds } from '../worldBounds';
+import {
+  BOSS_MONSTER_TEMPLATES,
+  MAP_OUTER_SPAWN_CONFIG,
+  REGULAR_MONSTER_TEMPLATES,
+} from '../../data/waves';
+
+export type CardinalDirection = 'north' | 'south' | 'east' | 'west';
 
 export interface PerimeterSpawnPoint {
   territory: Island;
   spawnX: number;
   spawnY: number;
+  direction: CardinalDirection;
+  directionLabel: string;
 }
 
 export interface MonsterTemplate {
@@ -16,60 +25,103 @@ export interface MonsterTemplate {
   speed: number;
 }
 
-/**
- * 점령된(unlocked === true) 영지들의 외곽 둘레 경계선 스폰 지점 계산 순수 함수
- * 마물 웨이브는 점령한 땅의 외곽 경계선에서부터 진입하여 중심부를 향해 진격합니다.
- */
-export function getOuterPerimeterSpawns(islands: Island[]): PerimeterSpawnPoint[] {
-  const unlocked = islands.filter((i) => i.unlocked);
-  if (unlocked.length === 0) {
-    const center = islands[0];
-    const origin = getIslandOrigin(0, 0);
-    return [{ territory: center, spawnX: origin.x + 320, spawnY: origin.y + 20 }];
-  }
+const CARDINAL_DIRECTIONS: readonly { direction: CardinalDirection; label: string }[] = [
+  { direction: 'north', label: '북쪽 외곽' },
+  { direction: 'south', label: '남쪽 외곽' },
+  { direction: 'east', label: '동쪽 외곽' },
+  { direction: 'west', label: '서쪽 외곽' },
+] as const;
 
-  const unlockedSet = new Set(unlocked.map((i) => `${i.gridX},${i.gridY}`));
-  const spawns: PerimeterSpawnPoint[] = [];
-
-  const dirs = [
-    { dx: 0, dy: -1, relX: 320, relY: 20 },  // 북쪽 외곽 경계
-    { dx: 0, dy: 1, relX: 320, relY: 620 },  // 남쪽 외곽 경계
-    { dx: 1, dy: 0, relX: 620, relY: 350 },  // 동쪽 외곽 경계
-    { dx: -1, dy: 0, relX: 20, relY: 350 },  // 서쪽 외곽 경계
-  ];
-
-  let maxDist = 0;
-  for (const isl of unlocked) {
-    const d = Math.abs(isl.gridX) + Math.abs(isl.gridY);
-    if (d > maxDist) maxDist = d;
-  }
-
-  for (const isl of unlocked) {
-    const origin = getIslandOrigin(isl.gridX, isl.gridY);
-    for (const dir of dirs) {
-      const nx = isl.gridX + dir.dx;
-      const ny = isl.gridY + dir.dy;
-      // 인접 방향이 미점령 상태라면 이 변은 점령지의 외곽 경계선!
-      if (!unlockedSet.has(`${nx},${ny}`)) {
-        if (unlocked.length === 1 || isl.id !== 0 || maxDist === 0) {
-          spawns.push({
-            territory: isl,
-            spawnX: origin.x + dir.relX,
-            spawnY: origin.y + dir.relY,
-          });
-        }
-      }
-    }
-  }
-
-  if (spawns.length === 0) {
-    const first = unlocked[unlocked.length - 1];
-    const origin = getIslandOrigin(first.gridX, first.gridY);
-    spawns.push({ territory: first, spawnX: origin.x + 320, spawnY: origin.y + 20 });
-  }
-
-  return spawns;
+function resolveTargetTerritory(spawnX: number, spawnY: number, islands: Island[]): Island {
+  const targetId = findNextInwardTargetTerritory(spawnX, spawnY, islands);
+  return islands.find((i) => i.id === targetId && i.unlocked) ?? islands[0];
 }
+
+function clampCoord(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function computeEdgeCoordinate(
+  direction: CardinalDirection,
+  offset: number,
+  bounds: WorldBounds
+): { spawnX: number; spawnY: number } {
+  const margin = MAP_OUTER_SPAWN_CONFIG.edgeMarginPx;
+  const minBound = bounds.min + margin;
+  const maxBound = bounds.max - margin;
+  const mapCenter = (bounds.min + bounds.max) / 2;
+
+  switch (direction) {
+    case 'north':
+      return {
+        spawnX: clampCoord(mapCenter + offset, minBound, maxBound),
+        spawnY: minBound,
+      };
+    case 'south':
+      return {
+        spawnX: clampCoord(mapCenter + offset, minBound, maxBound),
+        spawnY: maxBound,
+      };
+    case 'east':
+      return {
+        spawnX: maxBound,
+        spawnY: clampCoord(mapCenter + offset, minBound, maxBound),
+      };
+    case 'west':
+      return {
+        spawnX: minBound,
+        spawnY: clampCoord(mapCenter + offset, minBound, maxBound),
+      };
+  }
+}
+
+/**
+ * 전체 지도(WORLD_BOUNDS)의 동·서·남·북 최외곽 경계 대표 스폰 지점 계산 순수 함수
+ * 마물 웨이브는 지도 외곽에서 시작해 가장 가까운 점령 영지를 향해 진격합니다.
+ */
+export function getOuterPerimeterSpawns(
+  islands: Island[],
+  bounds: WorldBounds = WORLD_BOUNDS
+): PerimeterSpawnPoint[] {
+  if (islands.length === 0) return [];
+
+  return CARDINAL_DIRECTIONS.map(({ direction, label }) => {
+    const { spawnX, spawnY } = computeEdgeCoordinate(direction, 0, bounds);
+    return {
+      territory: resolveTargetTerritory(spawnX, spawnY, islands),
+      spawnX,
+      spawnY,
+      direction,
+      directionLabel: label,
+    };
+  });
+}
+
+/**
+ * 동·서·남·북 지도 외곽 중 무작위 방향과 변 내 랜덤 좌표를 선택하는 함수
+ */
+export function pickRandomMapEdgeSpawn(
+  islands: Island[],
+  bounds: WorldBounds = WORLD_BOUNDS,
+  rng: () => number = Math.random
+): PerimeterSpawnPoint | null {
+  if (islands.length === 0) return null;
+
+  const dirIndex = Math.floor(rng() * CARDINAL_DIRECTIONS.length);
+  const picked = CARDINAL_DIRECTIONS[dirIndex] ?? CARDINAL_DIRECTIONS[0];
+  const halfSpread = MAP_OUTER_SPAWN_CONFIG.spreadHalfWidthPx;
+  const offset = (rng() * 2 - 1) * halfSpread;
+  const { spawnX, spawnY } = computeEdgeCoordinate(picked.direction, offset, bounds);
+
+  return {
+    territory: resolveTargetTerritory(spawnX, spawnY, islands),
+    spawnX,
+    spawnY,
+    direction: picked.direction,
+    directionLabel: picked.label,
+  };
+}
+
 
 /**
  * 몬스터의 현재 위치에서 중심 마을(Territory #0) 방향으로 가장 가까운 안쪽 점령 영지 ID 탐색
