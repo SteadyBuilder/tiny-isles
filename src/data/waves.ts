@@ -66,6 +66,7 @@ export interface BossMonsterDataTemplate {
   baseHp: number;
   hpPerBossWave: number;
   baseAttack: number;
+  attackPerBossWave: number;
   speed: number;
   title: string;
 }
@@ -78,6 +79,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     baseHp: 900,
     hpPerBossWave: 250,
     baseAttack: 45,
+    attackPerBossWave: 8,
     speed: 38,
     title: '멸망을 부르는 파괴자',
   },
@@ -88,7 +90,24 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     baseHp: 750,
     hpPerBossWave: 220,
     baseAttack: 55,
+    attackPerBossWave: 9,
     speed: 42,
     title: '망자들의 군주',
   },
 ];
+
+/**
+ * 웨이브 스폰 수 스케일링 및 처치 보상 데이터
+ */
+export const WAVE_SPAWN_SCALING_CONFIG = {
+  baseRegularCount: 5,
+  baseBossWaveMinionCount: 6,
+  extraCountPerUnlockedTerritory: 0.4,
+  extraCountPerWave: 0.25,
+  maxBaseCountBeforeOnlineScaling: 18,
+} as const;
+
+export const MONSTER_KILL_REWARDS = {
+  regular: { wood: 5, stone: 4, gold: 5 },
+  boss: { wood: 50, stone: 45, gold: 60 },
+} as const;

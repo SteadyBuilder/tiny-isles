@@ -127,8 +127,11 @@ export function resolveOfflinePeriod(input: OfflineResolveInput): OfflineResolve
   const simulatedRegularWaves =
     crossedRegularWaves === 0 && hasUnfinishedWave ? 1 : crossedRegularWaves;
 
-  // 지난 웨이브가 전혀 없고 시간만 흐른 경우 패시브 자원만 소폭 정산할지 여부
-  const totalWaves = Math.max(1, simulatedRegularWaves);
+  // 지난 웨이브가 전혀 없는 단기 오프라인은 경과 시간 비율만큼만 패시브 생산
+  const elapsedWaveFraction =
+    simulatedRegularWaves > 0
+      ? simulatedRegularWaves
+      : Math.max(0.2, elapsedSec / WORLD_CLOCK_CONFIG.regularWaveIntervalSec);
   const defensePower = computeVillageDefensePower(
     input.islands,
     input.constructedBuildings,
@@ -146,6 +149,7 @@ export function resolveOfflinePeriod(input: OfflineResolveInput): OfflineResolve
   const threatPower = Math.round(singleWaveThreat + bossThreat);
 
   const victory = defensePower >= threatPower;
+  const isDecisiveVictory = defensePower >= threatPower * 1.5;
   const deficitRatio = victory ? 0 : Math.min(1, (threatPower - defensePower) / Math.max(1, threatPower));
 
   // 1. 패시브 자원 생산 정산
@@ -155,24 +159,31 @@ export function resolveOfflinePeriod(input: OfflineResolveInput): OfflineResolve
     if (!isl.unlocked) continue;
     const cfg = VILLAGE_TIER_CONFIGS[isl.villageTier];
     passiveGain.wood += Math.floor(
-      cfg.passiveWood * totalWaves * OFFLINE_RESOLUTION_CONFIG.passiveYieldMultiplierPerWave * yieldScale
+      cfg.passiveWood * elapsedWaveFraction * OFFLINE_RESOLUTION_CONFIG.passiveYieldMultiplierPerWave * yieldScale
     );
     passiveGain.stone += Math.floor(
-      cfg.passiveStone * totalWaves * OFFLINE_RESOLUTION_CONFIG.passiveYieldMultiplierPerWave * yieldScale
+      cfg.passiveStone * elapsedWaveFraction * OFFLINE_RESOLUTION_CONFIG.passiveYieldMultiplierPerWave * yieldScale
     );
     passiveGain.gold += Math.floor(
-      cfg.passiveGold * totalWaves * OFFLINE_RESOLUTION_CONFIG.passiveYieldMultiplierPerWave * yieldScale
+      cfg.passiveGold * elapsedWaveFraction * OFFLINE_RESOLUTION_CONFIG.passiveYieldMultiplierPerWave * yieldScale
     );
   }
 
-  // 2. 건물 손상 정산 (외곽 영지 우선)
+  // 2. 건물 손상 정산 (웨이브가 실제로 발생한 경우만 적용; 압승 시 무피해, 박빙 승리 시 성벽만 소폭 손상)
   let damagedBuildingsCount = 0;
   const updatedBuildings: ConstructedBuilding[] = [];
-  const damageRatio = victory
-    ? Math.min(0.18, 0.04 * simulatedRegularWaves)
-    : Math.min(0.75, 0.25 + deficitRatio * 0.5);
+  const damageRatio =
+    simulatedRegularWaves === 0 || isDecisiveVictory
+      ? 0
+      : victory
+        ? Math.min(0.1, 0.025 * simulatedRegularWaves)
+        : Math.min(0.75, 0.25 + deficitRatio * 0.5);
 
   for (const b of input.constructedBuildings) {
+    if (damageRatio <= 0 || (victory && b.category !== 'wall')) {
+      updatedBuildings.push({ ...b });
+      continue;
+    }
     const isOuter = b.territoryId !== 0;
     const appliedRatio = isOuter ? damageRatio : damageRatio * 0.55;
     const dmg = Math.round(b.maxHp * appliedRatio);
@@ -223,13 +234,11 @@ export function resolveOfflinePeriod(input: OfflineResolveInput): OfflineResolve
   const lostSet = new Set(lostOuterIslandIds);
   const survivingBuildings = updatedBuildings.filter((b) => !lostSet.has(b.territoryId));
 
-  // #0 중심 마을 코어 보호 하한선 적용
+  // #0 중심 마을 코어 보호 하한선 적용 (웨이브 미발생 또는 승리 시 중심 마을 코어 무피해)
   const homeIsle = updatedIslands.find((i) => i.id === 0) ?? updatedIslands[0];
-  if (homeIsle) {
+  if (homeIsle && simulatedRegularWaves > 0 && !victory) {
     const minHomeHp = Math.ceil(homeIsle.coreMaxHp * OFFLINE_RESOLUTION_CONFIG.homeCoreMinHpRatio);
-    const homeDmg = victory
-      ? Math.round(homeIsle.coreMaxHp * 0.05)
-      : Math.round(homeIsle.coreMaxHp * Math.min(0.65, deficitRatio * 0.7));
+    const homeDmg = Math.round(homeIsle.coreMaxHp * Math.min(0.65, deficitRatio * 0.7));
     homeIsle.coreHp = Math.max(minHomeHp, homeIsle.coreHp - homeDmg);
   }
 

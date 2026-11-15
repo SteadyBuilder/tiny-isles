@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { WAVE_SPAWN_SCALING_CONFIG } from '../../data/waves';
 import { Island, Monster } from '../../types/game';
 import {
   getBossMonsterTemplate,
@@ -47,8 +48,22 @@ export class WaveSpawner {
     const monsters = this.ctx.getMonsters();
     const scaling = getDynamicScalingProfile(params.onlineCount);
     const waveNum = params.waveCount + params.bossWaveCount;
+    const unlockedCount = islands.filter((i) => i.unlocked).length;
     const regularTemplates = getRegularMonsterTemplates(waveNum);
-    const baseCount = params.isBossWave ? 6 : 5;
+
+    const territoryBonus = Math.floor(
+      Math.max(0, unlockedCount - 1) * WAVE_SPAWN_SCALING_CONFIG.extraCountPerUnlockedTerritory
+    );
+    const waveBonus = Math.floor(
+      Math.max(0, waveNum - 1) * WAVE_SPAWN_SCALING_CONFIG.extraCountPerWave
+    );
+    const initialCount = params.isBossWave
+      ? WAVE_SPAWN_SCALING_CONFIG.baseBossWaveMinionCount
+      : WAVE_SPAWN_SCALING_CONFIG.baseRegularCount;
+    const baseCount = Math.min(
+      WAVE_SPAWN_SCALING_CONFIG.maxBaseCountBeforeOnlineScaling,
+      initialCount + territoryBonus + waveBonus
+    );
     const countToSpawn = Math.max(3, Math.round(baseCount * scaling.countMultiplier));
 
     for (let i = 0; i < countToSpawn; i++) {

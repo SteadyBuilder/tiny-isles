@@ -66,10 +66,12 @@ export class TowerDefenseSystem {
       if (nearestMonster) {
         cv.lastFireTime = time;
 
-        // 왕국 수비대 병영(special_barracks) 존재 시 영지 내 타워 공격력 25% 버프!
-        const hasBarracksBuff = constructedBuildings.some(
-          (b) => b.territoryId === cb.territoryId && b.type === 'special_barracks'
-        );
+        // 왕국 수비대 병영(special_barracks) 존재 시 영지 내 타워 공격력 25% 버프 (병영 자체 공격은 제외)
+        const hasBarracksBuff =
+          cb.category === 'tower' &&
+          constructedBuildings.some(
+            (b) => b.territoryId === cb.territoryId && b.type === 'special_barracks'
+          );
         const finalDamage = Math.round(bp.attack * (hasBarracksBuff ? 1.25 : 1.0));
 
         this.fireTowerProjectile(cb, nearestMonster, finalDamage, hasBarracksBuff);

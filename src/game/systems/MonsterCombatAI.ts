@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MONSTER_KILL_REWARDS } from '../../data/waves';
 import { ConstructedBuilding, Island } from '../../types/game';
 import { sound } from '../../lib/sound';
 import { getTerritoryCorePos } from '../constants';
@@ -200,9 +201,10 @@ export class MonsterCombatAI {
     mv.container.destroy();
     monsters.delete(params.monsterId);
 
-    const rewardWood = Math.round((deadM.isBoss ? 25 : 3) * params.bonusMultiplier);
-    const rewardStone = Math.round((deadM.isBoss ? 25 : 3) * params.bonusMultiplier);
-    const rewardGold = Math.round((deadM.isBoss ? 35 : 4) * params.bonusMultiplier);
+    const rewardTier = deadM.isBoss ? MONSTER_KILL_REWARDS.boss : MONSTER_KILL_REWARDS.regular;
+    const rewardWood = Math.round(rewardTier.wood * params.bonusMultiplier);
+    const rewardStone = Math.round(rewardTier.stone * params.bonusMultiplier);
+    const rewardGold = Math.round(rewardTier.gold * params.bonusMultiplier);
 
     this.ctx.addRewardResources(rewardWood, rewardStone, rewardGold);
     sound.playUnlock();

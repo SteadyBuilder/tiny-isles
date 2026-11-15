@@ -8,6 +8,7 @@ import { BOSS_WAVE_INTERVAL_SEC, REGULAR_WAVE_INTERVAL_SEC } from './waves';
 export const WORLD_CLOCK_CONFIG = {
   regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC, // 1800초 (30분)
   bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,       // 3600초 (60분)
+  passiveTickIntervalMs: 30_000,                     // 30초마다 마을/생산건물 패시브 정산
   worldSnapshotIntervalMs: 10_000,                   // 10초마다 월드 상태 스냅샷 저장
   garrisonSyncIntervalMs: 25_000,                    // 25초마다 내 수비대 위치 갱신
   monsterSyncIntervalMs: 180,                        // 호스트 -> 게스트 몬스터 상태 브로드캐스트 주기
@@ -35,8 +36,8 @@ export const OFFLINE_RESOLUTION_CONFIG = {
   homeCoreMinHpRatio: 0.15,
   /** 1회 오프라인 정산 세션당 상실 가능한 최대 외곽 섬 수 */
   maxOuterIslandsLostPerSession: 2,
-  /** 웨이브 1회당 마을 티어 패시브 생산 보상 배율 */
-  passiveYieldMultiplierPerWave: 1.0,
+  /** 웨이브 1회(30분)당 마을 티어 패시브 생산 보상 배율 (온라인 30초 틱 60회의 50% 수준) */
+  passiveYieldMultiplierPerWave: 30,
   /** 타워·성벽·수비대 방어력 대비 몬스터 1웨이브 기본 위협 전력 */
   baseWaveThreatPower: 140,
   /** 웨이브 차수당 위협 전력 증가량 */

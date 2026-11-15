@@ -117,7 +117,7 @@ export function getBossMonsterTemplate(bossWaveCount: number): MonsterTemplate {
     type: tmpl.type,
     name: `${tmpl.name} (60분 보스 Lv.${bossWaveCount})`,
     hp: tmpl.baseHp + bossWaveCount * tmpl.hpPerBossWave,
-    attack: tmpl.baseAttack + bossWaveCount * 8,
+    attack: tmpl.baseAttack + bossWaveCount * tmpl.attackPerBossWave,
     speed: tmpl.speed,
   };
 }

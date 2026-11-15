@@ -1,3 +1,4 @@
+import { WORLD_CLOCK_CONFIG } from '../../../data/worldRules';
 import { ConstructedBuilding, Island } from '../../../types/game';
 import { VILLAGE_TIER_CONFIGS } from '../../constants';
 
@@ -13,7 +14,7 @@ export interface ITerritoryPassiveContext {
 }
 
 /**
- * 점령지 마을 단계별 기본 자원 생산 및 특수 건물(벌목소/석공소/금광/집/성소) 주기 효과 처리기 (6초 주기)
+ * 점령지 마을 단계별 기본 자원 생산 및 특수 건물(벌목소/석공소/금광/집/성소) 주기 효과 처리기 (30초 주기)
  */
 export class TerritoryPassiveSystem {
   private ctx: ITerritoryPassiveContext;
@@ -25,7 +26,7 @@ export class TerritoryPassiveSystem {
 
   public update(delta: number): void {
     this.passiveTickAccum += delta;
-    if (this.passiveTickAccum < 6000) return;
+    if (this.passiveTickAccum < WORLD_CLOCK_CONFIG.passiveTickIntervalMs) return;
     this.passiveTickAccum = 0;
 
     const islands = this.ctx.getIslands();
