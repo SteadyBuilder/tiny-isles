@@ -6,13 +6,11 @@ import {
   ConstructedBuilding,
   GarrisonUnit,
   Island,
-  OfflineResolutionReport,
   PlayerColor,
   VillageTier,
   WorldSyncState,
 } from '../../types/game';
 import { worldStateSync } from '../../lib/worldStateSync';
-import { resolveOfflinePeriod } from '../utils/offlineResolver';
 import { GameEvents } from '../events/gameEvents';
 import { GarrisonSystem } from './GarrisonSystem';
 import { WaveSystem } from './WaveSystem';
@@ -27,13 +25,12 @@ export interface ILivingWorldContext {
   getConstructedBuildings: () => ConstructedBuilding[];
   applyOfflineWorldUpdate: (
     updatedIslands: Island[],
-    updatedBuildings: ConstructedBuilding[],
-    passiveGain: { wood: number; stone: number; gold: number }
+    updatedBuildings: ConstructedBuilding[]
   ) => void;
 }
 
 /**
- * 리빙 아일즈(Living Isles) 오프라인 정산, 주기적 스냅샷 저장 및 비동기 수비대 조율기
+ * 리빙 아일즈(Living Isles) 주기적 스냅샷 저장 및 비동기 수비대 조율기
  */
 export class LivingWorldCoordinator {
   private ctx: ILivingWorldContext;
@@ -104,43 +101,13 @@ export class LivingWorldCoordinator {
         if (Array.isArray(savedWorld.constructedBuildings)) {
           baseBuildings = savedWorld.constructedBuildings;
         }
-        this.ctx.applyOfflineWorldUpdate(baseIslands, baseBuildings, {
-          wood: 0,
-          stone: 0,
-          gold: 0,
-        });
+        this.ctx.applyOfflineWorldUpdate(baseIslands, baseBuildings);
       }
 
       const savedMonsters = Array.isArray(savedWorld.activeMonsters)
         ? savedWorld.activeMonsters.filter((m) => m.hp > 0)
         : [];
-      const hasBossActive = savedMonsters.some((m) => m.isBoss);
-
-      const resolution = resolveOfflinePeriod({
-        lastActiveAtIso: savedWorld.lastActiveAt,
-        nowMs: Date.now(),
-        baseWaveCount: savedWorld.waveCount,
-        baseBossWaveCount: savedWorld.bossWaveCount,
-        islands: baseIslands,
-        constructedBuildings: baseBuildings,
-        garrisons,
-        activeMonstersCount: savedMonsters.length,
-        hasBossActive,
-      });
-
-      if (resolution.shouldReport && resolution.report) {
-        this.ctx.applyOfflineWorldUpdate(
-          resolution.updatedIslands,
-          resolution.updatedBuildings,
-          resolution.report.passiveGain
-        );
-        this.waveSystem.syncCountsFromWorldState(
-          resolution.newWaveCount,
-          resolution.newBossWaveCount
-        );
-        this.emitOfflineReport(resolution.report);
-      } else if (savedMonsters.length > 0) {
-        // 5분 미만 재접속 등 오프라인 정산 대상이 아닌 경우 진행 중이던 몬스터 복원
+      if (savedMonsters.length > 0) {
         this.waveSystem.restoreMonsters(savedMonsters);
       }
     }
@@ -151,10 +118,6 @@ export class LivingWorldCoordinator {
     } else {
       await this.saveLocalGarrison();
     }
-  }
-
-  private emitOfflineReport(report: OfflineResolutionReport) {
-    GameEvents.emit('offline-report-ready', report);
   }
 
   public update(delta: number) {

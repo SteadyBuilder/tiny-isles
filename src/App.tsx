@@ -3,7 +3,6 @@ import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
 import { VillageBuildModal } from './components/VillageBuildModal';
-import { OfflineReportModal } from './components/OfflineReportModal';
 import { ConstructableType } from './types/game';
 import { GameEvents } from './game/events/gameEvents';
 import { useGameShellState } from './hooks/useGameShellState';
@@ -23,8 +22,6 @@ export function App() {
     setConstructedBuildings,
     waveState,
     setWaveState,
-    offlineReport,
-    setOfflineReport,
     showVillageModal,
     setShowVillageModal,
     selectedTerritoryId,
@@ -88,7 +85,6 @@ export function App() {
         onTerritoriesChange={setTerritories}
         onConstructedBuildingsChange={setConstructedBuildings}
         onWaveStateChange={setWaveState}
-        onOfflineReport={setOfflineReport}
         onOpenVillageModal={handleOpenVillageModalById}
         onGameAlert={handleShowAlert}
         joystickRef={joystickRef}
@@ -132,11 +128,6 @@ export function App() {
           GameEvents.emit('construct-building', { territoryId, type, slotIndex })
         }
         onRepairCore={(territoryId) => GameEvents.emit('repair-territory-core', territoryId)}
-      />
-
-      <OfflineReportModal
-        report={offlineReport}
-        onClose={() => setOfflineReport(null)}
       />
     </div>
   );

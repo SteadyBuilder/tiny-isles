@@ -36,8 +36,7 @@ export interface IWorldSystemsHost {
   getConstructedBuildings: () => ConstructedBuilding[];
   applyOfflineWorldUpdate: (
     updatedIslands: Island[],
-    updatedBuildings: ConstructedBuilding[],
-    passiveGain: { wood: number; stone: number; gold: number }
+    updatedBuildings: ConstructedBuilding[]
   ) => void;
   addResources: (wood: number, stone: number, gold: number) => void;
   destroyConstructedBuilding: (buildingId: string) => void;

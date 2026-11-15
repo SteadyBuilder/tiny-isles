@@ -8,7 +8,7 @@ import { BOSS_WAVE_INTERVAL_SEC, REGULAR_WAVE_INTERVAL_SEC } from './waves';
 export const WORLD_CLOCK_CONFIG = {
   regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC, // 1800초 (30분)
   bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,       // 3600초 (60분)
-  passiveTickIntervalMs: 30_000,                     // 30초마다 마을/생산건물 패시브 정산
+  passiveTickIntervalMs: 30_000,                     // 30초마다 특수 생산/회복 건물 주기 정산
   worldSnapshotIntervalMs: 10_000,                   // 10초마다 월드 상태 스냅샷 저장
   garrisonSyncIntervalMs: 25_000,                    // 25초마다 내 수비대 위치 갱신
   monsterSyncIntervalMs: 180,                        // 호스트 -> 게스트 몬스터 상태 브로드캐스트 주기
@@ -23,28 +23,6 @@ export const ONLINE_SCALING_PROFILES: DynamicScalingProfile[] = [
   { minPlayers: 3, maxPlayers: 3, countMultiplier: 1.8, hpMultiplier: 1.5, attackMultiplier: 1.2, label: '3인 연합' },
   { minPlayers: 4, maxPlayers: 99, countMultiplier: 2.2, hpMultiplier: 1.85, attackMultiplier: 1.3, label: '4인+ 총력전' },
 ];
-
-/**
- * 오프라인(무인) 휴면 및 복귀 정산 밸런스
- */
-export const OFFLINE_RESOLUTION_CONFIG = {
-  /** 이 시간(초) 이상 전원 오프라인이었다가 복귀할 때만 오프라인 정산 모달 표시 (5분) */
-  minOfflineSecondsForReport: 5 * 60,
-  /** 장기간 미접속 시 무한 누적 방지를 위한 최대 정산 웨이브 수 (최대 6시간분 = 12웨이브) */
-  maxSimulatedWaves: 12,
-  /** 중심 마을(#0) 코어 보호 하한 비율 (오프라인 정산으로는 절대 전멸하지 않음) */
-  homeCoreMinHpRatio: 0.15,
-  /** 1회 오프라인 정산 세션당 상실 가능한 최대 외곽 섬 수 */
-  maxOuterIslandsLostPerSession: 2,
-  /** 웨이브 1회(30분)당 마을 티어 패시브 생산 보상 배율 (온라인 30초 틱 60회의 50% 수준) */
-  passiveYieldMultiplierPerWave: 30,
-  /** 타워·성벽·수비대 방어력 대비 몬스터 1웨이브 기본 위협 전력 */
-  baseWaveThreatPower: 140,
-  /** 웨이브 차수당 위협 전력 증가량 */
-  threatPowerPerWave: 32,
-  /** 보스 웨이브 추가 위협 전력 */
-  bossExtraThreatPower: 220,
-} as const;
 
 /**
  * 비동기 오프라인 수비대(Garrison) AI 밸런스

@@ -141,13 +141,10 @@ export class WorldScene extends Phaser.Scene {
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,
       getConstructedBuildings: () => this.constructedBuildings,
-      applyOfflineWorldUpdate: (updatedIslands, updatedBuildings, passiveGain) => {
+      applyOfflineWorldUpdate: (updatedIslands, updatedBuildings) => {
         if (!this.isSceneAlive()) return;
         this.islands = updatedIslands;
         this.constructedBuildings = updatedBuildings;
-        if (passiveGain.wood > 0 || passiveGain.stone > 0 || passiveGain.gold > 0) {
-          this.addResources(passiveGain.wood, passiveGain.stone, passiveGain.gold);
-        }
         this.territoryStructureRenderer.spawnAllTerritoryCores(
           this.islands,
           this.systems.coreGemSystem

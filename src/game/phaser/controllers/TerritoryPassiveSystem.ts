@@ -1,6 +1,5 @@
 import { WORLD_CLOCK_CONFIG } from '../../../data/worldRules';
 import { ConstructedBuilding, Island } from '../../../types/game';
-import { VILLAGE_TIER_CONFIGS } from '../../constants';
 
 export interface ITerritoryPassiveContext {
   getIslands: () => Island[];
@@ -14,7 +13,7 @@ export interface ITerritoryPassiveContext {
 }
 
 /**
- * 점령지 마을 단계별 기본 자원 생산 및 특수 건물(벌목소/석공소/금광/집/성소) 주기 효과 처리기 (30초 주기)
+ * 특수 경제 건물(벌목 작업장/석공 작업장/황금 연금술 공방) 자동 채집 및 회복 건물(주민 가옥/성소) 주기 효과 처리기 (30초 주기)
  */
 export class TerritoryPassiveSystem {
   private ctx: ITerritoryPassiveContext;
@@ -36,16 +35,7 @@ export class TerritoryPassiveSystem {
     let totalStoneGain = 0;
     let totalGoldGain = 0;
 
-    // 점령지 마을 단계별 기본 생산
-    for (const isl of islands) {
-      if (!isl.unlocked) continue;
-      const cfg = VILLAGE_TIER_CONFIGS[isl.villageTier];
-      totalWoodGain += cfg.passiveWood;
-      totalStoneGain += cfg.passiveStone;
-      totalGoldGain += cfg.passiveGold;
-    }
-
-    // 기본건물 & 특수건물 효과
+    // 특수 경제 건물 자동 채집 & 회복 건물 효과
     let healStateDirty = false;
     for (const cb of constructedBuildings) {
       const isl = islands.find((i) => i.id === cb.territoryId && i.unlocked);

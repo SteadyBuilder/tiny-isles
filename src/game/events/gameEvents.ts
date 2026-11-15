@@ -4,7 +4,6 @@ import {
   GarrisonUnit,
   Inventory,
   Island,
-  OfflineResolutionReport,
   PlayerColor,
   VillageTier,
   WaveState,
@@ -51,8 +50,7 @@ export interface GameEventPayloads {
   'wave-spawned': { isBossWave: boolean; waveNumber: number };
   'monster-killed': { monsterId: string; monsterType: string; killer: string };
 
-  // 리빙 아일즈: 글로벌 동기화, 오프라인 정산, 수비대
-  'offline-report-ready': OfflineResolutionReport;
+  // 리빙 아일즈: 글로벌 동기화, 수비대
   'garrisons-updated': GarrisonUnit[];
   'world-state-synced': WorldSyncState;
 

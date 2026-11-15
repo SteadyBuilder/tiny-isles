@@ -75,9 +75,6 @@ export interface VillageTierConfig {
   costWood: number;
   costStone: number;
   costGold: number;
-  passiveWood: number;
-  passiveStone: number;
-  passiveGold: number;
   description: string;
 }
 
@@ -216,22 +213,6 @@ export interface WorldSyncState {
   activeMonsters: Monster[];
 }
 
-export interface OfflineResolutionReport {
-  elapsedSec: number;
-  simulatedRegularWaves: number;
-  simulatedBossWaves: number;
-  defensePower: number;
-  threatPower: number;
-  victory: boolean;
-  passiveGain: Inventory;
-  damagedBuildingsCount: number;
-  lostOuterIslandIds: number[];
-  lostOuterIslandNames: string[];
-  homeCoreHpAfter: number;
-  homeCoreMaxHp: number;
-  activeGarrisonsHelped: number;
-  summaryMessage: string;
-}
 
 export interface ServerIslandRecord {
   island_id: number;

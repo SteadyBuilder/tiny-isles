@@ -11,7 +11,6 @@ import {
   ConstructedBuilding,
   Inventory,
   Island,
-  OfflineResolutionReport,
   PlayerColor,
   WaveState,
 } from '../types/game';
@@ -49,7 +48,6 @@ export function useGameShellState() {
     lastWaveMessage: null,
     timeScale: 1,
   });
-  const [offlineReport, setOfflineReport] = useState<OfflineResolutionReport | null>(null);
 
   const [showVillageModal, setShowVillageModal] = useState<boolean>(false);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<number>(0);
@@ -211,8 +209,6 @@ export function useGameShellState() {
     setConstructedBuildings,
     waveState,
     setWaveState,
-    offlineReport,
-    setOfflineReport,
     showVillageModal,
     setShowVillageModal,
     selectedTerritoryId,
