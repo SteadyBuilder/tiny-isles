@@ -80,6 +80,10 @@ export const serverSync = {
     playerSyncManager.flush();
   },
 
+  cancelPendingSync: () => {
+    playerSyncManager.cancel();
+  },
+
   // --- 2. Realtime Broadcast 멀티플레이어 동기화 ---
   broadcast: <T extends object>(
     channel: RealtimeChannel | null,
@@ -174,6 +178,13 @@ const playerSyncManager = (() => {
     },
     flush: () => {
       if (pending) doSync();
+    },
+    cancel: () => {
+      pending = null;
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
     },
   };
 })();

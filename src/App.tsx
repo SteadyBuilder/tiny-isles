@@ -41,7 +41,6 @@ export function App() {
     handleUpdateColor,
     handleUpdateInventory,
     handleUnlockedCountChange,
-    handleResetGame,
     handleMobileAction,
     handleZoomChange,
     handleOpenVillageModalForCurrent,
@@ -62,7 +61,6 @@ export function App() {
         currentTerritory={currentTerritory}
         waveState={waveState}
         alertMessage={alertMessage}
-        onResetGame={handleResetGame}
         onOpenMinimap={() => setShowMinimapModal(true)}
         onOpenVillageModal={handleOpenVillageModalForCurrent}
         onTriggerRegularWave={() => GameEvents.emit('trigger-regular-wave')}

@@ -21,7 +21,6 @@ interface HUDProps {
   currentTerritory?: Island;
   waveState?: WaveState;
   alertMessage?: string | null;
-  onResetGame?: () => void;
   onOpenMinimap?: () => void;
   onOpenVillageModal?: () => void;
   onTriggerRegularWave?: () => void;
@@ -43,7 +42,6 @@ export const HUD: React.FC<HUDProps> = ({
   currentTerritory,
   waveState,
   alertMessage,
-  onResetGame,
   onOpenMinimap,
   onOpenVillageModal,
   onTriggerRegularWave,
@@ -151,7 +149,6 @@ export const HUD: React.FC<HUDProps> = ({
         onToggleSound={toggleSound}
         onOpenSoundModal={() => setShowSoundModal(true)}
         onOpenHelp={() => setShowHelp(true)}
-        onResetGame={onResetGame}
       />
 
       <HudHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />

@@ -17,6 +17,7 @@ import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
+import { isPlayDataResetting } from '../../../lib/adminResetService';
 
 export interface IWorldControllersHost {
   scene: Phaser.Scene;
@@ -185,6 +186,7 @@ export function createWorldControllersBundle(
     damageTerritoryCore: (id, dmg) =>
       host.systems.coreGemSystem.damageTerritoryCore(id, dmg, '마물 침공 테스트', true),
     onWindowUnload: () => {
+      if (isPlayDataResetting()) return;
       if (host.systems.waveSystem?.getIsHost()) {
         void host.systems.livingWorldCoordinator?.persistAllSnapshots();
       }

@@ -7,6 +7,7 @@ import {
 import { GameEvents } from '../game/events/gameEvents';
 import { serverSync } from '../lib/serverSync';
 import { storage } from '../lib/storage';
+import { isPlayDataResetting } from '../lib/adminResetService';
 import {
   ConstructedBuilding,
   Inventory,
@@ -108,7 +109,9 @@ export function useGameShellState() {
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      serverSync.flushPlayerSync();
+      if (!isPlayDataResetting()) {
+        serverSync.flushPlayerSync();
+      }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('pagehide', handleBeforeUnload);
@@ -147,13 +150,6 @@ export function useGameShellState() {
 
   const handleUnlockedCountChange = (unlocked: number, total: number) => {
     setIslandStats({ unlocked, total });
-  };
-
-  const handleResetGame = () => {
-    if (window.confirm('정말 게임 진행상황(자원, 점령한 땅, 건설된 마을 및 타워)을 초기화하시겠습니까?')) {
-      storage.resetAll();
-      window.location.reload();
-    }
   };
 
   const handleMobileAction = useCallback(() => {
@@ -228,7 +224,6 @@ export function useGameShellState() {
     handleUpdateColor,
     handleUpdateInventory,
     handleUnlockedCountChange,
-    handleResetGame,
     handleMobileAction,
     handleZoomChange,
     handleOpenVillageModalForCurrent,

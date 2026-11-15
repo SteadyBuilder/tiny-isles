@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PlayerColor } from '../types/game';
 import { sound, SoundSettings } from '../lib/sound';
 import { GameEvents } from '../game/events/gameEvents';
+import { ADMIN_RESET_CONFIG } from '../data/adminReset';
+import { AdminResetEasterEggModal } from './AdminResetEasterEggModal';
 
 interface HudSettingsModalProps {
   isOpen: boolean;
@@ -16,7 +17,6 @@ interface HudSettingsModalProps {
   onToggleSound: () => void;
   onOpenSoundModal: () => void;
   onOpenHelp: () => void;
-  onResetGame?: () => void;
 }
 
 export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
@@ -31,18 +31,47 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
   onToggleSound,
   onOpenSoundModal,
   onOpenHelp,
-  onResetGame,
 }) => {
   const [tempName, setTempName] = useState(playerName);
+  const [showAdminReset, setShowAdminReset] = useState(false);
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setTempName(playerName);
   }, [playerName]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      clickCountRef.current = 0;
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+      }
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const toggleColor = () => {
     setPlayerColor(playerColor === 'blue' ? 'red' : 'blue');
+  };
+
+  const handleSecretTitleClick = () => {
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+    if (clickCountRef.current >= ADMIN_RESET_CONFIG.requiredClicks) {
+      clickCountRef.current = 0;
+      clickTimerRef.current = null;
+      setShowAdminReset(true);
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+      clickTimerRef.current = null;
+    }, ADMIN_RESET_CONFIG.clickWindowMs);
   };
 
   return (
@@ -55,7 +84,10 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-2 border-b border-amber-500/20">
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2 select-none cursor-default"
+            onClick={handleSecretTitleClick}
+          >
             <img src="/assets/ui/Icons/Icon_10.png" alt="gear" className="w-5 h-5 pixel-art" />
             <h3 className="font-black text-lg text-amber-300">게임 설정 & 메뉴</h3>
           </div>
@@ -189,18 +221,13 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
             <img src="/assets/ui/Icons/Icon_11.png" alt="guide" className="w-4 h-4 pixel-art" />
             타워디펜스 기획 & 조작 가이드
           </button>
-
-          {onResetGame && (
-            <button
-              onClick={onResetGame}
-              className="py-2.5 px-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
-            >
-              <RotateCcw className="w-4 h-4" />
-              초기화
-            </button>
-          )}
         </div>
       </div>
+
+      <AdminResetEasterEggModal
+        isOpen={showAdminReset}
+        onClose={() => setShowAdminReset(false)}
+      />
     </div>
   );
 };
