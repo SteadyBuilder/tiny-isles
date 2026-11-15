@@ -1,3 +1,4 @@
+import { TERRITORY_BUILD_SLOTS } from '../data/buildings';
 import { ConstructedBuilding } from '../types/game';
 import { CollisionBox } from './constants';
 
@@ -11,15 +12,64 @@ export const WALL_GATE_HALF_OPENING = 44;
 /** Thickness (px) of the impassable wall collider strips */
 export const WALL_COLLIDER_THICKNESS = 34;
 
+export interface PerimeterWallSpan {
+  /** Center offset of the negative-direction corner post (left for H, top for V) */
+  negCorner: number;
+  /** Center offset of the positive-direction corner post (right for H, bottom for V) */
+  posCorner: number;
+  /** Outer negative edge including half wall thickness */
+  minEdge: number;
+  /** Outer positive edge including half wall thickness */
+  maxEdge: number;
+}
+
+/**
+ * Computes the relative span offsets for a perimeter wall (`slotIndex` 0..3)
+ * directly from `TERRITORY_BUILD_SLOTS` so rendering and collision share one source of truth.
+ */
+export function getPerimeterWallSpan(slotIndex: number): PerimeterWallSpan | null {
+  const north = TERRITORY_BUILD_SLOTS[0];
+  const south = TERRITORY_BUILD_SLOTS[1];
+  const east = TERRITORY_BUILD_SLOTS[2];
+  const west = TERRITORY_BUILD_SLOTS[3];
+  const halfThick = WALL_COLLIDER_THICKNESS / 2;
+
+  if (slotIndex === 0 || slotIndex === 1) {
+    const anchor = TERRITORY_BUILD_SLOTS[slotIndex];
+    const negCorner = west.relX - anchor.relX;
+    const posCorner = east.relX - anchor.relX;
+    return {
+      negCorner,
+      posCorner,
+      minEdge: negCorner - halfThick,
+      maxEdge: posCorner + halfThick,
+    };
+  }
+
+  if (slotIndex === 2 || slotIndex === 3) {
+    const anchor = TERRITORY_BUILD_SLOTS[slotIndex];
+    const negCorner = north.relY - anchor.relY;
+    const posCorner = south.relY - anchor.relY;
+    return {
+      negCorner,
+      posCorner,
+      minEdge: negCorner - halfThick,
+      maxEdge: posCorner + halfThick,
+    };
+  }
+
+  return null;
+}
+
 /**
  * Computes the static physics collision boxes (`CollisionBox[]`, top-left `x, y, w, h`)
  * for a constructed wall (`wood_wall` or `stone_wall`).
  *
  * - Perimeter horizontal walls (`slotIndex` 0 North, 1 South):
- *   Splits into Left Wing `[-300, -GATE]` and Right Wing `[+GATE, +300]`, leaving
+ *   Splits into Left Wing `[minEdge, -GATE]` and Right Wing `[+GATE, maxEdge]`, leaving
  *   the central gate `[-GATE, +GATE]` open for passage.
  * - Perimeter vertical walls (`slotIndex` 2 East, 3 West):
- *   Splits into Top Wing `[-298, -GATE]` and Bottom Wing `[+GATE, +238]`, leaving
+ *   Splits into Top Wing `[minEdge, -GATE]` and Bottom Wing `[+GATE, maxEdge]`, leaving
  *   the central gate `[-GATE, +GATE]` open for passage.
  * - Inner-slot standalone barricade (`slotIndex >= 4`):
  *   Single solid barricade box (no gate).
@@ -32,13 +82,14 @@ export function getWallCollisionBoxes(cb: ConstructedBuilding): CollisionBox[] {
   const gate = WALL_GATE_HALF_OPENING;
   const thickness = WALL_COLLIDER_THICKNESS;
   const halfThick = thickness / 2;
+  const span = getPerimeterWallSpan(cb.slotIndex);
 
   // North (0) or South (1) horizontal perimeter wall
-  if (cb.slotIndex === 0 || cb.slotIndex === 1) {
-    const leftMinX = cb.x - 300;
+  if (span && (cb.slotIndex === 0 || cb.slotIndex === 1)) {
+    const leftMinX = cb.x + span.minEdge;
     const leftMaxX = cb.x - gate;
     const rightMinX = cb.x + gate;
-    const rightMaxX = cb.x + 300;
+    const rightMaxX = cb.x + span.maxEdge;
     const topY = cb.y + 4 - halfThick;
 
     return [
@@ -58,11 +109,11 @@ export function getWallCollisionBoxes(cb: ConstructedBuilding): CollisionBox[] {
   }
 
   // East (2) or West (3) vertical perimeter wall
-  if (cb.slotIndex === 2 || cb.slotIndex === 3) {
-    const topMinY = cb.y - 298;
+  if (span && (cb.slotIndex === 2 || cb.slotIndex === 3)) {
+    const topMinY = cb.y + span.minEdge;
     const topMaxY = cb.y - gate;
     const bottomMinY = cb.y + gate;
-    const bottomMaxY = cb.y + 238;
+    const bottomMaxY = cb.y + span.maxEdge;
     const leftX = cb.x - halfThick;
 
     return [
@@ -129,22 +180,23 @@ export function getMonsterWallCollisionBox(cb: ConstructedBuilding): CollisionBo
 
   const thickness = WALL_COLLIDER_THICKNESS;
   const halfThick = thickness / 2;
+  const span = getPerimeterWallSpan(cb.slotIndex);
 
-  if (cb.slotIndex === 0 || cb.slotIndex === 1) {
+  if (span && (cb.slotIndex === 0 || cb.slotIndex === 1)) {
     return {
-      x: cb.x - 300,
+      x: cb.x + span.minEdge,
       y: cb.y + 4 - halfThick,
-      w: 600,
+      w: span.maxEdge - span.minEdge,
       h: thickness,
     };
   }
 
-  if (cb.slotIndex === 2 || cb.slotIndex === 3) {
+  if (span && (cb.slotIndex === 2 || cb.slotIndex === 3)) {
     return {
       x: cb.x - halfThick,
-      y: cb.y - 298,
+      y: cb.y + span.minEdge,
       w: thickness,
-      h: 536,
+      h: span.maxEdge - span.minEdge,
     };
   }
 
