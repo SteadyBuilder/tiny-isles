@@ -25,7 +25,7 @@ export interface IPlayerInteractionContext {
   addHarvestedResource: (resKey: keyof Inventory, amount: number) => void;
   getMonsterVisuals: () => Map<string, MonsterVisual>;
   damageMonster: (monsterId: string, damage: number, attackerName: string) => void;
-  findNearestEntityVisual: (x: number, y: number, maxDist: number) => EntityVisual | null;
+  findGatherableEntityVisual: (x: number, y: number) => EntityVisual | null;
   updateEntityHpBar: (entityId: string) => void;
   removeAndRespawnEntity: (ent: Entity) => void;
   reduceWaveCooldown: (seconds: number) => void;
@@ -109,7 +109,7 @@ export class PlayerInteractionController {
     }
 
     // 3. 자원 엔티티 채집
-    const nearestVisual = this.ctx.findNearestEntityVisual(px, py, 95);
+    const nearestVisual = this.ctx.findGatherableEntityVisual(px, py);
     if (nearestVisual) {
       const ent = nearestVisual.entity;
 

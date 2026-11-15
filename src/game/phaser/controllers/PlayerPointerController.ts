@@ -18,7 +18,9 @@ export interface IPlayerPointerContext {
   getPlayerPosition: () => { x: number; y: number };
   getIslands: () => Island[];
   getMonsterVisuals: () => Map<string, MonsterVisual>;
-  findNearestEntityVisual: (x: number, y: number, maxDist: number) => EntityVisual | null;
+  findTappedEntityVisual: (wx: number, wy: number) => EntityVisual | null;
+  isWithinEntityGatherRange: (px: number, py: number, visual: EntityVisual) => boolean;
+  getEntityInteractionPoint: (visual: EntityVisual) => { x: number; y: number };
   onInteract: () => void;
   isPlacementActive?: () => boolean;
 }
@@ -30,7 +32,7 @@ export class PlayerPointerController {
   private ctx: IPlayerPointerContext;
   private mouseTarget: { x: number; y: number; active: boolean } = { x: 0, y: 0, active: false };
   private touchIndicator!: Phaser.GameObjects.Image;
-  private touchTargetObj: { x: number; y: number } | null = null;
+  private touchTargetObj: { x: number; y: number; entityVisual?: EntityVisual } | null = null;
   private targetZoom: number;
 
   constructor(ctx: IPlayerPointerContext) {
@@ -98,12 +100,18 @@ export class PlayerPointerController {
 
     const dist = Phaser.Math.Distance.Between(px, py, this.mouseTarget.x, this.mouseTarget.y);
 
-    if (this.touchTargetObj && dist < 90) {
-      this.mouseTarget.active = false;
-      this.touchTargetObj = null;
-      this.touchIndicator.setVisible(false);
-      this.ctx.onInteract();
-      return null;
+    if (this.touchTargetObj) {
+      const reachedTarget = this.touchTargetObj.entityVisual
+        ? this.ctx.isWithinEntityGatherRange(px, py, this.touchTargetObj.entityVisual)
+        : dist < 90;
+
+      if (reachedTarget) {
+        this.mouseTarget.active = false;
+        this.touchTargetObj = null;
+        this.touchIndicator.setVisible(false);
+        this.ctx.onInteract();
+        return null;
+      }
     }
 
     if (dist <= 14) {
@@ -168,15 +176,20 @@ export class PlayerPointerController {
     const interactTarget = this.findInteractableTarget(worldPoint.x, worldPoint.y);
     if (interactTarget) {
       const distFromPlayer = Math.hypot(px - interactTarget.x, py - interactTarget.y);
-      this.touchTargetObj = { x: interactTarget.x, y: interactTarget.y };
+      const inRange = interactTarget.entityVisual
+        ? this.ctx.isWithinEntityGatherRange(px, py, interactTarget.entityVisual)
+        : distFromPlayer < 100;
+
+      this.touchTargetObj = interactTarget;
       this.touchIndicator
         .setPosition(interactTarget.x, interactTarget.y)
         .setVisible(true)
         .setAlpha(1)
         .setScale(0.45);
 
-      if (distFromPlayer < 100) {
+      if (inRange) {
         this.mouseTarget.active = false;
+        this.touchTargetObj = null;
         this.ctx.onInteract();
       } else {
         this.mouseTarget = { x: interactTarget.x, y: interactTarget.y, active: true };
@@ -206,10 +219,14 @@ export class PlayerPointerController {
     return nearest;
   }
 
-  private findInteractableTarget(wx: number, wy: number): { x: number; y: number } | null {
-    const touchedEntity = this.ctx.findNearestEntityVisual(wx, wy, 55);
+  private findInteractableTarget(
+    wx: number,
+    wy: number
+  ): { x: number; y: number; entityVisual?: EntityVisual } | null {
+    const touchedEntity = this.ctx.findTappedEntityVisual(wx, wy);
     if (touchedEntity) {
-      return { x: touchedEntity.entity.x + 16, y: touchedEntity.entity.y + 16 };
+      const point = this.ctx.getEntityInteractionPoint(touchedEntity);
+      return { x: point.x, y: point.y, entityVisual: touchedEntity };
     }
 
     for (const isl of this.ctx.getIslands()) {

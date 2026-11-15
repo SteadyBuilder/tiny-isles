@@ -23,7 +23,9 @@ export interface IPlayerMovementContext {
   getWaterColliders: () => Phaser.Physics.Arcade.StaticGroup;
   getIslands: () => Island[];
   getMonsterVisuals: () => Map<string, MonsterVisual>;
-  findNearestEntityVisual: (x: number, y: number, maxDist: number) => EntityVisual | null;
+  findTappedEntityVisual: (wx: number, wy: number) => EntityVisual | null;
+  isWithinEntityGatherRange: (px: number, py: number, visual: EntityVisual) => boolean;
+  getEntityInteractionPoint: (visual: EntityVisual) => { x: number; y: number };
   onInteract: () => void;
   isPlacementActive?: () => boolean;
 }
@@ -60,7 +62,9 @@ export class PlayerMovementController {
       getPlayerPosition: () => this.getPosition(),
       getIslands: ctx.getIslands,
       getMonsterVisuals: ctx.getMonsterVisuals,
-      findNearestEntityVisual: ctx.findNearestEntityVisual,
+      findTappedEntityVisual: ctx.findTappedEntityVisual,
+      isWithinEntityGatherRange: ctx.isWithinEntityGatherRange,
+      getEntityInteractionPoint: ctx.getEntityInteractionPoint,
       onInteract: ctx.onInteract,
       isPlacementActive: ctx.isPlacementActive,
     });

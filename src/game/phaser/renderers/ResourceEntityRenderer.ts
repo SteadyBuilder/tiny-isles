@@ -2,9 +2,15 @@ import Phaser from 'phaser';
 import confetti from 'canvas-confetti';
 import { ConstructedBuilding, Entity, Island } from '../../../types/game';
 import { GOLD_MINE_BIOME_CONFIG, RESOURCE_DISTRIBUTION_CONFIG } from '../../../data/biomes';
+import { RESOURCE_INTERACTION_RULES } from '../../../data/resourceInteraction';
 import { sound } from '../../../lib/sound';
 import { ySortDepth } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
+import {
+  distancePointToRect,
+  getResourceGatherRect,
+  getSpriteWorldRect,
+} from '../../utils/resourceBounds';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import {
@@ -51,17 +57,78 @@ export class ResourceEntityRenderer {
     return Array.from(this.entityVisuals.values()).map((ev) => ev.entity);
   }
 
-  public findNearestVisual(x: number, y: number, maxDist: number): EntityVisual | null {
-    let nearest: EntityVisual | null = null;
-    let minDist = maxDist;
+  public getEntityInteractionPoint(visual: EntityVisual): { x: number; y: number } {
+    const spriteRect = getSpriteWorldRect(
+      visual.sprite,
+      visual.container.x,
+      visual.container.y
+    );
+    const gatherRect = getResourceGatherRect(visual.entity.type, spriteRect);
+    return { x: gatherRect.centerX, y: gatherRect.centerY };
+  }
+
+  public isWithinGatherRange(px: number, py: number, visual: EntityVisual): boolean {
+    const spriteRect = getSpriteWorldRect(
+      visual.sprite,
+      visual.container.x,
+      visual.container.y
+    );
+    const gatherRect = getResourceGatherRect(visual.entity.type, spriteRect);
+    const rule = RESOURCE_INTERACTION_RULES[visual.entity.type];
+    return distancePointToRect(px, py, gatherRect) <= rule.gatherReachPx;
+  }
+
+  public findGatherableVisual(px: number, py: number): EntityVisual | null {
+    let best: EntityVisual | null = null;
+    let bestEdgeDist = Infinity;
+    let bestCenterDist = Infinity;
+
     this.entityVisuals.forEach((ev) => {
-      const dist = Math.hypot(x - (ev.entity.x + 16), y - (ev.entity.y + 16));
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = ev;
+      const spriteRect = getSpriteWorldRect(ev.sprite, ev.container.x, ev.container.y);
+      const gatherRect = getResourceGatherRect(ev.entity.type, spriteRect);
+      const rule = RESOURCE_INTERACTION_RULES[ev.entity.type];
+      const edgeDist = distancePointToRect(px, py, gatherRect);
+
+      if (edgeDist <= rule.gatherReachPx) {
+        const centerDist = Math.hypot(px - gatherRect.centerX, py - gatherRect.centerY);
+        if (
+          edgeDist < bestEdgeDist - 0.001 ||
+          (Math.abs(edgeDist - bestEdgeDist) <= 0.001 && centerDist < bestCenterDist)
+        ) {
+          bestEdgeDist = edgeDist;
+          bestCenterDist = centerDist;
+          best = ev;
+        }
       }
     });
-    return nearest;
+
+    return best;
+  }
+
+  public findTappedVisual(wx: number, wy: number): EntityVisual | null {
+    let best: EntityVisual | null = null;
+    let bestEdgeDist = Infinity;
+    let bestCenterDist = Infinity;
+
+    this.entityVisuals.forEach((ev) => {
+      const spriteRect = getSpriteWorldRect(ev.sprite, ev.container.x, ev.container.y);
+      const rule = RESOURCE_INTERACTION_RULES[ev.entity.type];
+      const edgeDist = distancePointToRect(wx, wy, spriteRect);
+
+      if (edgeDist <= rule.tapPaddingPx) {
+        const centerDist = Math.hypot(wx - spriteRect.centerX, wy - spriteRect.centerY);
+        if (
+          edgeDist < bestEdgeDist - 0.001 ||
+          (Math.abs(edgeDist - bestEdgeDist) <= 0.001 && centerDist < bestCenterDist)
+        ) {
+          bestEdgeDist = edgeDist;
+          bestCenterDist = centerDist;
+          best = ev;
+        }
+      }
+    });
+
+    return best;
   }
 
   public removeForIsland(islandId: number): void {

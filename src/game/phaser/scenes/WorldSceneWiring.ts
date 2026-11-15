@@ -123,8 +123,8 @@ export function createWorldControllersBundle(
     addHarvestedResource: host.addHarvestedResource,
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
     damageMonster: (id, dmg, attacker) => host.systems.waveSystem.damageMonster(id, dmg, attacker),
-    findNearestEntityVisual: (x, y, maxDist) =>
-      host.resourceEntityRenderer.findNearestVisual(x, y, maxDist),
+    findGatherableEntityVisual: (x, y) =>
+      host.resourceEntityRenderer.findGatherableVisual(x, y),
     updateEntityHpBar: (id) => host.resourceEntityRenderer.updateHpBar(id),
     removeAndRespawnEntity: (ent) => host.resourceEntityRenderer.removeAndRespawn(ent),
     reduceWaveCooldown: (seconds) => host.systems.waveSystem.reduceCooldown(seconds),
@@ -157,8 +157,11 @@ export function createWorldControllersBundle(
     getWaterColliders: () => host.terrainRenderer.getWaterColliders(),
     getIslands: host.getIslands,
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
-    findNearestEntityVisual: (x, y, maxDist) =>
-      host.resourceEntityRenderer.findNearestVisual(x, y, maxDist),
+    findTappedEntityVisual: (wx, wy) => host.resourceEntityRenderer.findTappedVisual(wx, wy),
+    isWithinEntityGatherRange: (px, py, visual) =>
+      host.resourceEntityRenderer.isWithinGatherRange(px, py, visual),
+    getEntityInteractionPoint: (visual) =>
+      host.resourceEntityRenderer.getEntityInteractionPoint(visual),
     onInteract: () => playerInteraction.tryInteract(),
     isPlacementActive: () => towerPlacement.isActive(),
   });
