@@ -28,14 +28,24 @@ const CATEGORIES: { key: BuildingCategory; label: string; icon: string }[] = [
 
 const SPRITES: Record<string, string> = {
   woodPalisade: '/assets/buildings/Wood_Palisade.png',
+  stoneWall: '/assets/buildings/Stone_Wall.png',
   castle: '/assets/buildings/Castle.png',
   house1: '/assets/buildings/House1.png',
   house2: '/assets/buildings/House2.png',
   house3: '/assets/buildings/House3.png',
   tower: '/assets/buildings/Tower.png',
+  magicTower: '/assets/buildings/Magic_Tower.png',
   barracks: '/assets/buildings/Barracks.png',
   archery: '/assets/buildings/Archery.png',
   monastery: '/assets/buildings/Monastery.png',
+  lumberCamp: '/assets/buildings/Lumber_Camp.png',
+  stoneWorks: '/assets/buildings/Stone_Works.png',
+  alchemistLab: '/assets/buildings/Alchemist_Lab.png',
+  woodOutpost: '/assets/buildings/Wood_Outpost.png',
+  woodHut: '/assets/buildings/Wood_Hut.png',
+  blacksmith: '/assets/buildings/Blacksmith.png',
+  market: '/assets/buildings/Market.png',
+  windmill: '/assets/buildings/Windmill.png',
 };
 
 export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({

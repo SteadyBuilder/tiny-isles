@@ -29,15 +29,25 @@ export function generateTerritoryBuildings(
   const tierInfo = VILLAGE_TIER_CONFIGS[villageTier];
 
   if (villageTier === 0) {
-    // 마을 건설 전 (점령지 상태): 작은 개척 막사만 있거나 비어있음
+    // 마을 건설 전 (점령지 상태): 나무로 된 허름한 임시 막사 배치
+    buildings.push({
+      id: `b_${islandId}_outpost_lv0`,
+      type: 'woodOutpost',
+      name: `${tierInfo.badge} 임시 막사`,
+      x: cx - 64,
+      y: cy - 245,
+      width: 128,
+      height: 192,
+      islandId,
+    });
     return buildings;
   }
 
   if (villageTier === 1) {
-    // 1단계: 마을
+    // 1단계: 개척마을
     buildings.push({
       id: `b_${islandId}_hall_lv1`,
-      type: 'house1',
+      type: 'woodHut',
       name: `${tierInfo.badge} 회관`,
       x: cx - 64,
       y: cy - 260,
@@ -81,22 +91,22 @@ export function generateTerritoryBuildings(
     });
     buildings.push({
       id: `b_${islandId}_sub1_lv3`,
-      type: 'house2',
+      type: 'market',
       name: '큰마을 상점가',
-      x: cx - 340,
-      y: cy - 170,
-      width: 120,
-      height: 180,
+      x: cx - 350,
+      y: cy - 175,
+      width: 150,
+      height: 150,
       islandId,
     });
     buildings.push({
       id: `b_${islandId}_sub2_lv3`,
-      type: 'house3',
+      type: 'blacksmith',
       name: '큰마을 대장간',
-      x: cx + 220,
-      y: cy - 170,
-      width: 120,
-      height: 180,
+      x: cx + 210,
+      y: cy - 175,
+      width: 150,
+      height: 150,
       islandId,
     });
   } else if (villageTier >= 4) {
@@ -113,7 +123,7 @@ export function generateTerritoryBuildings(
     });
     buildings.push({
       id: `b_${islandId}_west_city`,
-      type: villageTier >= 5 ? 'barracks' : 'house2',
+      type: villageTier >= 5 ? 'barracks' : 'windmill',
       name: `${tierInfo.name} 서구획`,
       x: cx - 360,
       y: cy - 190,
@@ -143,11 +153,21 @@ export function getBuildingCollisionBox(b: Building): CollisionBox {
     case 'house1':
     case 'house2':
     case 'house3':
+    case 'woodOutpost':
+    case 'woodHut':
       return { x: b.x + 20, y: b.y + 85, w: b.width - 40, h: 75 };
+    case 'market':
+    case 'blacksmith':
+    case 'lumberCamp':
+    case 'stoneWorks':
+      return { x: b.x + 18, y: b.y + 65, w: b.width - 36, h: 65 };
     case 'tower':
+    case 'magicTower':
       return { x: b.x + 24, y: b.y + 140, w: b.width - 48, h: 80 };
     case 'barracks':
     case 'archery':
+    case 'windmill':
+    case 'alchemistLab':
       return { x: b.x + 24, y: b.y + 120, w: b.width - 48, h: 95 };
     case 'monastery':
       return { x: b.x + 24, y: b.y + 150, w: b.width - 48, h: 110 };

@@ -6,7 +6,6 @@ import {
   getConstructedBuildingFootprintBox,
   getPerimeterWallSpan,
   getWallCollisionBoxes,
-  WALL_GATE_HALF_OPENING,
 } from '../../wallCollisionGeometry';
 import { ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
 
@@ -163,73 +162,14 @@ export class ConstructedBuildingRenderer {
     slotIndex: number,
     isHorizontal: boolean
   ): void {
-    const span = getPerimeterWallSpan(slotIndex);
-
-    if (isHorizontal && span) {
-      const gate = this.scene.add.image(0, 0, 'woodPalisadeGate');
-      gate.setDisplaySize(128, 64);
-      gate.setDepth(2);
-      container.add(gate);
-
-      this.addHorizontalPalisadeWing(container, span.negCorner + 32, -60);
-      this.addHorizontalPalisadeWing(container, 60, span.posCorner - 32);
-
-      const leftCorner = this.scene.add.image(span.negCorner, 0, 'woodPalisadeCorner');
-      leftCorner.setDisplaySize(64, 64);
-      leftCorner.setDepth(3);
-      container.add(leftCorner);
-
-      const rightCorner = this.scene.add.image(span.posCorner, 0, 'woodPalisadeCorner');
-      rightCorner.setDisplaySize(64, 64);
-      rightCorner.setDepth(3);
-      container.add(rightCorner);
-    } else if ((slotIndex === 2 || slotIndex === 3) && span) {
-      const gate = this.scene.add.image(0, 0, 'woodPalisadeGateV');
-      gate.setDisplaySize(64, 128);
-      gate.setDepth(2);
-      container.add(gate);
-
-      this.addVerticalPalisadeWing(container, span.negCorner, -60);
-      this.addVerticalPalisadeWing(container, 60, span.posCorner);
-    } else {
-      const palisade = this.scene.add.image(0, -10, 'woodPalisade');
-      palisade.setDisplaySize(128, 128);
-      container.add(palisade);
-    }
-  }
-
-  private addHorizontalPalisadeWing(
-    container: Phaser.GameObjects.Container,
-    startX: number,
-    endX: number
-  ): void {
-    const totalW = Math.max(64, endX - startX);
-    const segments = Math.max(1, Math.round(totalW / 192));
-    const segW = totalW / segments;
-    for (let i = 0; i < segments; i++) {
-      const cx = startX + (i + 0.5) * segW;
-      const wing = this.scene.add.image(cx, 0, 'woodPalisadeH');
-      wing.setDisplaySize(segW + 2, 64);
-      wing.setDepth(1);
-      container.add(wing);
-    }
-  }
-
-  private addVerticalPalisadeWing(
-    container: Phaser.GameObjects.Container,
-    startY: number,
-    endY: number
-  ): void {
-    const totalH = Math.max(64, endY - startY);
-    const segments = Math.max(1, Math.round(totalH / 192));
-    const segH = totalH / segments;
-    for (let i = 0; i < segments; i++) {
-      const cy = startY + (i + 0.5) * segH;
-      const wing = this.scene.add.image(0, cy, 'woodPalisadeV');
-      wing.setDisplaySize(64, segH + 2);
-      wing.setDepth(1);
-      container.add(wing);
-    }
+    this.renderPerimeterWallSprites(container, slotIndex, isHorizontal, {
+      gateH: 'woodPalisadeGate',
+      gateV: 'woodPalisadeGateV',
+      wingH: 'woodPalisadeH',
+      wingV: 'woodPalisadeV',
+      corner: 'woodPalisadeCorner',
+      standalone: 'woodPalisade',
+    });
   }
 
   private renderStoneWall(
@@ -237,74 +177,97 @@ export class ConstructedBuildingRenderer {
     slotIndex: number,
     isHorizontal: boolean
   ): void {
-    const wallGraphics = this.scene.add.graphics();
-    const mainColor = 0x64748b;
-    const borderColor = 0xe2e8f0;
+    this.renderPerimeterWallSprites(container, slotIndex, isHorizontal, {
+      gateH: 'stoneWallGate',
+      gateV: 'stoneWallGateV',
+      wingH: 'stoneWallH',
+      wingV: 'stoneWallV',
+      corner: 'stoneWallCorner',
+      standalone: 'stoneWall',
+    });
+  }
+
+  private renderPerimeterWallSprites(
+    container: Phaser.GameObjects.Container,
+    slotIndex: number,
+    isHorizontal: boolean,
+    keys: {
+      gateH: string;
+      gateV: string;
+      wingH: string;
+      wingV: string;
+      corner: string;
+      standalone: string;
+    }
+  ): void {
     const span = getPerimeterWallSpan(slotIndex);
-    const gate = WALL_GATE_HALF_OPENING;
 
-    if (!span) {
-      wallGraphics.fillStyle(mainColor, 0.94);
-      wallGraphics.lineStyle(2.5, borderColor, 0.95);
-      wallGraphics.fillRoundedRect(-44, -12, 88, 40, 6);
-      wallGraphics.strokeRoundedRect(-44, -12, 88, 40, 6);
-      container.add(wallGraphics);
-      return;
-    }
+    if (isHorizontal && span) {
+      const gate = this.scene.add.image(0, 0, keys.gateH);
+      gate.setDisplaySize(128, 64);
+      gate.setDepth(2);
+      container.add(gate);
 
-    if (isHorizontal) {
-      const leftW = -gate - span.minEdge;
-      const rightW = span.maxEdge - gate;
-      wallGraphics.fillStyle(mainColor, 0.94);
-      wallGraphics.lineStyle(2.5, borderColor, 0.95);
-      wallGraphics.fillRoundedRect(span.minEdge, -15, leftW, 30, 6);
-      wallGraphics.strokeRoundedRect(span.minEdge, -15, leftW, 30, 6);
-      wallGraphics.fillRoundedRect(gate, -15, rightW, 30, 6);
-      wallGraphics.strokeRoundedRect(gate, -15, rightW, 30, 6);
+      this.addHorizontalWallWing(container, span.negCorner + 32, -60, keys.wingH);
+      this.addHorizontalWallWing(container, 60, span.posCorner - 32, keys.wingH);
 
-      wallGraphics.fillStyle(0x334155, 0.55);
-      wallGraphics.fillRoundedRect(-gate, -8, gate * 2, 16, 3);
-      wallGraphics.fillStyle(0x94a3b8, 1);
-      wallGraphics.fillRoundedRect(-54, -18, 14, 36, 4);
-      wallGraphics.strokeRoundedRect(-54, -18, 14, 36, 4);
-      wallGraphics.fillRoundedRect(40, -18, 14, 36, 4);
-      wallGraphics.strokeRoundedRect(40, -18, 14, 36, 4);
+      const leftCorner = this.scene.add.image(span.negCorner, 0, keys.corner);
+      leftCorner.setDisplaySize(64, 64);
+      leftCorner.setDepth(3);
+      container.add(leftCorner);
 
-      for (const cx of [span.negCorner, span.posCorner]) {
-        wallGraphics.fillStyle(mainColor, 1);
-        wallGraphics.fillRoundedRect(cx - 18, -18, 36, 36, 6);
-        wallGraphics.strokeRoundedRect(cx - 18, -18, 36, 36, 6);
-      }
+      const rightCorner = this.scene.add.image(span.posCorner, 0, keys.corner);
+      rightCorner.setDisplaySize(64, 64);
+      rightCorner.setDepth(3);
+      container.add(rightCorner);
+    } else if ((slotIndex === 2 || slotIndex === 3) && span) {
+      const gate = this.scene.add.image(0, 0, keys.gateV);
+      gate.setDisplaySize(64, 128);
+      gate.setDepth(2);
+      container.add(gate);
 
-      for (let px = span.negCorner + 24; px <= span.posCorner - 24; px += 28) {
-        if (Math.abs(px) < 56) continue;
-        wallGraphics.fillStyle(0x94a3b8, 1);
-        wallGraphics.fillCircle(px, 0, 5);
-      }
+      this.addVerticalWallWing(container, span.negCorner, -60, keys.wingV);
+      this.addVerticalWallWing(container, 60, span.posCorner, keys.wingV);
     } else {
-      const topH = -gate - span.minEdge;
-      const bottomH = span.maxEdge - gate;
-      wallGraphics.fillStyle(mainColor, 0.94);
-      wallGraphics.lineStyle(2.5, borderColor, 0.95);
-      wallGraphics.fillRoundedRect(-15, span.minEdge, 30, topH, 6);
-      wallGraphics.strokeRoundedRect(-15, span.minEdge, 30, topH, 6);
-      wallGraphics.fillRoundedRect(-15, gate, 30, bottomH, 6);
-      wallGraphics.strokeRoundedRect(-15, gate, 30, bottomH, 6);
-
-      wallGraphics.fillStyle(0x334155, 0.55);
-      wallGraphics.fillRoundedRect(-8, -gate, 16, gate * 2, 3);
-      wallGraphics.fillStyle(0x94a3b8, 1);
-      wallGraphics.fillRoundedRect(-18, -54, 36, 14, 4);
-      wallGraphics.strokeRoundedRect(-18, -54, 36, 14, 4);
-      wallGraphics.fillRoundedRect(-18, 40, 36, 14, 4);
-      wallGraphics.strokeRoundedRect(-18, 40, 36, 14, 4);
-
-      for (let py = span.negCorner + 24; py <= span.posCorner - 24; py += 28) {
-        if (Math.abs(py) < 56) continue;
-        wallGraphics.fillStyle(0x94a3b8, 1);
-        wallGraphics.fillCircle(0, py, 5);
-      }
+      const standalone = this.scene.add.image(0, -10, keys.standalone);
+      standalone.setDisplaySize(128, 128);
+      container.add(standalone);
     }
-    container.add(wallGraphics);
+  }
+
+  private addHorizontalWallWing(
+    container: Phaser.GameObjects.Container,
+    startX: number,
+    endX: number,
+    textureKey: string
+  ): void {
+    const totalW = Math.max(64, endX - startX);
+    const segments = Math.max(1, Math.round(totalW / 192));
+    const segW = totalW / segments;
+    for (let i = 0; i < segments; i++) {
+      const cx = startX + (i + 0.5) * segW;
+      const wing = this.scene.add.image(cx, 0, textureKey);
+      wing.setDisplaySize(segW + 2, 64);
+      wing.setDepth(1);
+      container.add(wing);
+    }
+  }
+
+  private addVerticalWallWing(
+    container: Phaser.GameObjects.Container,
+    startY: number,
+    endY: number,
+    textureKey: string
+  ): void {
+    const totalH = Math.max(64, endY - startY);
+    const segments = Math.max(1, Math.round(totalH / 192));
+    const segH = totalH / segments;
+    for (let i = 0; i < segments; i++) {
+      const cy = startY + (i + 0.5) * segH;
+      const wing = this.scene.add.image(0, cy, textureKey);
+      wing.setDisplaySize(64, segH + 2);
+      wing.setDepth(1);
+      container.add(wing);
+    }
   }
 }

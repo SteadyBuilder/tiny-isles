@@ -120,6 +120,21 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('woodPalisadeGate', '/assets/buildings/Wood_Palisade_Gate.png');
     this.load.image('woodPalisadeGateV', '/assets/buildings/Wood_Palisade_Gate_V.png');
     this.load.image('woodPalisadeCorner', '/assets/buildings/Wood_Palisade_Corner.png');
+    this.load.image('woodOutpost', '/assets/buildings/Wood_Outpost.png');
+    this.load.image('woodHut', '/assets/buildings/Wood_Hut.png');
+    this.load.image('magicTower', '/assets/buildings/Magic_Tower.png');
+    this.load.image('lumberCamp', '/assets/buildings/Lumber_Camp.png');
+    this.load.image('stoneWorks', '/assets/buildings/Stone_Works.png');
+    this.load.image('alchemistLab', '/assets/buildings/Alchemist_Lab.png');
+    this.load.image('blacksmith', '/assets/buildings/Blacksmith.png');
+    this.load.image('market', '/assets/buildings/Market.png');
+    this.load.image('windmill', '/assets/buildings/Windmill.png');
+    this.load.image('stoneWall', '/assets/buildings/Stone_Wall.png');
+    this.load.image('stoneWallH', '/assets/buildings/Stone_Wall_H.png');
+    this.load.image('stoneWallV', '/assets/buildings/Stone_Wall_V.png');
+    this.load.image('stoneWallGate', '/assets/buildings/Stone_Wall_Gate.png');
+    this.load.image('stoneWallGateV', '/assets/buildings/Stone_Wall_Gate_V.png');
+    this.load.image('stoneWallCorner', '/assets/buildings/Stone_Wall_Corner.png');
 
     // Terrain & Environment
     this.load.image('grassSeamless', '/assets/terrain/Grass_Seamless.png');
