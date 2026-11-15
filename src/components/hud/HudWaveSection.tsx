@@ -29,7 +29,7 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
           <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
             <div
               className="flex items-center gap-1 text-emerald-300 font-bold"
-              title="30분 주기 일반 마물 웨이브 남은 시간"
+              title={`${Math.round(waveState.regularWaveIntervalSec / 60)}분 주기 일반 마물 웨이브 남은 시간`}
             >
               <Skull className="w-3.5 h-3.5 text-emerald-400" />
               <span>🧟</span>
@@ -40,7 +40,7 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
 
             <div
               className="flex items-center gap-1 text-red-300 font-bold"
-              title="60분 주기 보스몬스터 출현 남은 시간"
+              title={`${Math.round(waveState.bossWaveIntervalSec / 60)}분 주기 보스몬스터 출현 남은 시간`}
             >
               <Flame className="w-3.5 h-3.5 text-red-400" />
               <span>👹</span>

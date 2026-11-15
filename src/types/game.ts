@@ -170,8 +170,8 @@ export interface Monster {
 }
 
 export interface WaveState {
-  regularWaveIntervalSec: number; // 1800 (30분)
-  bossWaveIntervalSec: number; // 3600 (60분)
+  regularWaveIntervalSec: number; // 480 (8분)
+  bossWaveIntervalSec: number; // 1440 (24분)
   regularWaveRemainingSec: number;
   bossWaveRemainingSec: number;
   waveCount: number;

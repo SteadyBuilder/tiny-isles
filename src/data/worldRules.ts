@@ -6,8 +6,8 @@ import { BOSS_WAVE_INTERVAL_SEC, REGULAR_WAVE_INTERVAL_SEC } from './waves';
  * [AI Guideline]: 수치·밸런스 변경은 로직 파일이 아닌 이 데이터 파일에서만 수행하세요.
  */
 export const WORLD_CLOCK_CONFIG = {
-  regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC, // 1800초 (30분)
-  bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,       // 3600초 (60분)
+  regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC, // 480초 (8분)
+  bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,       // 1440초 (24분)
   passiveTickIntervalMs: 30_000,                     // 30초마다 특수 생산/회복 건물 주기 정산
   worldSnapshotIntervalMs: 10_000,                   // 10초마다 월드 상태 스냅샷 저장
   garrisonSyncIntervalMs: 25_000,                    // 25초마다 내 수비대 위치 갱신
@@ -54,6 +54,8 @@ export const ACTIVE_WAVE_ACCELERATION_CONFIG = {
   gatherCooldownReductionSec: 10,
   /** 건물 건설 1회당 다음 웨이브 대기시간 단축(초) */
   buildCooldownReductionSec: 45,
+  /** 웨이브 1주기당 능동 가속(채집/건설)으로 단축 가능한 최대 비율 (0.4 = 기본 주기의 최대 40%까지만 단축) */
+  maxCooldownReductionRatio: 0.4,
   /** 조기 소환(즉시 침공 맞이하기) 시 처치 보상 보너스 배율 */
   earlySummonRewardMultiplier: 1.35,
 } as const;

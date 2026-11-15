@@ -11,10 +11,7 @@ import {
 import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../data/worldRules';
 import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
-import {
-  getDynamicScalingProfile,
-  getGlobalClockRemainingSec,
-} from '../utils/worldClockUtils';
+import { getDynamicScalingProfile } from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
 import { MonsterCombatAI } from './MonsterCombatAI';
 import { MonsterVisual } from './MonsterVisualManager';
@@ -41,7 +38,7 @@ export interface IWaveSystemContext {
 }
 
 /**
- * 글로벌 시계 기반 30분/60분 침공 타이머, 접속자 수 동적 스케일링, 조기 소환 및 전투 오케스트레이션 시스템
+ * 접속 중 활성 타이머 기반 8분/24분 침공 타이머, 접속자 수 동적 스케일링, 조기 소환 및 전투 오케스트레이션 시스템
  */
 export class WaveSystem {
   private ctx: IWaveSystemContext;
@@ -57,8 +54,8 @@ export class WaveSystem {
   private waveState: WaveState = {
     regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC,
     bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,
-    regularWaveRemainingSec: getGlobalClockRemainingSec(Date.now(), REGULAR_WAVE_INTERVAL_SEC),
-    bossWaveRemainingSec: getGlobalClockRemainingSec(Date.now(), BOSS_WAVE_INTERVAL_SEC),
+    regularWaveRemainingSec: REGULAR_WAVE_INTERVAL_SEC,
+    bossWaveRemainingSec: BOSS_WAVE_INTERVAL_SEC,
     waveCount: 0,
     bossWaveCount: 0,
     activeMonstersCount: 0,
@@ -67,7 +64,7 @@ export class WaveSystem {
     timeScale: 1.0,
     onlineScaleLabel: getDynamicScalingProfile(1).label,
     activeGarrisonCount: 0,
-    isGlobalClockSynced: true,
+    isGlobalClockSynced: false,
   };
 
   private onTerritoryLost = (data: { territoryId: number }) => {
@@ -153,30 +150,36 @@ export class WaveSystem {
   public syncCountsFromWorldState(waveCount: number, bossWaveCount: number): void {
     this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
-    this.waveState.regularWaveRemainingSec = getGlobalClockRemainingSec(
-      Date.now(),
-      REGULAR_WAVE_INTERVAL_SEC
-    );
-    this.waveState.bossWaveRemainingSec = getGlobalClockRemainingSec(
-      Date.now(),
-      BOSS_WAVE_INTERVAL_SEC
-    );
     this.emitWaveState();
   }
 
   /**
    * 자원 채집 또는 건설 시 다음 웨이브 대기 시간을 단축 (능동적 가속)
+   * - 다인 접속 시 중첩 과속을 방지하기 위해 onlineCount로 분산 적용
+   * - 기본 주기의 maxCooldownReductionRatio(40%) 이상은 단축되지 않도록 하한 보장
    */
   public reduceCooldown(seconds: number): void {
     if (seconds <= 0) return;
-    this.waveState.regularWaveRemainingSec = Math.max(
-      1,
-      this.waveState.regularWaveRemainingSec - seconds
-    );
-    this.waveState.bossWaveRemainingSec = Math.max(
-      1,
-      this.waveState.bossWaveRemainingSec - seconds
-    );
+
+    const scaledReduction = Math.max(1, Math.round(seconds / Math.max(1, this.onlineCount)));
+    const keepRatio = Math.max(0, 1 - ACTIVE_WAVE_ACCELERATION_CONFIG.maxCooldownReductionRatio);
+    const minRegularRemaining = Math.round(REGULAR_WAVE_INTERVAL_SEC * keepRatio);
+    const minBossRemaining = Math.round(BOSS_WAVE_INTERVAL_SEC * keepRatio);
+
+    if (this.waveState.regularWaveRemainingSec > minRegularRemaining) {
+      this.waveState.regularWaveRemainingSec = Math.max(
+        minRegularRemaining,
+        this.waveState.regularWaveRemainingSec - scaledReduction
+      );
+    }
+
+    if (this.waveState.bossWaveRemainingSec > minBossRemaining) {
+      this.waveState.bossWaveRemainingSec = Math.max(
+        minBossRemaining,
+        this.waveState.bossWaveRemainingSec - scaledReduction
+      );
+    }
+
     this.emitWaveState();
   }
 
@@ -259,16 +262,10 @@ export class WaveSystem {
   ): void {
     if (isBossWave) {
       this.waveState.bossWaveCount += 1;
-      this.waveState.bossWaveRemainingSec = getGlobalClockRemainingSec(
-        Date.now(),
-        BOSS_WAVE_INTERVAL_SEC
-      );
+      this.waveState.bossWaveRemainingSec = BOSS_WAVE_INTERVAL_SEC;
     } else {
       this.waveState.waveCount += 1;
-      this.waveState.regularWaveRemainingSec = getGlobalClockRemainingSec(
-        Date.now(),
-        REGULAR_WAVE_INTERVAL_SEC
-      );
+      this.waveState.regularWaveRemainingSec = REGULAR_WAVE_INTERVAL_SEC;
     }
 
     const result = this.spawner.spawnWave({
