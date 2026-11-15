@@ -25,6 +25,7 @@ export interface IPlayerMovementContext {
   getMonsterVisuals: () => Map<string, MonsterVisual>;
   findNearestEntityVisual: (x: number, y: number, maxDist: number) => EntityVisual | null;
   onInteract: () => void;
+  isPlacementActive?: () => boolean;
 }
 
 /**
@@ -61,6 +62,7 @@ export class PlayerMovementController {
       getMonsterVisuals: ctx.getMonsterVisuals,
       findNearestEntityVisual: ctx.findNearestEntityVisual,
       onInteract: ctx.onInteract,
+      isPlacementActive: ctx.isPlacementActive,
     });
   }
 

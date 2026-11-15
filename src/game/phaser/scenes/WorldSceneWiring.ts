@@ -9,6 +9,7 @@ import { PlayerInteractionController } from '../controllers/PlayerInteractionCon
 import { PlayerMovementController } from '../controllers/PlayerMovementController';
 import { TerritoryActionController } from '../controllers/TerritoryActionController';
 import { TerritoryPassiveSystem } from '../controllers/TerritoryPassiveSystem';
+import { TowerPlacementController } from '../controllers/TowerPlacementController';
 import { WorldEventBusController } from '../controllers/WorldEventBusController';
 import { WorldPersistenceController } from '../controllers/WorldPersistenceController';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
@@ -51,6 +52,7 @@ export interface WorldControllersBundle {
   territoryAction: TerritoryActionController;
   playerInteraction: PlayerInteractionController;
   playerMovement: PlayerMovementController;
+  towerPlacement: TowerPlacementController;
   eventBus: WorldEventBusController;
 }
 
@@ -135,6 +137,16 @@ export function createWorldControllersBundle(
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
   });
 
+  const towerPlacement = new TowerPlacementController({
+    scene: host.scene,
+    getIslands: host.getIslands,
+    getConstructedBuildings: host.getConstructedBuildings,
+    getInventory: host.getInventory,
+    onConstructAt: (territoryId, type, pos) =>
+      territoryAction.handleConstructBuilding(territoryId, type, undefined, true, pos),
+    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+  });
+
   playerMovement = new PlayerMovementController({
     scene: host.scene,
     getPlayerName: host.getPlayerName,
@@ -148,6 +160,7 @@ export function createWorldControllersBundle(
     findNearestEntityVisual: (x, y, maxDist) =>
       host.resourceEntityRenderer.findNearestVisual(x, y, maxDist),
     onInteract: () => playerInteraction.tryInteract(),
+    isPlacementActive: () => towerPlacement.isActive(),
   });
 
   const eventBus = new WorldEventBusController({
@@ -175,8 +188,13 @@ export function createWorldControllersBundle(
     setJoystickVector: (vector) => playerMovement.setJoystickVector(vector),
     tryInteract: () => playerInteraction.tryInteract(),
     upgradeVillage: (id) => territoryAction.handleUpgradeVillage(id, true),
-    constructBuilding: (id, type, slot) =>
-      territoryAction.handleConstructBuilding(id, type, slot, true),
+    constructBuilding: (id, type, slot, customPos) =>
+      territoryAction.handleConstructBuilding(id, type, slot, true, customPos),
+    enterTowerPlacement: (id, type) => towerPlacement.enter(id, type),
+    cancelTowerPlacement: () => towerPlacement.cancel(),
+    confirmTowerPlacement: () => {
+      towerPlacement.confirm();
+    },
     repairTerritoryCore: (id) => territoryAction.handleRepairCore(id),
     triggerRegularWave: () => host.systems.waveSystem.triggerRegularWave(),
     triggerBossWave: () => host.systems.waveSystem.triggerBossWave(),
@@ -198,6 +216,7 @@ export function createWorldControllersBundle(
     territoryAction,
     playerInteraction,
     playerMovement,
+    towerPlacement,
     eventBus,
   };
 }

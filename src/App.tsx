@@ -3,6 +3,7 @@ import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
 import { VillageBuildModal } from './components/VillageBuildModal';
+import { TowerPlacementBanner } from './components/TowerPlacementBanner';
 import { ConstructableType } from './types/game';
 import { GameEvents } from './game/events/gameEvents';
 import { useGameShellState } from './hooks/useGameShellState';
@@ -125,8 +126,13 @@ export function App() {
         onConstructBuilding={(territoryId, type: ConstructableType, slotIndex?: number) =>
           GameEvents.emit('construct-building', { territoryId, type, slotIndex })
         }
+        onSelectTowerPlacement={(territoryId, type: ConstructableType) =>
+          GameEvents.emit('enter-tower-placement', { territoryId, type })
+        }
         onRepairCore={(territoryId) => GameEvents.emit('repair-territory-core', territoryId)}
       />
+
+      <TowerPlacementBanner />
     </div>
   );
 }

@@ -10,7 +10,15 @@ export interface IWorldEventBusContext {
   setJoystickVector: (vector: { x: number; y: number }) => void;
   tryInteract: () => void;
   upgradeVillage: (territoryId: number) => void;
-  constructBuilding: (territoryId: number, type: ConstructableType, slotIndex?: number) => void;
+  constructBuilding: (
+    territoryId: number,
+    type: ConstructableType,
+    slotIndex?: number,
+    customPos?: { x: number; y: number }
+  ) => void;
+  enterTowerPlacement: (territoryId: number, type: ConstructableType) => void;
+  cancelTowerPlacement: () => void;
+  confirmTowerPlacement: () => void;
   repairTerritoryCore: (territoryId: number) => void;
   triggerRegularWave: () => void;
   triggerBossWave: () => void;
@@ -58,7 +66,19 @@ export class WorldEventBusController {
     });
 
     this.register('construct-building', (data) => {
-      this.ctx.constructBuilding(data.territoryId, data.type, data.slotIndex);
+      this.ctx.constructBuilding(data.territoryId, data.type, data.slotIndex, data.customPos);
+    });
+
+    this.register('enter-tower-placement', (data) => {
+      this.ctx.enterTowerPlacement(data.territoryId, data.type);
+    });
+
+    this.register('cancel-tower-placement', () => {
+      this.ctx.cancelTowerPlacement();
+    });
+
+    this.register('confirm-tower-placement', () => {
+      this.ctx.confirmTowerPlacement();
     });
 
     this.register('repair-territory-core', (territoryId) => {

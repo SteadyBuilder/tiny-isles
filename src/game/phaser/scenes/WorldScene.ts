@@ -307,6 +307,7 @@ export class WorldScene extends Phaser.Scene {
     this.unbindWebGLGuard?.();
     this.unbindWebGLGuard = null;
     this.controllers?.playerMovement?.destroy();
+    this.controllers?.towerPlacement?.destroy();
     this.systems?.livingWorldCoordinator?.destroy();
     this.systems?.waveSystem?.destroy();
     this.systems?.coreGemSystem?.clearAllVisuals();

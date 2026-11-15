@@ -14,6 +14,7 @@ interface VillageBuildModalProps {
   inventory: Inventory;
   onUpgradeVillage: (territoryId: number) => void;
   onConstructBuilding: (territoryId: number, type: ConstructableType, slotIndex?: number) => void;
+  onSelectTowerPlacement?: (territoryId: number, type: ConstructableType) => void;
   onRepairCore: (territoryId: number) => void;
   onTestDestroyCore?: (territoryId: number) => void;
 }
@@ -47,6 +48,7 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   inventory,
   onUpgradeVillage,
   onConstructBuilding,
+  onSelectTowerPlacement,
   onRepairCore,
 }) => {
   const [activeCategory, setActiveCategory] = useState<BuildingCategory>('tower');
@@ -66,9 +68,23 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   const upgrade = BuildingSystem.checkUpgrade(curTerritory, inventory);
   const slotStates = BuildingSystem.getSlotStates(curTerritory.id, curTier, constructedBuildings);
   const maxSlots = BuildingSystem.getMaxSlots(curTier);
+  const existingCount = constructedBuildings.filter((b) => b.territoryId === curTerritory.id).length;
   const blueprints = CONSTRUCTABLE_BLUEPRINTS.filter((b) => b.category === activeCategory);
 
   const handleBuild = (type: ConstructableType) => {
+    const bp = blueprints.find((b) => b.type === type);
+    if (bp?.category === 'tower' && onSelectTowerPlacement) {
+      const hasSlot = existingCount < maxSlots;
+      const canAfford =
+        inventory.wood >= bp.costWood &&
+        inventory.stone >= bp.costStone &&
+        inventory.gold >= bp.costGold;
+      if (!hasSlot || !canAfford) return;
+      onSelectTowerPlacement(curTerritory.id, type);
+      onClose();
+      return;
+    }
+
     const check = BuildingSystem.checkBuild(curTerritory, type, inventory, constructedBuildings, selectedSlotIndex ?? undefined);
     if (!check.canBuild) return;
     const finalSlot = check.slotIndex!;
@@ -170,7 +186,30 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
         {/* Blueprints Grid (Sprite + Stat Badges + Resource Costs) */}
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
           {blueprints.map((bp) => {
-            const check = BuildingSystem.checkBuild(curTerritory, bp.type, inventory, constructedBuildings, selectedSlotIndex ?? undefined);
+            const isTower = bp.category === 'tower' && Boolean(onSelectTowerPlacement);
+            const hasSlot = existingCount < maxSlots;
+            const canAfford =
+              inventory.wood >= bp.costWood &&
+              inventory.stone >= bp.costStone &&
+              inventory.gold >= bp.costGold;
+            const check = BuildingSystem.checkBuild(
+              curTerritory,
+              bp.type,
+              inventory,
+              constructedBuildings,
+              selectedSlotIndex ?? undefined
+            );
+            const isEnabled = isTower ? hasSlot && canAfford : check.canBuild;
+            const statusText = !hasSlot
+              ? '슬롯 부족'
+              : !canAfford
+                ? '자원 부족'
+                : isTower
+                  ? '외곽 배치'
+                  : check.canBuild
+                    ? '건설 가능'
+                    : '슬롯 부족';
+
             return (
               <div key={bp.type} className="bg-[#faecd1] border-2 border-[#b89568] rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-sm" title={bp.description}>
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -182,7 +221,18 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="font-black text-xs text-[#3a2211] truncate">{bp.icon} {bp.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-xs text-[#3a2211] truncate">{bp.icon} {bp.name}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-black shrink-0 ${
+                          isEnabled
+                            ? 'bg-emerald-700/15 text-emerald-800 border border-emerald-700/30'
+                            : 'bg-red-700/15 text-red-800 border border-red-700/30'
+                        }`}
+                      >
+                        {statusText}
+                      </span>
+                    </div>
                     <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-[#785333] mt-0.5 tabular-nums">
                       <span>❤️{bp.maxHp}</span>
                       {bp.attack ? <span>⚔️{bp.attack}</span> : null}
@@ -196,10 +246,16 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                   </div>
                 </div>
 
-                <button disabled={!check.canBuild} onClick={() => handleBuild(bp.type)} className={`px-3 py-1.5 rounded-lg text-xs font-black border transition shrink-0 ${
-                  check.canBuild ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white border-[#93c5fd] shadow active:scale-95' : 'bg-[#cbb597] text-[#735e47] border-[#b09a7d] cursor-not-allowed'
-                }`}>
-                  🔨
+                <button
+                  disabled={!isEnabled}
+                  onClick={() => handleBuild(bp.type)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black border transition shrink-0 ${
+                    isEnabled
+                      ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white border-[#93c5fd] shadow active:scale-95'
+                      : 'bg-[#cbb597] text-[#735e47] border-[#b09a7d] cursor-not-allowed'
+                  }`}
+                >
+                  {isTower ? '📍 선택' : '🔨'}
                 </button>
               </div>
             );

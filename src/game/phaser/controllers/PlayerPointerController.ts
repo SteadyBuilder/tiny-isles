@@ -20,6 +20,7 @@ export interface IPlayerPointerContext {
   getMonsterVisuals: () => Map<string, MonsterVisual>;
   findNearestEntityVisual: (x: number, y: number, maxDist: number) => EntityVisual | null;
   onInteract: () => void;
+  isPlacementActive?: () => boolean;
 }
 
 /**
@@ -78,6 +79,7 @@ export class PlayerPointerController {
     });
 
     scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.ctx.isPlacementActive?.()) return;
       if (this.isPinchZooming()) {
         this.cancelPointerTarget();
         return;
@@ -134,6 +136,7 @@ export class PlayerPointerController {
   }
 
   private handlePointerAction(pointer: Phaser.Input.Pointer): void {
+    if (this.ctx.isPlacementActive?.()) return;
     if (pointer.rightButtonDown()) return;
     if (this.isPinchZooming()) {
       this.cancelPointerTarget();

@@ -117,7 +117,8 @@ export class TerritoryActionController {
     territoryId: number,
     type: ConstructableType,
     preferredSlotIndex?: number | boolean,
-    isLocalTrigger = true
+    isLocalTrigger = true,
+    customPos?: { x: number; y: number }
   ): boolean {
     const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return false;
@@ -131,7 +132,8 @@ export class TerritoryActionController {
       type,
       this.ctx.getInventory(),
       constructedBuildings,
-      slotIdx
+      slotIdx,
+      customPos
     );
 
     if (!check.canBuild || check.slotIndex === undefined) {
@@ -147,17 +149,23 @@ export class TerritoryActionController {
       this.ctx.spendInventory(bp.costWood, bp.costStone, bp.costGold);
     }
 
-    const newBuilding = BuildingSystem.createConstructedBuilding(isl, type, finalSlotIndex);
+    const newBuilding = BuildingSystem.createConstructedBuilding(
+      isl,
+      type,
+      finalSlotIndex,
+      check.customPos
+    );
     constructedBuildings.push(newBuilding);
     this.ctx.spawnConstructedBuildingVisual(newBuilding);
     this.ctx.saveWorldState();
     this.ctx.emitWorldStateToReact();
 
     sound.playUnlock();
+    const slotLabel = finalSlotIndex >= 0 ? `#${finalSlotIndex} 슬롯` : '외곽 자유 배치';
     this.ctx.showFloatingText(
       newBuilding.x,
       newBuilding.y - 45,
-      `🏗️ [${bp.categoryLabel}] ${bp.name} 건설 완료! (#${finalSlotIndex} 슬롯)`,
+      `🏗️ [${bp.categoryLabel}] ${bp.name} 건설 완료! (${slotLabel})`,
       '#38bdf8'
     );
 

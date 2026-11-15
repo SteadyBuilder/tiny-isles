@@ -12,6 +12,7 @@ import {
   TERRITORY_BUILD_SLOTS,
   VILLAGE_TIER_CONFIGS,
 } from './constants';
+import { validateOuterTowerPosition } from './towerPlacementRules';
 
 export interface SlotState {
   slotIndex: number;
@@ -35,6 +36,7 @@ export interface BuildCheckResult {
   canBuild: boolean;
   reason?: string;
   slotIndex?: number;
+  customPos?: { x: number; y: number };
   blueprint: ConstructableBlueprint;
 }
 
@@ -164,14 +166,15 @@ export class BuildingSystem {
   }
 
   /**
-   * 건물 건설 가능 여부 및 슬롯 할당 검사
+   * 건물 건설 가능 여부 및 슬롯/좌표 할당 검사
    */
   public static checkBuild(
     territory: Island,
     type: ConstructableType,
     inventory: Inventory,
     constructedBuildings: ConstructedBuilding[],
-    preferredSlotIndex?: number
+    preferredSlotIndex?: number,
+    customPos?: { x: number; y: number }
   ): BuildCheckResult {
     const bp = getBlueprint(type);
     const existing = constructedBuildings.filter((b) => b.territoryId === territory.id);
@@ -181,6 +184,42 @@ export class BuildingSystem {
       return {
         canBuild: false,
         reason: `건물 슬롯이 꽉 찼습니다 (${existing.length}/${maxSlots}). 마을을 승급하세요.`,
+        blueprint: bp,
+      };
+    }
+
+    const canAfford =
+      inventory.wood >= bp.costWood &&
+      inventory.stone >= bp.costStone &&
+      inventory.gold >= bp.costGold;
+
+    if (!canAfford) {
+      return {
+        canBuild: false,
+        reason: `자원 부족 (필요: 🪵${bp.costWood} 🪨${bp.costStone} 🪙${bp.costGold})`,
+        blueprint: bp,
+      };
+    }
+
+    // 방어 타워 자유 외곽 배치
+    if (bp.category === 'tower' && customPos) {
+      const validation = validateOuterTowerPosition(
+        customPos.x,
+        customPos.y,
+        territory,
+        constructedBuildings
+      );
+      if (!validation.valid) {
+        return {
+          canBuild: false,
+          reason: validation.reason || '배치할 수 없는 위치입니다.',
+          blueprint: bp,
+        };
+      }
+      return {
+        canBuild: true,
+        slotIndex: -1,
+        customPos: { x: validation.worldX, y: validation.worldY },
         blueprint: bp,
       };
     }
@@ -204,19 +243,6 @@ export class BuildingSystem {
       };
     }
 
-    const canAfford =
-      inventory.wood >= bp.costWood &&
-      inventory.stone >= bp.costStone &&
-      inventory.gold >= bp.costGold;
-
-    if (!canAfford) {
-      return {
-        canBuild: false,
-        reason: `자원 부족 (필요: 🪵${bp.costWood} 🪨${bp.costStone} 🪙${bp.costGold})`,
-        blueprint: bp,
-      };
-    }
-
     return {
       canBuild: true,
       slotIndex,
@@ -230,23 +256,28 @@ export class BuildingSystem {
   public static createConstructedBuilding(
     territory: Island,
     type: ConstructableType,
-    slotIndex: number
+    slotIndex: number,
+    customPos?: { x: number; y: number }
   ): ConstructedBuilding {
     const bp = getBlueprint(type);
     const origin = getIslandOrigin(territory.gridX, territory.gridY);
     const slot = TERRITORY_BUILD_SLOTS[slotIndex] || TERRITORY_BUILD_SLOTS[0];
 
+    const x = customPos ? Math.round(customPos.x) : origin.x + slot.relX;
+    const y = customPos ? Math.round(customPos.y) : origin.y + slot.relY;
+    const finalSlotIndex = customPos ? -1 : slotIndex;
+
     return {
-      id: `cb_${territory.id}_${slotIndex}_${Date.now().toString(36)}`,
+      id: `cb_${territory.id}_${finalSlotIndex}_${Date.now().toString(36)}`,
       territoryId: territory.id,
       type,
       category: bp.category,
       name: bp.name,
-      x: origin.x + slot.relX,
-      y: origin.y + slot.relY,
+      x,
+      y,
       hp: bp.maxHp,
       maxHp: bp.maxHp,
-      slotIndex,
+      slotIndex: finalSlotIndex,
     };
   }
 }

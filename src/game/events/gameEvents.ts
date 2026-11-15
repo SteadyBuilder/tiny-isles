@@ -34,7 +34,23 @@ export interface GameEventPayloads {
   'open-village-modal': number; // territoryId
 
   // 건물 건설 및 파괴
-  'construct-building': { territoryId: number; type: ConstructableType; slotIndex?: number };
+  'construct-building': {
+    territoryId: number;
+    type: ConstructableType;
+    slotIndex?: number;
+    customPos?: { x: number; y: number };
+  };
+  'enter-tower-placement': { territoryId: number; type: ConstructableType };
+  'cancel-tower-placement': void;
+  'confirm-tower-placement': void;
+  'placement-state-changed': {
+    active: boolean;
+    territoryId?: number;
+    type?: ConstructableType;
+    hasSelection?: boolean;
+    isValid?: boolean;
+    reason?: string;
+  };
   'constructed-buildings-updated': ConstructedBuilding[];
   'building-placed': ConstructedBuilding;
   'building-damaged': { buildingId: string; hp: number; maxHp: number };
