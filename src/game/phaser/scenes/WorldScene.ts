@@ -13,6 +13,7 @@ import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGen
 import { WorldPersistenceController } from '../controllers/WorldPersistenceController';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
+import { MonsterTargetIndicatorRenderer } from '../renderers/MonsterTargetIndicatorRenderer';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
@@ -42,6 +43,7 @@ export class WorldScene extends Phaser.Scene {
   private territoryStructureRenderer!: TerritoryStructureRenderer;
   private constructedBuildingRenderer!: ConstructedBuildingRenderer;
   private resourceEntityRenderer!: ResourceEntityRenderer;
+  private monsterIndicatorRenderer!: MonsterTargetIndicatorRenderer;
 
   private systems!: WorldSystemsBundle;
   private controllers!: WorldControllersBundle;
@@ -107,6 +109,7 @@ export class WorldScene extends Phaser.Scene {
     this.terrainRenderer.buildWaterColliders();
 
     this.effectsRenderer = new WorldEffectsRenderer(this, () => this.isSceneAlive());
+    this.monsterIndicatorRenderer = new MonsterTargetIndicatorRenderer(this, () => this.isSceneAlive());
     this.drawTerrainDecorations();
 
     const buildingColliders = this.physics.add.staticGroup();
@@ -258,6 +261,7 @@ export class WorldScene extends Phaser.Scene {
     this.controllers.territoryPassive.update(delta);
     this.controllers.playerMovement.update(time);
     this.effectsRenderer.updateClouds();
+    this.monsterIndicatorRenderer.update(time, this.systems.waveSystem.getMonsterVisuals());
     this.systems.multiplayerSync?.maybeBroadcastPlayerMove(time);
   }
 
@@ -317,6 +321,7 @@ export class WorldScene extends Phaser.Scene {
     this.altarRenderer?.destroy();
     this.terrainRenderer?.destroy();
     this.effectsRenderer?.destroy();
+    this.monsterIndicatorRenderer?.destroy();
     this.systems?.multiplayerSync?.destroy();
   }
 }
