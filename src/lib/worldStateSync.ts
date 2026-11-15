@@ -1,5 +1,9 @@
 import { GARRISON_CONFIG } from '../data/worldRules';
 import {
+  TERRITORY_CORE_REL_X,
+  TERRITORY_CORE_REL_Y,
+} from '../game/world/territoryGrid';
+import {
   ConstructedBuilding,
   GarrisonUnit,
   Monster,
@@ -150,8 +154,8 @@ export const worldStateSync = {
         name: String(row.name ?? '수비대'),
         color: row.color === 'red' ? 'red' : 'blue',
         territoryId: Number(row.territory_id ?? 0),
-        x: Number(row.x ?? 320),
-        y: Number(row.y ?? 350),
+        x: Number(row.x ?? TERRITORY_CORE_REL_X),
+        y: Number(row.y ?? TERRITORY_CORE_REL_Y),
         power: Number(row.power ?? GARRISON_CONFIG.offlineDefensePowerPerGarrison),
         updatedAt: String(row.updated_at ?? new Date().toISOString()),
       }));

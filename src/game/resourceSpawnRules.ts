@@ -1,46 +1,52 @@
 import { Entity } from '../types/game';
+import {
+  TERRITORY_CORE_REL_X,
+  TERRITORY_CORE_REL_Y,
+  TERRITORY_PX,
+  TERRITORY_STEP,
+} from './world/territoryGrid';
 
-/** Side length (px) of each territory's buildable/living village square (10 tiles * 64px) */
-export const TERRITORY_VILLAGE_PX = 640;
+/** Side length (px) of each territory's buildable/living village square */
+export const TERRITORY_VILLAGE_PX = TERRITORY_PX;
 
-/** Center-to-center step (px) between adjacent territories (640px village + 640px outdoor gap) */
-export const TERRITORY_GRID_STEP = 1280;
+/** Center-to-center step (px) between adjacent territories */
+export const TERRITORY_GRID_STEP = TERRITORY_STEP;
 
 /** Minimum clearance (px) outside the 0..TERRITORY_PX village border for resource spawns */
 export const VILLAGE_OUTDOOR_MARGIN = 76;
 
-/** Half-width clearance (px) around the N-S (x=320) and W-E (y=350) gate crossroads */
+/** Half-width clearance (px) around the N-S and W-E gate crossroads */
 const ROAD_CLEARANCE = 56;
-const ROAD_CENTER_X = 320;
-const ROAD_CENTER_Y = 350;
+const ROAD_CENTER_X = TERRITORY_CORE_REL_X;
+const ROAD_CENTER_Y = TERRITORY_CORE_REL_Y;
 
 /**
- * Deterministic outdoor plains anchor slots around a 640x640 territory.
+ * Deterministic outdoor plains anchor slots around a 1280x1280 territory.
  * All coordinates lie strictly outside `[0, TERRITORY_PX]` (with >= 76px margin from walls)
- * and inside `[-230, TERRITORY_PX + 230]` so adjacent territories never overlap.
- * None of the slots sit on the N-S (`relX ≈ 320`) or W-E (`relY ≈ 350`) gate roads.
+ * and inside `[-460, TERRITORY_PX + 460]` so adjacent territories never overlap.
+ * None of the slots sit on the N-S (`relX ≈ 640`) or W-E (`relY ≈ 700`) gate roads.
  */
 export const OUTDOOR_RESOURCE_SLOTS: ReadonlyArray<{ readonly relX: number; readonly relY: number }> = [
-  // North outdoor plains (relY in [-210, -85])
-  { relX: 110, relY: -110 },
-  { relX: 220, relY: -155 },
-  { relX: 430, relY: -155 },
-  { relX: 540, relY: -110 },
-  // South outdoor plains (relY in [725, 850])
-  { relX: 110, relY: 745 },
-  { relX: 225, relY: 790 },
-  { relX: 425, relY: 790 },
-  { relX: 540, relY: 745 },
-  // West outdoor plains (relX in [-210, -85])
-  { relX: -120, relY: 120 },
-  { relX: -175, relY: 235 },
-  { relX: -175, relY: 465 },
-  { relX: -120, relY: 560 },
-  // East outdoor plains (relX in [725, 850])
-  { relX: 750, relY: 120 },
-  { relX: 805, relY: 235 },
-  { relX: 805, relY: 465 },
-  { relX: 750, relY: 560 },
+  // North outdoor plains (relY in [-240, -110])
+  { relX: 220, relY: -120 },
+  { relX: 440, relY: -200 },
+  { relX: 840, relY: -200 },
+  { relX: 1060, relY: -120 },
+  // South outdoor plains (relY in [1390, 1520])
+  { relX: 220, relY: TERRITORY_PX + 120 },
+  { relX: 440, relY: TERRITORY_PX + 200 },
+  { relX: 840, relY: TERRITORY_PX + 200 },
+  { relX: 1060, relY: TERRITORY_PX + 120 },
+  // West outdoor plains (relX in [-240, -110])
+  { relX: -130, relY: 240 },
+  { relX: -210, relY: 480 },
+  { relX: -210, relY: 920 },
+  { relX: -130, relY: 1120 },
+  // East outdoor plains (relX in [1390, 1520])
+  { relX: TERRITORY_PX + 130, relY: 240 },
+  { relX: TERRITORY_PX + 210, relY: 480 },
+  { relX: TERRITORY_PX + 210, relY: 920 },
+  { relX: TERRITORY_PX + 130, relY: 1120 },
 ];
 
 /**

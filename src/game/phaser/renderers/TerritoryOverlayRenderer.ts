@@ -5,6 +5,7 @@ import {
   TERRITORY_PX,
   VILLAGE_TIER_CONFIGS,
   getIslandOrigin,
+  getTerritoryCorePos,
 } from '../../constants';
 import { DEPTH } from '../../depthLayers';
 import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
@@ -51,12 +52,13 @@ export class TerritoryOverlayRenderer {
 
     for (const isl of islands) {
       const origin = getIslandOrigin(isl.gridX, isl.gridY);
+      const corePos = getTerritoryCorePos(isl.gridX, isl.gridY);
       if (isl.unlocked) {
         const plazaRadius = 56 + isl.villageTier * 8;
         g.fillStyle(0xa8a29e, 0.48);
-        g.fillCircle(origin.x + 320, origin.y + 350, plazaRadius);
+        g.fillCircle(corePos.x, corePos.y, plazaRadius);
         g.lineStyle(3, 0x78716c, 0.58);
-        g.strokeCircle(origin.x + 320, origin.y + 350, plazaRadius);
+        g.strokeCircle(corePos.x, corePos.y, plazaRadius);
 
         g.lineStyle(2, 0x93c5fd, 0.28);
         g.strokeRect(origin.x, origin.y, TERRITORY_PX, TERRITORY_PX);

@@ -1,6 +1,10 @@
 import { Building, VillageTier } from '../../types/game';
 import { VILLAGE_TIER_CONFIGS } from '../../data/buildings';
-import { getIslandOrigin } from './territoryGrid';
+import {
+  TERRITORY_CORE_REL_X,
+  TERRITORY_CORE_REL_Y,
+  getIslandOrigin,
+} from './territoryGrid';
 
 export interface CollisionBox {
   x: number;
@@ -19,6 +23,8 @@ export function generateTerritoryBuildings(
   villageTier: VillageTier = islandId === 0 ? 2 : 0
 ): Building[] {
   const origin = getIslandOrigin(gridX, gridY);
+  const cx = origin.x + TERRITORY_CORE_REL_X;
+  const cy = origin.y + TERRITORY_CORE_REL_Y;
   const buildings: Building[] = [];
   const tierInfo = VILLAGE_TIER_CONFIGS[villageTier];
 
@@ -33,8 +39,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_hall_lv1`,
       type: 'house1',
       name: `${tierInfo.badge} 회관`,
-      x: origin.x + 256,
-      y: origin.y + 90,
+      x: cx - 64,
+      y: cy - 260,
       width: 128,
       height: 192,
       islandId,
@@ -45,8 +51,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_hall_lv2`,
       type: islandId === 0 ? 'castle' : 'house2',
       name: islandId === 0 ? '중심 중소마을 본관' : `${tierInfo.badge} 중심회관`,
-      x: origin.x + (islandId === 0 ? 160 : 256),
-      y: origin.y + (islandId === 0 ? 45 : 85),
+      x: cx - (islandId === 0 ? 160 : 64),
+      y: cy - (islandId === 0 ? 305 : 265),
       width: islandId === 0 ? 320 : 128,
       height: islandId === 0 ? 240 : 192,
       islandId,
@@ -55,8 +61,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_sub_lv2`,
       type: 'house1',
       name: '중소마을 민가',
-      x: origin.x + 60,
-      y: origin.y + 180,
+      x: cx - 320,
+      y: cy - 170,
       width: 120,
       height: 180,
       islandId,
@@ -67,8 +73,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_hall_lv3`,
       type: 'castle',
       name: `${tierInfo.badge} 영주관`,
-      x: origin.x + 160,
-      y: origin.y + 45,
+      x: cx - 160,
+      y: cy - 305,
       width: 320,
       height: 240,
       islandId,
@@ -77,8 +83,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_sub1_lv3`,
       type: 'house2',
       name: '큰마을 상점가',
-      x: origin.x + 50,
-      y: origin.y + 180,
+      x: cx - 340,
+      y: cy - 170,
       width: 120,
       height: 180,
       islandId,
@@ -87,8 +93,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_sub2_lv3`,
       type: 'house3',
       name: '큰마을 대장간',
-      x: origin.x + 470,
-      y: origin.y + 180,
+      x: cx + 220,
+      y: cy - 170,
       width: 120,
       height: 180,
       islandId,
@@ -99,8 +105,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_hall_city`,
       type: 'castle',
       name: `${tierInfo.badge} 중앙 성채`,
-      x: origin.x + 160,
-      y: origin.y + 40,
+      x: cx - 160,
+      y: cy - 310,
       width: 320,
       height: 250,
       islandId,
@@ -109,8 +115,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_west_city`,
       type: villageTier >= 5 ? 'barracks' : 'house2',
       name: `${tierInfo.name} 서구획`,
-      x: origin.x + 36,
-      y: origin.y + 160,
+      x: cx - 360,
+      y: cy - 190,
       width: 140,
       height: 190,
       islandId,
@@ -119,8 +125,8 @@ export function generateTerritoryBuildings(
       id: `b_${islandId}_east_city`,
       type: villageTier >= 6 ? 'monastery' : 'archery',
       name: `${tierInfo.name} 동구획`,
-      x: origin.x + 464,
-      y: origin.y + 160,
+      x: cx + 220,
+      y: cy - 190,
       width: 140,
       height: 190,
       islandId,

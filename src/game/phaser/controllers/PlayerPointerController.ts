@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
 import { Island } from '../../../types/game';
-import { getIslandOrigin, getTerritoryCorePos } from '../../constants';
+import {
+  TERRITORY_CENTER_X,
+  TERRITORY_CENTER_Y,
+  getIslandOrigin,
+  getTerritoryCorePos,
+} from '../../constants';
 import { DEPTH } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { MonsterVisual } from '../../systems/WaveSystem';
@@ -213,8 +218,8 @@ export class PlayerPointerController {
         }
       } else {
         const origin = getIslandOrigin(isl.gridX, isl.gridY);
-        const signX = origin.x + 320;
-        const signY = origin.y + 320;
+        const signX = origin.x + TERRITORY_CENTER_X;
+        const signY = origin.y + TERRITORY_CENTER_Y;
         if (Math.hypot(wx - signX, wy - signY) < 75) {
           return { x: signX, y: signY };
         }

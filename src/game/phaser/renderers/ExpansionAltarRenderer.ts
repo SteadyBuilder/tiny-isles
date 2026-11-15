@@ -1,6 +1,10 @@
 import Phaser from 'phaser';
 import { Inventory, Island } from '../../../types/game';
-import { getIslandOrigin } from '../../constants';
+import {
+  TERRITORY_CENTER_X,
+  TERRITORY_CENTER_Y,
+  getIslandOrigin,
+} from '../../constants';
 import { DEPTH } from '../../depthLayers';
 
 interface AltarCardRef {
@@ -60,8 +64,8 @@ export class ExpansionAltarRenderer {
 
     for (const isl of lockedIslands) {
       const origin = getIslandOrigin(isl.gridX, isl.gridY);
-      const signX = origin.x + 320;
-      const signY = origin.y + 320;
+      const signX = origin.x + TERRITORY_CENTER_X;
+      const signY = origin.y + TERRITORY_CENTER_Y;
       const canAfford = this.checkAfford(isl, inventory);
 
       const cardContainer = this.scene.add.container(signX, signY);

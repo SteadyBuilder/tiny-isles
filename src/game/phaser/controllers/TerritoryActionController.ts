@@ -233,9 +233,9 @@ export class TerritoryActionController {
     sound.playUnlock();
     confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
 
-    const origin = getIslandOrigin(target.gridX, target.gridY);
+    const corePos = getTerritoryCorePos(target.gridX, target.gridY);
     const msg = `🚩 ${unlockedBy}님이 '${target.name}' 영지를 점령했습니다! 건물을 세우고 마을로 발전시키세요!`;
-    this.ctx.showFloatingText(origin.x + 320, origin.y + 240, msg, '#ffd700');
+    this.ctx.showFloatingText(corePos.x, corePos.y - 110, msg, '#ffd700');
 
     if (islandId === GOLD_MINE_BIOME_CONFIG.unlockTerritoryId) {
       this.ctx.spawnGoldMineClusterAndAnnounce();

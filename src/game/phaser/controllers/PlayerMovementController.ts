@@ -1,6 +1,12 @@
 import Phaser from 'phaser';
 import { Island, PlayerAction, PlayerColor } from '../../../types/game';
-import { getIslandOrigin, TERRITORY_STEP } from '../../constants';
+import {
+  TERRITORY_CENTER_X,
+  TERRITORY_CENTER_Y,
+  TERRITORY_STEP,
+  getIslandOrigin,
+  getTerritoryCorePos,
+} from '../../constants';
 import { ySortDepth } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { MonsterVisual } from '../../systems/WaveSystem';
@@ -59,9 +65,10 @@ export class PlayerMovementController {
   }
 
   public getPosition(): { x: number; y: number } {
+    const core0 = getTerritoryCorePos(0, 0);
     return {
-      x: this.playerSprite?.x ?? 320,
-      y: this.playerSprite?.y ?? 350,
+      x: this.playerSprite?.x ?? core0.x,
+      y: this.playerSprite?.y ?? core0.y,
     };
   }
 
@@ -275,8 +282,8 @@ export class PlayerMovementController {
     for (const isl of this.ctx.getIslands()) {
       if (!isl.unlocked) {
         const origin = getIslandOrigin(isl.gridX, isl.gridY);
-        const signX = origin.x + 320;
-        const signY = origin.y + 320;
+        const signX = origin.x + TERRITORY_CENTER_X;
+        const signY = origin.y + TERRITORY_CENTER_Y;
         if (Math.hypot(px - signX, py - signY) < 260) {
           nearLocked = isl;
           break;
@@ -289,8 +296,8 @@ export class PlayerMovementController {
       GameEvents.emit('near-island-changed', nearLocked);
     }
 
-    const gridX = Math.round((px - 320) / TERRITORY_STEP);
-    const gridY = Math.round((py - 320) / TERRITORY_STEP);
+    const gridX = Math.round((px - TERRITORY_CENTER_X) / TERRITORY_STEP);
+    const gridY = Math.round((py - TERRITORY_CENTER_Y) / TERRITORY_STEP);
     if (gridX !== this.lastGridPos.gridX || gridY !== this.lastGridPos.gridY) {
       this.lastGridPos = { gridX, gridY };
       GameEvents.emit('player-grid-pos-changed', { gridX, gridY });

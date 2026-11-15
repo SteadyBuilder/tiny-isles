@@ -152,9 +152,9 @@ export interface GoldMineBiomeConfig {
 
 export const GOLD_MINE_BIOME_CONFIG: GoldMineBiomeConfig = {
   unlockTerritoryId: 11, // #11 극서 태양금광 변경 마을터 (-2, 0) 인접 야외 광맥 지대
-  centerX: -1600,
-  centerY: -320,
-  radiusPx: 300,
+  centerX: -3200,
+  centerY: -640,
+  radiusPx: 480,
   clusterNodeCount: 16,
   clusterMinSpacingPx: 56,
   announcementText: '황금광산 발견!!',
@@ -163,7 +163,7 @@ export const GOLD_MINE_BIOME_CONFIG: GoldMineBiomeConfig = {
 export interface TerrainGenerationConfig {
   seed: number;
   tileSize: number;
-  /** Buffer tiles outside any 640x640 village square guaranteed to stay dry land */
+  /** Buffer tiles outside any village square guaranteed to stay dry land */
   villageDryBufferPx: number;
   /** Half-width of main village-connecting roads (px) */
   roadHalfWidthPx: number;

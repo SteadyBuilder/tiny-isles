@@ -253,25 +253,25 @@ export function getBlueprint(type: ConstructableType): ConstructableBlueprint {
 }
 
 /**
- * 영지 내 건설 슬롯 상대 좌표 오프셋 (640x640 영지 기준)
+ * 영지 내 건설 슬롯 상대 좌표 오프셋 (1280x1280 영지 기준)
  */
 export const TERRITORY_BUILD_SLOTS: { relX: number; relY: number; role: 'wall' | 'inner' }[] = [
   // 외곽 방책/성벽 슬롯 (북, 남, 동, 서 방어선)
-  { relX: 320, relY: 52, role: 'wall' },   // Slot 0: 북쪽 방책선
-  { relX: 320, relY: 588, role: 'wall' },  // Slot 1: 남쪽 방책선
-  { relX: 588, relY: 350, role: 'wall' },  // Slot 2: 동쪽 방책선
-  { relX: 52, relY: 350, role: 'wall' },   // Slot 3: 서쪽 방책선
+  { relX: 640, relY: 52, role: 'wall' },    // Slot 0: 북쪽 방책선
+  { relX: 640, relY: 1228, role: 'wall' },  // Slot 1: 남쪽 방책선
+  { relX: 1228, relY: 700, role: 'wall' },  // Slot 2: 동쪽 방책선
+  { relX: 52, relY: 700, role: 'wall' },    // Slot 3: 서쪽 방책선
   // 마을 내부 타워/기본/특수건물 슬롯
-  { relX: 490, relY: 190, role: 'inner' }, // Slot 4: 북동 타워/건물지
-  { relX: 150, relY: 190, role: 'inner' }, // Slot 5: 북서 타워/건물지
-  { relX: 490, relY: 490, role: 'inner' }, // Slot 6: 남동 타워/건물지
-  { relX: 150, relY: 490, role: 'inner' }, // Slot 7: 남서 타워/건물지
-  { relX: 460, relY: 340, role: 'inner' }, // Slot 8: 동측 내부 슬롯
-  { relX: 180, relY: 340, role: 'inner' }, // Slot 9: 서측 내부 슬롯
-  { relX: 320, relY: 480, role: 'inner' }, // Slot 10: 남측 광장 슬롯
-  { relX: 210, relY: 110, role: 'inner' }, // Slot 11: 북서 상단 슬롯
-  { relX: 430, relY: 110, role: 'inner' }, // Slot 12: 북동 상단 슬롯
-  { relX: 110, relY: 260, role: 'inner' }, // Slot 13: 서단 슬롯
-  { relX: 530, relY: 260, role: 'inner' }, // Slot 14: 동단 슬롯
-  { relX: 320, relY: 220, role: 'inner' }, // Slot 15: 중앙 상단 슬롯
+  { relX: 980, relY: 380, role: 'inner' },  // Slot 4: 북동 타워/건물지
+  { relX: 300, relY: 380, role: 'inner' },  // Slot 5: 북서 타워/건물지
+  { relX: 980, relY: 980, role: 'inner' },  // Slot 6: 남동 타워/건물지
+  { relX: 300, relY: 980, role: 'inner' },  // Slot 7: 남서 타워/건물지
+  { relX: 920, relY: 680, role: 'inner' },  // Slot 8: 동측 내부 슬롯
+  { relX: 360, relY: 680, role: 'inner' },  // Slot 9: 서측 내부 슬롯
+  { relX: 640, relY: 960, role: 'inner' },  // Slot 10: 남측 광장 슬롯
+  { relX: 420, relY: 220, role: 'inner' },  // Slot 11: 북서 상단 슬롯
+  { relX: 860, relY: 220, role: 'inner' },  // Slot 12: 북동 상단 슬롯
+  { relX: 220, relY: 520, role: 'inner' },  // Slot 13: 서단 슬롯
+  { relX: 1060, relY: 520, role: 'inner' }, // Slot 14: 동단 슬롯
+  { relX: 640, relY: 240, role: 'inner' },  // Slot 15: 중앙 상단 슬롯
 ];

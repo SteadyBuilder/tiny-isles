@@ -1,6 +1,14 @@
 import { Entity } from '../../types/game';
-import { getIslandOrigin } from './territoryGrid';
+import { getIslandOrigin, TERRITORY_PX } from './territoryGrid';
 import { resolveOutdoorRelPos } from '../resourceSpawnRules';
+
+const BASE_VILLAGE_PX = 640;
+
+function mapRelToTerritory(rel: number): number {
+  if (rel < 0) return rel;
+  if (rel > BASE_VILLAGE_PX) return TERRITORY_PX + (rel - BASE_VILLAGE_PX);
+  return Math.round((rel / BASE_VILLAGE_PX) * TERRITORY_PX);
+}
 
 /**
  * 영지별 자원 엔티티 생성 (마을 영역 `TERRITORY_PX` 외부 야외 평원 벨트에만 스폰)
@@ -15,7 +23,11 @@ export function generateIslandEntities(islandId: number, gridX: number, gridY: n
   let slotCounter = islandId * 3;
 
   const toWorldOutdoor = (relX: number, relY: number) => {
-    const out = resolveOutdoorRelPos(relX, relY, slotCounter++);
+    const out = resolveOutdoorRelPos(
+      mapRelToTerritory(relX),
+      mapRelToTerritory(relY),
+      slotCounter++
+    );
     return { x: origin.x + out.relX, y: origin.y + out.relY };
   };
 

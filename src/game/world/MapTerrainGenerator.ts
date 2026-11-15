@@ -5,7 +5,13 @@ import {
   LandBiomeId,
   TERRAIN_GENERATION_CONFIG,
 } from '../../data/biomes';
-import { INITIAL_ISLANDS, TERRITORY_PX, TERRITORY_STEP } from '../constants';
+import {
+  INITIAL_ISLANDS,
+  TERRITORY_CORE_REL_X,
+  TERRITORY_CORE_REL_Y,
+  TERRITORY_PX,
+  TERRITORY_STEP,
+} from '../constants';
 import { WORLD_BOUNDS, WorldBounds } from '../worldBounds';
 import { fbm2D, hash2D } from './TerrainNoise';
 import { Island } from '../../types/game';
@@ -94,8 +100,8 @@ function getRoadOrientationAt(
   for (const t of territories) {
     const ox = t.gridX * TERRITORY_STEP;
     const oy = t.gridY * TERRITORY_STEP;
-    const roadY = oy + 350;
-    const roadX = ox + 320;
+    const roadY = oy + TERRITORY_CORE_REL_Y;
+    const roadX = ox + TERRITORY_CORE_REL_X;
 
     // Horizontal road segment connecting through territory gap
     if (

@@ -24,6 +24,10 @@ import {
   ISLAND_GAP,
   TERRITORY_STEP,
   ISLAND_STEP,
+  TERRITORY_CENTER_X,
+  TERRITORY_CENTER_Y,
+  TERRITORY_CORE_REL_X,
+  TERRITORY_CORE_REL_Y,
   getIslandOrigin,
   getTerritoryCorePos,
 } from './world/territoryGrid';
@@ -54,6 +58,10 @@ export {
   ISLAND_GAP,
   TERRITORY_STEP,
   ISLAND_STEP,
+  TERRITORY_CENTER_X,
+  TERRITORY_CENTER_Y,
+  TERRITORY_CORE_REL_X,
+  TERRITORY_CORE_REL_Y,
   getIslandOrigin,
   getTerritoryCorePos,
   generateTerritoryBuildings,
@@ -144,17 +152,17 @@ export function getOuterPerimeterSpawns(islands: Island[]): {
   if (unlocked.length === 0) {
     const center = islands[0];
     const origin = getIslandOrigin(0, 0);
-    return [{ territory: center, spawnX: origin.x + 320, spawnY: origin.y + 20 }];
+    return [{ territory: center, spawnX: origin.x + TERRITORY_CORE_REL_X, spawnY: origin.y + 20 }];
   }
 
   const unlockedSet = new Set(unlocked.map((i) => `${i.gridX},${i.gridY}`));
   const spawns: { territory: Island; spawnX: number; spawnY: number }[] = [];
 
   const dirs = [
-    { dx: 0, dy: -1, relX: 320, relY: 20 },  // 북쪽 외곽 경계
-    { dx: 0, dy: 1, relX: 320, relY: 620 },  // 남쪽 외곽 경계
-    { dx: 1, dy: 0, relX: 620, relY: 350 },  // 동쪽 외곽 경계
-    { dx: -1, dy: 0, relX: 20, relY: 350 },  // 서쪽 외곽 경계
+    { dx: 0, dy: -1, relX: TERRITORY_CORE_REL_X, relY: 20 },  // 북쪽 외곽 경계
+    { dx: 0, dy: 1, relX: TERRITORY_CORE_REL_X, relY: TERRITORY_PX - 20 },  // 남쪽 외곽 경계
+    { dx: 1, dy: 0, relX: TERRITORY_PX - 20, relY: TERRITORY_CORE_REL_Y },  // 동쪽 외곽 경계
+    { dx: -1, dy: 0, relX: 20, relY: TERRITORY_CORE_REL_Y },  // 서쪽 외곽 경계
   ];
 
   let maxDist = 0;
@@ -183,7 +191,7 @@ export function getOuterPerimeterSpawns(islands: Island[]): {
   if (spawns.length === 0) {
     const first = unlocked[unlocked.length - 1];
     const origin = getIslandOrigin(first.gridX, first.gridY);
-    spawns.push({ territory: first, spawnX: origin.x + 320, spawnY: origin.y + 20 });
+    spawns.push({ territory: first, spawnX: origin.x + TERRITORY_CORE_REL_X, spawnY: origin.y + 20 });
   }
 
   return spawns;

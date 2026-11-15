@@ -6,6 +6,7 @@ import {
   Island,
   PlayerColor,
 } from '../../../types/game';
+import { getTerritoryCorePos } from '../../constants';
 import { GameEvents } from '../../events/gameEvents';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
@@ -136,7 +137,7 @@ export class WorldScene extends Phaser.Scene {
       getPlayerId: () => this.playerId,
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
-      getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? { x: 320, y: 350 },
+      getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
       getLocalPlayerState: () => this.controllers.playerMovement.getState(),
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,

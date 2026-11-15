@@ -7,6 +7,7 @@ import {
   getRegularMonsterTemplates,
 } from '../utils/waveUtils';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
+import { TERRITORY_CORE_REL_X } from '../constants';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 
 export interface IWaveSpawnerContext {
@@ -87,7 +88,7 @@ export class WaveSpawner {
         speed: template.speed,
         targetTerritoryId: sp.territory.id,
         spawnTerritoryId: sp.territory.id,
-        direction: sp.spawnX > 320 ? 'left' : 'right',
+        direction: sp.spawnX > TERRITORY_CORE_REL_X ? 'left' : 'right',
       };
       monsters.set(monster.id, MonsterVisualManager.create(this.ctx.scene, monster));
     }
@@ -114,7 +115,7 @@ export class WaveSpawner {
         speed: bossTemplate.speed,
         targetTerritoryId: bossSpawn.territory.id,
         spawnTerritoryId: bossSpawn.territory.id,
-        direction: bossSpawn.spawnX > 320 ? 'left' : 'right',
+        direction: bossSpawn.spawnX > TERRITORY_CORE_REL_X ? 'left' : 'right',
       };
       monsters.set(bossMonster.id, MonsterVisualManager.create(this.ctx.scene, bossMonster));
     }
