@@ -57,6 +57,10 @@ export class ResourceEntityRenderer {
     return Array.from(this.entityVisuals.values()).map((ev) => ev.entity);
   }
 
+  public getEntityVisuals(): ReadonlyMap<string, EntityVisual> {
+    return this.entityVisuals;
+  }
+
   public getEntityInteractionPoint(visual: EntityVisual): { x: number; y: number } {
     const spriteRect = getSpriteWorldRect(
       visual.sprite,
@@ -212,26 +216,29 @@ export class ResourceEntityRenderer {
 
     container.add(sprite);
 
-    const hpBar = scene.add.graphics();
-    container.add(hpBar);
-
     this.entityVisuals.set(ent.id, {
       entity: ent,
       container,
       sprite,
-      hpBar,
+      hpBar: undefined,
     });
 
-    this.updateHpBar(ent.id);
+    if (ent.hp < ent.maxHp && ent.type !== 'sheep') {
+      this.updateHpBar(ent.id);
+    }
   }
 
   public updateHpBar(entityId: string): void {
     const visual = this.entityVisuals.get(entityId);
-    if (!visual || !visual.hpBar) return;
+    if (!visual) return;
 
-    visual.hpBar.clear();
     const ent = visual.entity;
     if (ent.hp < ent.maxHp && ent.type !== 'sheep') {
+      if (!visual.hpBar) {
+        visual.hpBar = this.ctx.scene.add.graphics();
+        visual.container.add(visual.hpBar);
+      }
+      visual.hpBar.clear();
       const barW = 40;
       const barH = 5;
       const barX = 16 - barW / 2;
@@ -241,6 +248,9 @@ export class ResourceEntityRenderer {
       visual.hpBar.fillRect(barX, barY, barW, barH);
       visual.hpBar.fillStyle(0x4caf50, 1);
       visual.hpBar.fillRect(barX, barY, (ent.hp / ent.maxHp) * barW, barH);
+    } else if (visual.hpBar) {
+      visual.hpBar.destroy();
+      visual.hpBar = undefined;
     }
   }
 

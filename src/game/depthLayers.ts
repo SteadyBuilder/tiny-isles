@@ -40,5 +40,19 @@ export const DEPTH = {
 
 /** Y-sorted depth for a world object at `y`, with optional per-object bias. Pure. */
 export function ySortDepth(y: number, bias: number = 0): number {
-  return Y_SORT_OFFSET + y + bias;
+  return Y_SORT_OFFSET + Math.round(y) + bias;
 }
+
+/**
+ * depth 값이 실제로 변경되었을 때만 setDepth를 호출하여
+ * 매 프레임 불필요한 Phaser DisplayList 재정렬(queueDepthSort)을 방지합니다.
+ */
+export function setDepthIfChanged(
+  target: { depth: number; setDepth: (value: number) => unknown },
+  nextDepth: number
+): void {
+  if (target.depth !== nextDepth) {
+    target.setDepth(nextDepth);
+  }
+}
+

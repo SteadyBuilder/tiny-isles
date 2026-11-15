@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GARRISON_CONFIG } from '../../data/worldRules';
 import { GarrisonUnit } from '../../types/game';
-import { DEPTH, ySortDepth } from '../depthLayers';
+import { DEPTH, setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
 import { MonsterVisual, WaveSystem } from './WaveSystem';
 
@@ -147,8 +147,9 @@ export class GarrisonSystem {
     ref.sprite.x += (dx / dist) * step;
     ref.sprite.y += (dy / dist) * step;
     ref.sprite.setFlipX(dx < 0);
-    ref.sprite.setDepth(ySortDepth(ref.sprite.y, 22));
-    ref.label.setPosition(ref.sprite.x, ref.sprite.y - 40).setDepth(ySortDepth(ref.sprite.y, 29));
+    setDepthIfChanged(ref.sprite, ySortDepth(ref.sprite.y, 22));
+    ref.label.setPosition(ref.sprite.x, ref.sprite.y - 40);
+    setDepthIfChanged(ref.label, ySortDepth(ref.sprite.y, 29));
     this.playAnim(ref, 'run');
   }
 

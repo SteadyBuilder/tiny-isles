@@ -33,6 +33,10 @@ export class ExpansionAltarRenderer {
     this.rootContainer.setDepth(DEPTH.ALTAR_CARDS);
   }
 
+  public getCardContainers(): Phaser.GameObjects.Container[] {
+    return Array.from(this.cards.values()).map((c) => c.container);
+  }
+
   public render(islands: ReadonlyArray<Island>, inventory: Inventory): void {
     const locked = islands.filter((isl) => !isl.unlocked);
     const structureKey = locked.map((isl) => isl.id).join(',');

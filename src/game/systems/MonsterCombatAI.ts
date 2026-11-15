@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
+import { PERFORMANCE_CONFIG } from '../../data/performanceConfig';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
 import { ConstructedBuilding, Island } from '../../types/game';
 import { sound } from '../../lib/sound';
 import { getTerritoryCorePos } from '../constants';
-import { ySortDepth } from '../depthLayers';
+import { setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { findNextInwardTargetTerritory } from '../utils/waveUtils';
 import {
   getMonsterWallCollisionBox,
@@ -28,11 +29,19 @@ export interface IMonsterCombatContext {
   broadcastMonsterHit?: (monsterId: string, damage: number, attackerName: string) => void;
 }
 
+interface CachedBlockerTarget {
+  lastSearchTime: number;
+  buildingId: string | null;
+  targetX: number;
+  targetY: number;
+}
+
 /**
  * 마물 웨이브 유닛의 목표 영지 추적, 성벽 충돌 클램핑, 방책/건물/코어 공격 AI 전담 모듈
  */
 export class MonsterCombatAI {
   private ctx: IMonsterCombatContext;
+  private blockerCache = new Map<string, CachedBlockerTarget>();
 
   constructor(ctx: IMonsterCombatContext) {
     this.ctx = ctx;
@@ -58,36 +67,62 @@ export class MonsterCombatAI {
 
       const corePos = getTerritoryCorePos(targetIsl.gridX, targetIsl.gridY);
 
-      // 1순위: 전 영지 성벽(성문 포함 닫힌 방책) 및 목표 영지 내 방해 건물 탐색
+      // 1순위: 전 영지 성벽 및 목표 영지 내 방해 건물 탐색 (150ms 주기 캐싱으로 O(M*B) 프레임 부하 절감)
       let blockingBuilding: ConstructedBuilding | null = null;
       let blockingTargetX = corePos.x;
       let blockingTargetY = corePos.y;
-      let minBldDist = 96;
-      for (const cb of constructedBuildings) {
-        if (cb.hp <= 0) continue;
-        if (cb.category !== 'wall' && cb.territoryId !== targetIsl.id) continue;
 
-        let nearestX = cb.x;
-        let nearestY = cb.y;
-        let d = Math.hypot(m.x - cb.x, m.y - cb.y);
+      const cached = this.blockerCache.get(m.id);
+      const canUseCache =
+        cached &&
+        time - cached.lastSearchTime < PERFORMANCE_CONFIG.monsterTargetSearchIntervalMs;
 
-        if (cb.category === 'wall') {
-          const solidBox = getMonsterWallCollisionBox(cb);
-          if (solidBox) {
-            const hit = nearestPointOnCollisionBox(m.x, m.y, solidBox);
-            d = hit.dist;
-            nearestX = hit.x;
-            nearestY = hit.y;
+      if (canUseCache) {
+        if (cached.buildingId) {
+          const found = constructedBuildings.find(
+            (cb) => cb.id === cached.buildingId && cb.hp > 0
+          );
+          if (found) {
+            blockingBuilding = found;
+            blockingTargetX = cached.targetX;
+            blockingTargetY = cached.targetY;
+          }
+        }
+      } else {
+        let minBldDist = 96;
+        for (const cb of constructedBuildings) {
+          if (cb.hp <= 0) continue;
+          if (cb.category !== 'wall' && cb.territoryId !== targetIsl.id) continue;
+
+          let nearestX = cb.x;
+          let nearestY = cb.y;
+          let d = Math.hypot(m.x - cb.x, m.y - cb.y);
+
+          if (cb.category === 'wall') {
+            const solidBox = getMonsterWallCollisionBox(cb);
+            if (solidBox) {
+              const hit = nearestPointOnCollisionBox(m.x, m.y, solidBox);
+              d = hit.dist;
+              nearestX = hit.x;
+              nearestY = hit.y;
+            }
+          }
+
+          const threshold = cb.category === 'wall' ? 96 : 85;
+          if (d < threshold && d < minBldDist) {
+            minBldDist = d;
+            blockingBuilding = cb;
+            blockingTargetX = nearestX;
+            blockingTargetY = nearestY;
           }
         }
 
-        const threshold = cb.category === 'wall' ? 96 : 85;
-        if (d < threshold && d < minBldDist) {
-          minBldDist = d;
-          blockingBuilding = cb;
-          blockingTargetX = nearestX;
-          blockingTargetY = nearestY;
-        }
+        this.blockerCache.set(m.id, {
+          lastSearchTime: time,
+          buildingId: blockingBuilding ? blockingBuilding.id : null,
+          targetX: blockingTargetX,
+          targetY: blockingTargetY,
+        });
       }
 
       let targetX = blockingBuilding ? blockingTargetX : corePos.x;
@@ -114,7 +149,7 @@ export class MonsterCombatAI {
         m.direction = vx < 0 ? 'left' : 'right';
 
         mv.container.setPosition(m.x, m.y);
-        mv.container.setDepth(ySortDepth(m.y, 28));
+        setDepthIfChanged(mv.container, ySortDepth(m.y, 28));
         mv.sprite.setFlipX(m.direction === 'left');
 
         if (clamp.blockedBy) {
@@ -128,6 +163,12 @@ export class MonsterCombatAI {
             targetX = clamp.blockedBy.x;
             targetY = clamp.blockedBy.y;
           }
+          this.blockerCache.set(m.id, {
+            lastSearchTime: time,
+            buildingId: clamp.blockedBy.id,
+            targetX,
+            targetY,
+          });
           canAttackNow = true;
         }
       }
@@ -200,6 +241,7 @@ export class MonsterCombatAI {
     this.ctx.playExplosionAt(deadM.x, deadM.y);
     mv.container.destroy();
     monsters.delete(params.monsterId);
+    this.blockerCache.delete(params.monsterId);
 
     const rewardTier = deadM.isBoss ? MONSTER_KILL_REWARDS.boss : MONSTER_KILL_REWARDS.regular;
     const rewardWood = Math.round(rewardTier.wood * params.bonusMultiplier);

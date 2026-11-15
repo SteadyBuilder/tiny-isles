@@ -26,6 +26,10 @@ export class TerritoryStructureRenderer {
     return this.buildingColliders;
   }
 
+  public getBuildingVisuals(): ReadonlyArray<Phaser.GameObjects.Container> {
+    return this.buildingVisuals;
+  }
+
   public spawnAllBuildings(islands: Island[]): void {
     this.buildings = [];
     this.buildingVisuals.forEach((c) => c.destroy());

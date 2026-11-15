@@ -7,7 +7,7 @@ import {
   getIslandOrigin,
   getTerritoryCorePos,
 } from '../../constants';
-import { ySortDepth } from '../../depthLayers';
+import { setDepthIfChanged, ySortDepth } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
@@ -267,9 +267,11 @@ export class PlayerMovementController {
 
     const px = this.playerSprite.x;
     const py = this.playerSprite.y;
-    this.playerSprite.setDepth(ySortDepth(py, 24));
-    this.playerNameTag.setPosition(px, py - 42).setDepth(ySortDepth(py, 30));
-    this.playerIndicator.setPosition(px, py - 54).setDepth(ySortDepth(py, 30));
+    setDepthIfChanged(this.playerSprite, ySortDepth(py, 24));
+    this.playerNameTag.setPosition(px, py - 42);
+    setDepthIfChanged(this.playerNameTag, ySortDepth(py, 30));
+    this.playerIndicator.setPosition(px, py - 54);
+    setDepthIfChanged(this.playerIndicator, ySortDepth(py, 30));
 
     const isHoldInput = this.spaceKey?.isDown || this.eKey?.isDown || this.isActionHolding;
     if (isHoldInput && time - this.lastInteractTime >= 240) {

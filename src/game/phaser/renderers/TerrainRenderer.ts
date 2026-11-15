@@ -27,6 +27,10 @@ export class TerrainRenderer {
     return this.waterColliders;
   }
 
+  public getChunkImages(): ReadonlyArray<Phaser.GameObjects.Image> {
+    return this.chunkImages;
+  }
+
   public bakeTerrainChunks(): void {
     this.clearChunks();
     const baked = bakeTerrainChunkTextures(this.scene, this.terrain);

@@ -10,9 +10,11 @@ import { PlayerMovementController } from '../controllers/PlayerMovementControlle
 import { TerritoryActionController } from '../controllers/TerritoryActionController';
 import { TerritoryPassiveSystem } from '../controllers/TerritoryPassiveSystem';
 import { TowerPlacementController } from '../controllers/TowerPlacementController';
+import { ViewportCullingController } from '../controllers/ViewportCullingController';
 import { WorldEventBusController } from '../controllers/WorldEventBusController';
 import { WorldPersistenceController } from '../controllers/WorldPersistenceController';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
+import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
@@ -39,6 +41,7 @@ export interface IWorldControllersHost {
   drawExpansionAltars: () => void;
   getWallColliders: () => Phaser.Physics.Arcade.StaticGroup | null;
   terrainRenderer: TerrainRenderer;
+  altarRenderer: ExpansionAltarRenderer;
   effectsRenderer: WorldEffectsRenderer;
   territoryStructureRenderer: TerritoryStructureRenderer;
   constructedBuildingRenderer: ConstructedBuildingRenderer;
@@ -53,6 +56,7 @@ export interface WorldControllersBundle {
   playerInteraction: PlayerInteractionController;
   playerMovement: PlayerMovementController;
   towerPlacement: TowerPlacementController;
+  viewportCulling: ViewportCullingController;
   eventBus: WorldEventBusController;
 }
 
@@ -214,12 +218,22 @@ export function createWorldControllersBundle(
     },
   });
 
+  const viewportCulling = new ViewportCullingController({
+    scene: host.scene,
+    getChunkImages: () => host.terrainRenderer.getChunkImages(),
+    getResourceVisuals: () => host.resourceEntityRenderer.getEntityVisuals(),
+    getTerritoryBuildingVisuals: () => host.territoryStructureRenderer.getBuildingVisuals(),
+    getConstructedVisuals: () => host.constructedBuildingRenderer.getVisuals(),
+    getAltarCardContainers: () => host.altarRenderer.getCardContainers(),
+  });
+
   return {
     territoryPassive,
     territoryAction,
     playerInteraction,
     playerMovement,
     towerPlacement,
+    viewportCulling,
     eventBus,
   };
 }

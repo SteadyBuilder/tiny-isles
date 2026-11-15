@@ -222,6 +222,7 @@ export class WorldScene extends Phaser.Scene {
       drawExpansionAltars: () => this.drawExpansionAltars(),
       getWallColliders: () => this.wallColliders,
       terrainRenderer: this.terrainRenderer,
+      altarRenderer: this.altarRenderer,
       effectsRenderer: this.effectsRenderer,
       territoryStructureRenderer: this.territoryStructureRenderer,
       constructedBuildingRenderer: this.constructedBuildingRenderer,
@@ -235,6 +236,7 @@ export class WorldScene extends Phaser.Scene {
     this.controllers.playerMovement.setupCamera();
     this.controllers.playerMovement.setupInputs();
     this.controllers.eventBus.setup();
+    this.controllers.viewportCulling.forceCullNow();
     this.persistence.exposeTestHook();
 
     this.unbindWebGLGuard = attachWebGLContextGuard({
@@ -260,6 +262,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems.livingWorldCoordinator.update(delta);
     this.controllers.territoryPassive.update(delta);
     this.controllers.playerMovement.update(time);
+    this.controllers.viewportCulling.update(time);
     this.effectsRenderer.updateClouds();
     this.monsterIndicatorRenderer.update(time, this.systems.waveSystem.getMonsterVisuals());
     this.systems.multiplayerSync?.maybeBroadcastPlayerMove(time);
