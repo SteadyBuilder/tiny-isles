@@ -35,6 +35,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
   private localPlayerId = '';
   private isHost = true;
   private onlineCount = 1;
+  private connectionEpoch = 0;
 
   private eventHandlers = new Map<string, Set<NetworkEventHandler>>();
   private presenceHandlers = new Set<PresenceSyncHandler>();
@@ -46,10 +47,29 @@ export class SupabaseRoomTransport implements INetworkTransport {
     meta: Omit<NetworkPresenceMeta, 'joinedAt'>
   ): void {
     this.cleanupChannel();
+    const epoch = ++this.connectionEpoch;
     this.localPlayerId = playerId;
     this.status = 'connecting';
 
     const channelName = `tiny_isles_room_${roomId}`;
+    void this.openChannel(channelName, playerId, meta, epoch);
+  }
+
+  private async openChannel(
+    channelName: string,
+    playerId: string,
+    meta: Omit<NetworkPresenceMeta, 'joinedAt'>,
+    epoch: number
+  ): Promise<void> {
+    const targetTopic = `realtime:${channelName}`;
+    const staleChannels = supabase
+      .getChannels()
+      .filter((ch) => ch.topic === targetTopic);
+    if (staleChannels.length > 0) {
+      await Promise.all(staleChannels.map((ch) => supabase.removeChannel(ch)));
+    }
+    if (epoch !== this.connectionEpoch) return;
+
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: false },
@@ -60,6 +80,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
 
     channel
       .on('presence', { event: 'sync' }, () => {
+        if (epoch !== this.connectionEpoch) return;
         const rawState = channel.presenceState() as Record<string, PresenceRawEntry[]>;
         const { isHost, hostId, onlineCount } = electHostFromPresence(rawState, playerId);
         this.isHost = isHost;
@@ -82,9 +103,11 @@ export class SupabaseRoomTransport implements INetworkTransport {
         );
       })
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
+        if (epoch !== this.connectionEpoch) return;
         this.leaveHandlers.forEach((h) => h(key));
       })
       .on('broadcast', { event: '*' }, ({ event, payload }: { event: string; payload: unknown }) => {
+        if (epoch !== this.connectionEpoch) return;
         const env = (payload ?? {}) as BroadcastEnvelope;
         if (!serverSync.isValidIncomingEvent(env.eventId, env.senderId, this.localPlayerId)) {
           return;
@@ -94,6 +117,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
         handlers.forEach((handler) => handler(payload));
       })
       .subscribe(async (subStatus: string) => {
+        if (epoch !== this.connectionEpoch) return;
         if (subStatus === 'SUBSCRIBED') {
           this.status = 'connected';
           const currentPresence = channel.presenceState() as Record<string, PresenceEntryMeta[]>;
@@ -108,9 +132,11 @@ export class SupabaseRoomTransport implements INetworkTransport {
   }
 
   private cleanupChannel(): void {
+    this.connectionEpoch += 1;
     if (this.channel) {
-      void this.channel.unsubscribe();
+      const ch = this.channel;
       this.channel = null;
+      void supabase.removeChannel(ch);
     }
     this.status = 'disconnected';
   }
