@@ -8,6 +8,7 @@ import {
   PlayerAction,
   PlayerColor,
 } from '../../../types/game';
+import { RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
@@ -27,6 +28,9 @@ export interface IWorldSystemsHost {
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
+  getRoomId?: () => string;
+  getRoomMode?: () => RoomMode;
+  onCoreDestroyed?: () => void;
   getPlayerPosition: () => { x: number; y: number };
   respawnPlayerAt: (x: number, y: number) => void;
   applyRestoredPlayerPosition?: (x: number, y: number) => void;
@@ -110,6 +114,9 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       multiplayerSync?.broadcastTerritoryLost(territoryId),
     broadcastCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) =>
       multiplayerSync?.broadcastCoreHpSync(territoryId, coreHp, coreMaxHp, damageDelta),
+    broadcastWorldDefenseFailed: (resetAt, attackerName) =>
+      multiplayerSync?.broadcastWorldDefenseFailed(resetAt, attackerName),
+    onDefenseFailedReset: () => host.onCoreDestroyed?.(),
   });
 
   const waveSystem = new WaveSystem(
@@ -186,6 +193,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getPlayerId: host.getPlayerId,
     getPlayerName: host.getPlayerName,
     getPlayerColor: host.getPlayerColor,
+    getRoomId: host.getRoomId,
+    getRoomMode: host.getRoomMode,
     getLocalPlayerState: host.getLocalPlayerState,
     onOnlineCountChanged: (count) => {
       waveSystem.setOnlineCount(count);

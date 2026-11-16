@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { INSTANCE_ROOM_DEFAULTS, getDifficultyConfig } from '../../../data/missions';
+import { computeMetaBonuses } from '../../../data/metaProgression';
+import { saveRepository } from '../../../lib/repositories/LocalStorageSaveRepository';
 import { storage } from '../../../lib/storage';
 import {
   ConstructedBuilding,
@@ -6,8 +9,10 @@ import {
   Island,
   PlayerColor,
 } from '../../../types/game';
+import { MetaBonusSummary, RoomConfig } from '../../../types/room';
 import { getTerritoryCorePos } from '../../constants';
 import { GameEvents } from '../../events/gameEvents';
+import { MissionSystem } from '../../systems/MissionSystem';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { WorldPersistenceController } from '../controllers/WorldPersistenceController';
@@ -30,6 +35,26 @@ export class WorldScene extends Phaser.Scene {
   private playerName = '수호자';
   private playerId = '';
   private initialZoom = 1.0;
+
+  private roomConfig: RoomConfig = {
+    roomId: 'solo_local',
+    mode: 'solo',
+    missionId: INSTANCE_ROOM_DEFAULTS.defaultMissionId,
+    difficulty: INSTANCE_ROOM_DEFAULTS.defaultDifficulty,
+    maxPlayers: INSTANCE_ROOM_DEFAULTS.maxPlayers,
+    hostPlayerId: '',
+  };
+  private metaBonuses: MetaBonusSummary = computeMetaBonuses(saveRepository.loadMetaProgression());
+  private missionSystem!: MissionSystem;
+  private isPaused = false;
+  private onPauseToggled = (paused: boolean) => {
+    if (this.roomConfig.mode !== 'solo') return;
+    this.isPaused = paused;
+    if (this.physics?.world) {
+      if (paused) this.physics.world.pause();
+      else this.physics.world.resume();
+    }
+  };
 
   private islands: Island[] = [];
   private constructedBuildings: ConstructedBuilding[] = [];
@@ -58,19 +83,40 @@ export class WorldScene extends Phaser.Scene {
 
   public init(data?: { playerName?: string; playerColor?: PlayerColor; zoom?: number }): void {
     this.isCleanedUp = false;
+    this.isPaused = false;
     this.playerId = storage.getPlayerId();
     const profile = storage.loadProfile();
     this.playerName = data?.playerName || profile.name || '수호자';
     this.playerColor = data?.playerColor || profile.color || 'blue';
     this.initialZoom = data?.zoom || storage.loadZoom() || 1.0;
-    this.inventory = storage.loadInventory();
+
+    const regRoom = this.registry.get('roomConfig') as RoomConfig | undefined;
+    if (regRoom) {
+      this.roomConfig = regRoom;
+    } else {
+      this.roomConfig = {
+        ...this.roomConfig,
+        hostPlayerId: this.playerId,
+      };
+    }
+
+    const regBonuses = this.registry.get('metaBonuses') as MetaBonusSummary | undefined;
+    this.metaBonuses = regBonuses ?? computeMetaBonuses(saveRepository.loadMetaProgression());
+
+    this.inventory = {
+      wood: 30 + this.metaBonuses.bonusWood,
+      stone: 20 + this.metaBonuses.bonusStone,
+      gold: 10 + this.metaBonuses.bonusGold,
+    };
   }
 
   public create(): void {
     this.input.addPointer(2);
+    this.missionSystem = new MissionSystem(this.roomConfig);
 
     this.persistence = new WorldPersistenceController({
       isSceneAlive: () => this.isSceneAlive(),
+      isInstanceSession: () => true,
       getPlayerName: () => this.playerName,
       getIslands: () => this.islands,
       getConstructedBuildings: () => this.constructedBuildings,
@@ -95,7 +141,12 @@ export class WorldScene extends Phaser.Scene {
         this.controllers.territoryAction.handleConstructBuilding(id, type, slot, true),
     });
 
-    const loaded = this.persistence.loadInitialWorldData();
+    const difficultyCfg = getDifficultyConfig(this.roomConfig.difficulty);
+    const loaded = this.persistence.loadInitialWorldData({
+      isInstanceSession: true,
+      coreHpBonusRatio: this.metaBonuses.coreHpBonusRatio,
+      unlockCostDiscount: difficultyCfg.unlockCostDiscount,
+    });
     this.islands = loaded.islands;
     this.constructedBuildings = loaded.constructedBuildings;
 
@@ -143,6 +194,9 @@ export class WorldScene extends Phaser.Scene {
       getPlayerId: () => this.playerId,
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
+      getRoomId: () => this.roomConfig.roomId,
+      getRoomMode: () => this.roomConfig.mode,
+      onCoreDestroyed: () => this.missionSystem?.failByCoreDestroyed(),
       getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
       respawnPlayerAt: (x, y) => this.controllers?.playerMovement.respawnAt(x, y),
       applyRestoredPlayerPosition: (x, y) =>
@@ -269,18 +323,21 @@ export class WorldScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupScene());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanupScene());
 
-    // 5. Notify React & Initialize Living Isles Coordinator
+    // 5. Notify React & Initialize Instance Mission
+    GameEvents.on('game-pause-toggled', this.onPauseToggled);
     GameEvents.emit('scene-ready', this);
+    GameEvents.emit('inventory-updated', this.inventory);
+    GameEvents.emit('mission-progress-updated', this.missionSystem.getProgressState());
     this.persistence.emitWorldStateToReact(true);
     this.systems.waveSystem.emitWaveState();
-    void this.systems.livingWorldCoordinator.initialize();
   }
 
   public update(time: number, delta: number): void {
+    if (this.isPaused) return;
     this.systems.waveSystem.update(time, delta);
     this.systems.towerDefenseSystem.update(time, delta);
     this.systems.garrisonSystem.update(time, delta);
-    this.systems.livingWorldCoordinator.update(delta);
+    this.missionSystem.update(delta, this.systems.waveSystem.getWaveState(), this.islands);
     this.controllers.territoryPassive.update(delta);
     this.controllers.playerMovement.update(time);
     this.controllers.viewportCulling.update(time);
@@ -329,6 +386,7 @@ export class WorldScene extends Phaser.Scene {
 
   private cleanupScene(): void {
     if (this.isCleanedUp) return;
+    GameEvents.off('game-pause-toggled', this.onPauseToggled);
     this.persistence?.flushAndDestroy();
     this.isCleanedUp = true;
     this.controllers?.eventBus?.destroy();

@@ -6,19 +6,18 @@ import {
   PlayerColor,
   VillageTier,
 } from '../../../types/game';
-import { supabase } from '../../../lib/supabase';
-import { serverSync } from '../../../lib/serverSync';
+import { RoomMode } from '../../../types/room';
+import { INetworkTransport } from '../../../lib/contracts/INetworkTransport';
+import { LocalOfflineTransport } from '../../../lib/transports/LocalOfflineTransport';
+import { SupabaseRoomTransport } from '../../../lib/transports/SupabaseRoomTransport';
 import { GameEvents } from '../../events/gameEvents';
-import {
-  computeMonotonicJoinedAt,
-  electHostFromPresence,
-  PresenceEntryMeta,
-} from './HostAuthorityHelper';
 
 export interface IMultiplayerChannelCallbacks {
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
+  getRoomId?: () => string;
+  getRoomMode?: () => RoomMode;
   onOnlineCountChanged: (count: number) => void;
   onHostStatusChanged?: (isHost: boolean) => void;
   onRemotePlayerMove: (player: Player) => void;
@@ -52,11 +51,6 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteWorldDefenseFailed?: (resetAt: string, attackerName: string) => void;
 }
 
-interface BroadcastMeta {
-  eventId?: string;
-  senderId?: string;
-}
-
 interface LocalBusEnvelope {
   type?: string;
   senderId?: string;
@@ -64,13 +58,13 @@ interface LocalBusEnvelope {
 }
 
 /**
- * BroadcastChannel(로컬 탭) 및 Supabase Presence/Broadcast 채널 연결·라우팅 전담 라우터
+ * INetworkTransport(LocalOffline / SupabaseRoom / 추후 SteamP2P) 기반 멀티플레이 채널 라우터
  */
 export class MultiplayerChannelRouter {
   private callbacks: IMultiplayerChannelCallbacks;
+  private transport: INetworkTransport | null = null;
   private localBus: BroadcastChannel | null = null;
-  private supabaseChannel: ReturnType<typeof supabase.channel> | null = null;
-  private isSubscribed = false;
+  private unsubscribers: Array<() => void> = [];
   private isHost = true;
 
   constructor(callbacks: IMultiplayerChannelCallbacks) {
@@ -81,10 +75,24 @@ export class MultiplayerChannelRouter {
     return this.isHost;
   }
 
-  public connect(): void {
+  public connect(customTransport?: INetworkTransport): void {
     const playerId = this.callbacks.getPlayerId();
-    this.setupLocalBus(playerId);
-    this.setupSupabaseChannel(playerId);
+    const roomId = this.callbacks.getRoomId?.() || 'default_room';
+    const roomMode: RoomMode = this.callbacks.getRoomMode?.() || 'solo';
+
+    this.transport =
+      customTransport ??
+      (roomMode === 'solo' ? new LocalOfflineTransport() : new SupabaseRoomTransport());
+
+    if (roomMode === 'coop') {
+      this.setupLocalBus(playerId, roomId);
+    }
+
+    this.bindTransportEvents();
+    this.transport.connect(roomId, playerId, {
+      name: this.callbacks.getPlayerName(),
+      color: this.callbacks.getPlayerColor(),
+    });
   }
 
   public emit<T extends object>(
@@ -95,410 +103,193 @@ export class MultiplayerChannelRouter {
   ): void {
     const playerId = this.callbacks.getPlayerId();
     this.localBus?.postMessage({ type: localType, senderId: playerId, payload: localPayload });
-    if (this.supabaseChannel && this.isSubscribed) {
-      serverSync.broadcast(this.supabaseChannel, remoteEvent, remotePayload, playerId);
-    }
+    this.transport?.emit(remoteEvent, remotePayload);
   }
 
   public destroy(): void {
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
+
     if (this.localBus) {
       this.localBus.close();
       this.localBus = null;
     }
-
-    if (this.supabaseChannel) {
-      void this.supabaseChannel.unsubscribe();
-      this.supabaseChannel = null;
-      this.isSubscribed = false;
+    if (this.transport) {
+      this.transport.disconnect();
+      this.transport = null;
     }
   }
 
-  private setupLocalBus(playerId: string): void {
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+  private bindTransportEvents(): void {
+    const t = this.transport;
+    if (!t) return;
 
-    this.localBus = new BroadcastChannel('tiny_isles_multiplayer');
+    this.unsubscribers.push(
+      t.onPresenceSync((snapshot) => {
+        if (this.isHost !== snapshot.isHost) {
+          this.isHost = snapshot.isHost;
+          this.callbacks.onHostStatusChanged?.(snapshot.isHost);
+        }
+        this.callbacks.onOnlineCountChanged(snapshot.onlineCount);
+        GameEvents.emit('online-count-changed', snapshot.onlineCount);
+        GameEvents.emit('room-members-updated', snapshot.members);
+      }),
+      t.onPlayerLeave((playerId) => {
+        this.callbacks.onRemotePlayerLeave(playerId);
+      }),
+      t.on<Player>('player_move', (p) => this.callbacks.onRemotePlayerMove(p)),
+      t.on<{ entityId: string; damage: number; hitBy: string }>('entity_hit', (p) =>
+        this.callbacks.onRemoteEntityHit(p.entityId, p.damage, p.hitBy)
+      ),
+      t.on<{ islandId: number; unlockedBy: string; ownerId?: string }>('island_unlocked', (p) =>
+        this.callbacks.onRemoteIslandUnlocked(p.islandId, p.unlockedBy, p.ownerId)
+      ),
+      t.on<{ territoryId: number }>('village_upgraded', (p) =>
+        this.callbacks.onRemoteVillageUpgraded(p.territoryId)
+      ),
+      t.on<{ building: ConstructedBuilding }>('building_constructed', (p) => {
+        if (p.building) this.callbacks.onRemoteBuildingConstructed(p.building);
+      }),
+      t.on<{ isBossWave: boolean }>('wave_spawned', (p) =>
+        this.callbacks.onRemoteWaveSpawned(p.isBossWave)
+      ),
+      t.on<{ isBossWave: boolean; isEarlySummon: boolean }>('wave_summon_request', (p) =>
+        this.callbacks.onRemoteWaveSummonRequest?.(Boolean(p.isBossWave), Boolean(p.isEarlySummon))
+      ),
+      t.on<{ monsters: Monster[]; waveCount: number; bossWaveCount: number }>('monsters_sync', (p) =>
+        this.callbacks.onRemoteMonstersSync(p.monsters || [], p.waveCount ?? 0, p.bossWaveCount ?? 0)
+      ),
+      t.on<{ monsterId: string; damage: number; attackerName: string }>('monster_hit', (p) =>
+        this.callbacks.onRemoteMonsterHit(p.monsterId, p.damage, p.attackerName)
+      ),
+      t.on<{ amount: number }>('threat_added', (p) =>
+        this.callbacks.onRemoteThreatAdded?.(Number(p.amount ?? 0))
+      ),
+      t.on<{ threatPercent: number; waveCount: number; bossWaveCount: number }>('threat_sync', (p) =>
+        this.callbacks.onRemoteThreatSync?.(
+          Number(p.threatPercent ?? 0),
+          Number(p.waveCount ?? 0),
+          Number(p.bossWaveCount ?? 0)
+        )
+      ),
+      t.on<{ territoryId: number; reason?: string }>('territory_lost', (p) =>
+        this.callbacks.onRemoteTerritoryLost(p.territoryId, p.reason || '마물 군단')
+      ),
+      t.on<{ buildingId: string; hp: number; maxHp: number; damageDelta?: number }>(
+        'building_hp_sync',
+        (p) => this.callbacks.onRemoteBuildingHpSync?.(p.buildingId, p.hp, p.maxHp, p.damageDelta)
+      ),
+      t.on<{ buildingId: string }>('building_destroyed', (p) =>
+        this.callbacks.onRemoteBuildingDestroyed?.(p.buildingId)
+      ),
+      t.on<{ territoryId: number; coreHp: number; coreMaxHp: number; damageDelta?: number }>(
+        'core_hp_sync',
+        (p) =>
+          this.callbacks.onRemoteCoreHpSync?.(p.territoryId, p.coreHp, p.coreMaxHp, p.damageDelta)
+      ),
+      t.on<{ territoryId: number }>('repair_territory_request', (p) =>
+        this.callbacks.onRemoteRepairTerritoryRequest?.(p.territoryId)
+      ),
+      t.on<{ entity: Entity }>('entity_respawned', (p) => {
+        if (p.entity) this.callbacks.onRemoteEntityRespawned?.(p.entity);
+      }),
+      t.on<{ resetAt: string; attackerName: string }>('world_defense_failed', (p) => {
+        if (p.resetAt) {
+          this.callbacks.onRemoteWorldDefenseFailed?.(p.resetAt, p.attackerName || '마물 군단');
+        }
+      })
+    );
+  }
+
+  private setupLocalBus(playerId: string, roomId: string): void {
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    this.localBus = new BroadcastChannel(`tiny_isles_room_${roomId}`);
     this.localBus.onmessage = (event: MessageEvent<LocalBusEnvelope>) => {
       const data = event.data;
       if (!data || data.senderId === playerId || !data.type) return;
-
-      switch (data.type) {
-        case 'player_move':
-          this.callbacks.onRemotePlayerMove(data.payload as Player);
-          break;
-        case 'hit': {
-          const { entityId, damage, hitBy } = data.payload as {
-            entityId: string;
-            damage: number;
-            hitBy: string;
-          };
-          this.callbacks.onRemoteEntityHit(entityId, damage, hitBy);
-          break;
-        }
-        case 'island_unlocked': {
-          const { islandId, unlockedBy, ownerId } = data.payload as {
-            islandId: number;
-            unlockedBy: string;
-            ownerId?: string;
-          };
-          this.callbacks.onRemoteIslandUnlocked(islandId, unlockedBy, ownerId);
-          break;
-        }
-        case 'village_upgraded': {
-          const { territoryId } = data.payload as { territoryId: number };
-          this.callbacks.onRemoteVillageUpgraded(territoryId);
-          break;
-        }
-        case 'building_constructed':
-          this.callbacks.onRemoteBuildingConstructed(data.payload as ConstructedBuilding);
-          break;
-        case 'wave_spawned': {
-          const { isBossWave } = data.payload as { isBossWave: boolean };
-          this.callbacks.onRemoteWaveSpawned(isBossWave);
-          break;
-        }
-        case 'wave_summon_request': {
-          const { isBossWave, isEarlySummon } = data.payload as {
-            isBossWave: boolean;
-            isEarlySummon: boolean;
-          };
-          this.callbacks.onRemoteWaveSummonRequest?.(Boolean(isBossWave), Boolean(isEarlySummon));
-          break;
-        }
-        case 'monsters_sync': {
-          const { monsters, waveCount, bossWaveCount } = data.payload as {
-            monsters: Monster[];
-            waveCount: number;
-            bossWaveCount: number;
-          };
-          this.callbacks.onRemoteMonstersSync(monsters || [], waveCount ?? 0, bossWaveCount ?? 0);
-          break;
-        }
-        case 'monster_hit': {
-          const { monsterId, damage, attackerName } = data.payload as {
-            monsterId: string;
-            damage: number;
-            attackerName: string;
-          };
-          this.callbacks.onRemoteMonsterHit(monsterId, damage, attackerName);
-          break;
-        }
-        case 'threat_added': {
-          const { amount } = data.payload as { amount: number };
-          this.callbacks.onRemoteThreatAdded?.(Number(amount ?? 0));
-          break;
-        }
-        case 'threat_sync': {
-          const { threatPercent, waveCount, bossWaveCount } = data.payload as {
-            threatPercent: number;
-            waveCount: number;
-            bossWaveCount: number;
-          };
-          this.callbacks.onRemoteThreatSync?.(
-            Number(threatPercent ?? 0),
-            Number(waveCount ?? 0),
-            Number(bossWaveCount ?? 0)
-          );
-          break;
-        }
-        case 'territory_lost': {
-          const { territoryId, reason } = data.payload as {
-            territoryId: number;
-            reason?: string;
-          };
-          this.callbacks.onRemoteTerritoryLost(territoryId, reason || '마물 군단');
-          break;
-        }
-        case 'building_hp_sync': {
-          const { buildingId, hp, maxHp, damageDelta } = data.payload as {
-            buildingId: string;
-            hp: number;
-            maxHp: number;
-            damageDelta?: number;
-          };
-          this.callbacks.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta);
-          break;
-        }
-        case 'building_destroyed': {
-          const { buildingId } = data.payload as { buildingId: string };
-          this.callbacks.onRemoteBuildingDestroyed?.(buildingId);
-          break;
-        }
-        case 'core_hp_sync': {
-          const { territoryId, coreHp, coreMaxHp, damageDelta } = data.payload as {
-            territoryId: number;
-            coreHp: number;
-            coreMaxHp: number;
-            damageDelta?: number;
-          };
-          this.callbacks.onRemoteCoreHpSync?.(territoryId, coreHp, coreMaxHp, damageDelta);
-          break;
-        }
-        case 'repair_territory_request': {
-          const { territoryId } = data.payload as { territoryId: number };
-          this.callbacks.onRemoteRepairTerritoryRequest?.(territoryId);
-          break;
-        }
-        case 'entity_respawned': {
-          const { entity } = data.payload as { entity: Entity };
-          if (entity) {
-            this.callbacks.onRemoteEntityRespawned?.(entity);
-          }
-          break;
-        }
-      }
+      this.handleLocalMessage(data.type, data.payload);
     };
   }
 
-  private setupSupabaseChannel(playerId: string): void {
-    const roomId = 'tiny_isles_global_hub';
-    const channel = supabase.channel(roomId, {
-      config: {
-        broadcast: { self: false },
-        presence: { key: playerId },
-      },
-    });
-    this.supabaseChannel = channel;
-
-    const isValid = (meta: BroadcastMeta) =>
-      serverSync.isValidIncomingEvent(meta.eventId, meta.senderId, playerId);
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const presenceState = channel.presenceState() as Record<string, PresenceEntryMeta[]>;
-        const { isHost, onlineCount } = electHostFromPresence(presenceState, playerId);
-        if (this.isHost !== isHost) {
-          this.isHost = isHost;
-          this.callbacks.onHostStatusChanged?.(isHost);
-        }
-        this.callbacks.onOnlineCountChanged(onlineCount);
-        GameEvents.emit('online-count-changed', onlineCount);
-      })
-      .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
-        this.callbacks.onRemotePlayerLeave(key);
-      })
-      .on('broadcast', { event: 'player_move' }, ({ payload }: { payload: Player & BroadcastMeta }) => {
-        if (isValid(payload)) this.callbacks.onRemotePlayerMove(payload);
-      })
-      .on(
-        'broadcast',
-        { event: 'entity_hit' },
-        ({ payload }: { payload: { entityId: string; damage: number; hitBy: string } & BroadcastMeta }) => {
-          if (isValid(payload)) this.callbacks.onRemoteEntityHit(payload.entityId, payload.damage, payload.hitBy);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'island_unlocked' },
-        ({ payload }: { payload: { islandId: number; unlockedBy: string; ownerId?: string } & BroadcastMeta }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteIslandUnlocked(payload.islandId, payload.unlockedBy, payload.ownerId);
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'village_upgraded' },
-        ({ payload }: { payload: { territoryId: number; tier: VillageTier } & BroadcastMeta }) => {
-          if (isValid(payload)) this.callbacks.onRemoteVillageUpgraded(payload.territoryId);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'building_constructed' },
-        ({ payload }: { payload: { building: ConstructedBuilding } & BroadcastMeta }) => {
-          if (isValid(payload) && payload.building) {
-            this.callbacks.onRemoteBuildingConstructed(payload.building);
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'wave_spawned' },
-        ({ payload }: { payload: { isBossWave: boolean } & BroadcastMeta }) => {
-          if (isValid(payload)) this.callbacks.onRemoteWaveSpawned(payload.isBossWave);
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'wave_summon_request' },
-        ({
-          payload,
-        }: {
-          payload: { isBossWave: boolean; isEarlySummon: boolean } & BroadcastMeta;
-        }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteWaveSummonRequest?.(
-              Boolean(payload.isBossWave),
-              Boolean(payload.isEarlySummon)
-            );
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'monsters_sync' },
-        ({
-          payload,
-        }: {
-          payload: { monsters: Monster[]; waveCount: number; bossWaveCount: number } & BroadcastMeta;
-        }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteMonstersSync(
-              payload.monsters || [],
-              payload.waveCount ?? 0,
-              payload.bossWaveCount ?? 0
-            );
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'monster_hit' },
-        ({
-          payload,
-        }: {
-          payload: { monsterId: string; damage: number; attackerName: string } & BroadcastMeta;
-        }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteMonsterHit(payload.monsterId, payload.damage, payload.attackerName);
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'threat_added' },
-        ({ payload }: { payload: { amount: number } & BroadcastMeta }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteThreatAdded?.(Number(payload.amount ?? 0));
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'threat_sync' },
-        ({
-          payload,
-        }: {
-          payload: { threatPercent: number; waveCount: number; bossWaveCount: number } & BroadcastMeta;
-        }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteThreatSync?.(
-              Number(payload.threatPercent ?? 0),
-              Number(payload.waveCount ?? 0),
-              Number(payload.bossWaveCount ?? 0)
-            );
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'territory_lost' },
-        ({ payload }: { payload: { territoryId: number; reason?: string } & BroadcastMeta }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteTerritoryLost(payload.territoryId, payload.reason || '마물 군단');
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'building_hp_sync' },
-        ({
-          payload,
-        }: {
-          payload: {
-            buildingId: string;
-            hp: number;
-            maxHp: number;
-            damageDelta?: number;
-          } & BroadcastMeta;
-        }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteBuildingHpSync?.(
-              payload.buildingId,
-              payload.hp,
-              payload.maxHp,
-              payload.damageDelta
-            );
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'building_destroyed' },
-        ({ payload }: { payload: { buildingId: string } & BroadcastMeta }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteBuildingDestroyed?.(payload.buildingId);
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'core_hp_sync' },
-        ({
-          payload,
-        }: {
-          payload: {
-            territoryId: number;
-            coreHp: number;
-            coreMaxHp: number;
-            damageDelta?: number;
-          } & BroadcastMeta;
-        }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteCoreHpSync?.(
-              payload.territoryId,
-              payload.coreHp,
-              payload.coreMaxHp,
-              payload.damageDelta
-            );
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'repair_territory_request' },
-        ({ payload }: { payload: { territoryId: number } & BroadcastMeta }) => {
-          if (isValid(payload)) {
-            this.callbacks.onRemoteRepairTerritoryRequest?.(payload.territoryId);
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'entity_respawned' },
-        ({ payload }: { payload: { entity: Entity } & BroadcastMeta }) => {
-          if (isValid(payload) && payload.entity) {
-            this.callbacks.onRemoteEntityRespawned?.(payload.entity);
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'world_defense_failed' },
-        ({
-          payload,
-        }: {
-          payload: { resetAt: string; attackerName: string } & BroadcastMeta;
-        }) => {
-          if (isValid(payload) && payload.resetAt) {
-            this.callbacks.onRemoteWorldDefenseFailed?.(
-              payload.resetAt,
-              payload.attackerName || '마물 군단'
-            );
-          }
-        }
-      )
-      .subscribe(async (status: string) => {
-        if (status === 'SUBSCRIBED') {
-          this.isSubscribed = true;
-          const currentPresence = channel.presenceState() as Record<string, PresenceEntryMeta[]>;
-          const joinedAt = computeMonotonicJoinedAt(currentPresence, Date.now());
-          await channel.track({
-            name: this.callbacks.getPlayerName(),
-            color: this.callbacks.getPlayerColor(),
-            joinedAt,
-          });
-        }
-      });
+  private handleLocalMessage(type: string, payload: unknown): void {
+    switch (type) {
+      case 'player_move':
+        this.callbacks.onRemotePlayerMove(payload as Player);
+        break;
+      case 'hit': {
+        const p = payload as { entityId: string; damage: number; hitBy: string };
+        this.callbacks.onRemoteEntityHit(p.entityId, p.damage, p.hitBy);
+        break;
+      }
+      case 'island_unlocked': {
+        const p = payload as { islandId: number; unlockedBy: string; ownerId?: string };
+        this.callbacks.onRemoteIslandUnlocked(p.islandId, p.unlockedBy, p.ownerId);
+        break;
+      }
+      case 'village_upgraded':
+        this.callbacks.onRemoteVillageUpgraded((payload as { territoryId: number }).territoryId);
+        break;
+      case 'building_constructed':
+        this.callbacks.onRemoteBuildingConstructed(payload as ConstructedBuilding);
+        break;
+      case 'wave_spawned':
+        this.callbacks.onRemoteWaveSpawned((payload as { isBossWave: boolean }).isBossWave);
+        break;
+      case 'wave_summon_request': {
+        const p = payload as { isBossWave: boolean; isEarlySummon: boolean };
+        this.callbacks.onRemoteWaveSummonRequest?.(Boolean(p.isBossWave), Boolean(p.isEarlySummon));
+        break;
+      }
+      case 'monsters_sync': {
+        const p = payload as { monsters: Monster[]; waveCount: number; bossWaveCount: number };
+        this.callbacks.onRemoteMonstersSync(p.monsters || [], p.waveCount ?? 0, p.bossWaveCount ?? 0);
+        break;
+      }
+      case 'monster_hit': {
+        const p = payload as { monsterId: string; damage: number; attackerName: string };
+        this.callbacks.onRemoteMonsterHit(p.monsterId, p.damage, p.attackerName);
+        break;
+      }
+      case 'threat_added':
+        this.callbacks.onRemoteThreatAdded?.(Number((payload as { amount: number }).amount ?? 0));
+        break;
+      case 'threat_sync': {
+        const p = payload as { threatPercent: number; waveCount: number; bossWaveCount: number };
+        this.callbacks.onRemoteThreatSync?.(
+          Number(p.threatPercent ?? 0),
+          Number(p.waveCount ?? 0),
+          Number(p.bossWaveCount ?? 0)
+        );
+        break;
+      }
+      case 'territory_lost': {
+        const p = payload as { territoryId: number; reason?: string };
+        this.callbacks.onRemoteTerritoryLost(p.territoryId, p.reason || '마물 군단');
+        break;
+      }
+      case 'building_hp_sync': {
+        const p = payload as { buildingId: string; hp: number; maxHp: number; damageDelta?: number };
+        this.callbacks.onRemoteBuildingHpSync?.(p.buildingId, p.hp, p.maxHp, p.damageDelta);
+        break;
+      }
+      case 'building_destroyed':
+        this.callbacks.onRemoteBuildingDestroyed?.((payload as { buildingId: string }).buildingId);
+        break;
+      case 'core_hp_sync': {
+        const p = payload as { territoryId: number; coreHp: number; coreMaxHp: number; damageDelta?: number };
+        this.callbacks.onRemoteCoreHpSync?.(p.territoryId, p.coreHp, p.coreMaxHp, p.damageDelta);
+        break;
+      }
+      case 'repair_territory_request':
+        this.callbacks.onRemoteRepairTerritoryRequest?.((payload as { territoryId: number }).territoryId);
+        break;
+      case 'entity_respawned': {
+        const p = payload as { entity: Entity };
+        if (p.entity) this.callbacks.onRemoteEntityRespawned?.(p.entity);
+        break;
+      }
+    }
   }
 }

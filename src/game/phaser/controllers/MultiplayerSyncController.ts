@@ -8,6 +8,7 @@ import {
   PlayerColor,
   VillageTier,
 } from '../../../types/game';
+import { RoomMode } from '../../../types/room';
 import { RemotePlayerRenderer } from '../renderers/RemotePlayerRenderer';
 import { MultiplayerChannelRouter } from './MultiplayerChannelRouter';
 
@@ -16,6 +17,8 @@ export interface IMultiplayerSyncContext {
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
+  getRoomId?: () => string;
+  getRoomMode?: () => RoomMode;
   getLocalPlayerState: () => {
     x: number;
     y: number;
@@ -69,6 +72,8 @@ export class MultiplayerSyncController {
       getPlayerId: () => this.ctx.getPlayerId(),
       getPlayerName: () => this.ctx.getPlayerName(),
       getPlayerColor: () => this.ctx.getPlayerColor(),
+      getRoomId: () => this.ctx.getRoomId?.() || 'default_room',
+      getRoomMode: () => this.ctx.getRoomMode?.() || 'solo',
       onOnlineCountChanged: (count) => this.ctx.onOnlineCountChanged(count),
       onHostStatusChanged: (isHost) => this.ctx.onHostStatusChanged?.(isHost),
       onRemotePlayerMove: (player) =>

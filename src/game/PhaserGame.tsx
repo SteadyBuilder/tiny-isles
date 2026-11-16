@@ -9,10 +9,13 @@ import {
   PlayerColor,
   WaveState,
 } from '../types/game';
+import { MetaBonusSummary, RoomConfig } from '../types/room';
 
 interface PhaserGameProps {
   playerName: string;
   playerColor: PlayerColor;
+  roomConfig: RoomConfig;
+  metaBonuses: MetaBonusSummary;
   inventory: Inventory;
   onUpdateInventory: (updater: (prev: Inventory) => Inventory) => void;
   onlineCount: number;
@@ -35,6 +38,8 @@ interface PhaserGameProps {
 export const PhaserGame: React.FC<PhaserGameProps> = ({
   playerName,
   playerColor,
+  roomConfig,
+  metaBonuses,
   inventory,
   onUpdateInventory,
   setOnlineCount,
@@ -102,6 +107,8 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     });
 
     const game = new Phaser.Game(config);
+    game.registry.set('roomConfig', roomConfig);
+    game.registry.set('metaBonuses', metaBonuses);
     gameRef.current = game;
 
     const handleProgress = (val: number) => setLoadRatio(val);

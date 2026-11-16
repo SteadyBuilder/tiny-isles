@@ -10,12 +10,17 @@ import {
   WaveState,
 } from '../../../types/game';
 import { BuildingSystem } from '../../BuildingSystem';
-import { INITIAL_ISLANDS, VILLAGE_TIER_CONFIGS } from '../../constants';
+import {
+  INITIAL_ISLANDS,
+  VILLAGE_TIER_CONFIGS,
+  getInitialConstructedBuildings,
+} from '../../constants';
 import { GameEvents } from '../../events/gameEvents';
 import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
 
 export interface IWorldPersistenceContext {
   isSceneAlive: () => boolean;
+  isInstanceSession?: () => boolean;
   getPlayerName: () => string;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
@@ -33,6 +38,12 @@ export interface IWorldPersistenceContext {
   constructBuilding: (territoryId: number, type: ConstructableType, slotIndex?: number) => void;
 }
 
+export interface InitialWorldLoadOptions {
+  isInstanceSession?: boolean;
+  coreHpBonusRatio?: number;
+  unlockCostDiscount?: number;
+}
+
 /**
  * 월드 초기 상태 로드, 디바운스 저장/React 동기화 및 디버그 테스트 훅 등록 컨트롤러
  */
@@ -46,10 +57,40 @@ export class WorldPersistenceController {
     this.ctx = ctx;
   }
 
-  public loadInitialWorldData(): {
+  public loadInitialWorldData(options?: InitialWorldLoadOptions): {
     islands: Island[];
     constructedBuildings: ConstructedBuilding[];
   } {
+    const isInstance = options?.isInstanceSession ?? this.ctx.isInstanceSession?.() ?? true;
+    const hpBonusRatio = options?.coreHpBonusRatio ?? 0;
+    const costScale = options?.unlockCostDiscount ?? 1;
+
+    if (isInstance) {
+      const islands = INITIAL_ISLANDS.map((isl: Island) => {
+        const isHome = isl.id === 0;
+        const tier: VillageTier = isHome ? 2 : 0;
+        const baseMaxHp = VILLAGE_TIER_CONFIGS[tier].coreMaxHp;
+        const boostedMaxHp = Math.round(baseMaxHp * (1 + hpBonusRatio));
+        return {
+          ...isl,
+          unlocked: isHome,
+          ownerId: undefined,
+          ownerName: undefined,
+          costWood: Math.max(0, Math.round(isl.costWood * costScale)),
+          costStone: Math.max(0, Math.round(isl.costStone * costScale)),
+          costGold: Math.max(0, Math.round(isl.costGold * costScale)),
+          villageTier: tier,
+          coreHp: boostedMaxHp,
+          coreMaxHp: boostedMaxHp,
+        };
+      }).map((isl: Island) => BuildingSystem.ensureCentralVillageState(isl));
+
+      return {
+        islands,
+        constructedBuildings: getInitialConstructedBuildings(),
+      };
+    }
+
     const savedUnlocked = storage.loadUnlockedIslands();
     const savedOwners = storage.loadIslandOwners();
     const savedTiers = storage.loadVillageTiers();
@@ -175,6 +216,9 @@ export class WorldPersistenceController {
 
   private persistWorldStateNow(): void {
     this.hasPendingSaveWorld = false;
+    if (this.ctx.isInstanceSession?.() ?? true) {
+      return;
+    }
     const islands = this.ctx.getIslands();
     const unlockedIds = islands.filter((i) => i.unlocked).map((i) => i.id);
     storage.saveUnlockedIslands(unlockedIds);

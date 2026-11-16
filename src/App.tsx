@@ -4,10 +4,15 @@ import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
 import { VillageBuildModal } from './components/VillageBuildModal';
 import { TowerPlacementBanner } from './components/TowerPlacementBanner';
-import { DefenseFailedModal } from './components/DefenseFailedModal';
+import { MissionHudBanner } from './components/MissionHudBanner';
+import { MissionResultModal } from './components/MissionResultModal';
+import { LobbyScreen } from './components/lobby/LobbyScreen';
+import { RoomWaitingModal } from './components/lobby/RoomWaitingModal';
+import { MetaProgressionModal } from './components/lobby/MetaProgressionModal';
 import { ConstructableType } from './types/game';
 import { GameEvents } from './game/events/gameEvents';
 import { useGameShellState } from './hooks/useGameShellState';
+import { useRoomLobbyState } from './hooks/useRoomLobbyState';
 
 export function App() {
   const {
@@ -37,7 +42,6 @@ export function App() {
     setPlayerGridPos,
     playerStandingTerritoryId,
     playerHp,
-    defenseFailedResetAt,
     joystickRef,
     canBuildInCurrentTerritory,
     handleShowAlert,
@@ -49,8 +53,62 @@ export function App() {
     handleZoomChange,
     handleOpenVillageModalForCurrent,
     handleOpenVillageModalById,
-    handleConfirmDefenseFailed,
   } = useGameShellState();
+
+  const {
+    sessionStatus,
+    roomConfig,
+    waitingMembers,
+    isLobbyHost,
+    showMetaModal,
+    setShowMetaModal,
+    meta,
+    metaBonuses,
+    missionProgress,
+    missionResult,
+    toggleSoloPause,
+    handleStartSolo,
+    handleCreateCoopRoom,
+    handleJoinCoopRoom,
+    handleStartCoopMatch,
+    handleLeaveToLobby,
+    handleUpgradeTrait,
+    handleSelectOrUnlockTitle,
+  } = useRoomLobbyState(playerId, profile.name, profile.color);
+
+  if (sessionStatus === 'lobby' || sessionStatus === 'waiting') {
+    return (
+      <>
+        <LobbyScreen
+          playerName={profile.name}
+          playerColor={profile.color}
+          meta={meta}
+          onStartSolo={handleStartSolo}
+          onCreateCoopRoom={handleCreateCoopRoom}
+          onJoinCoopRoom={handleJoinCoopRoom}
+          onOpenMetaModal={() => setShowMetaModal(true)}
+        />
+
+        {sessionStatus === 'waiting' && (
+          <RoomWaitingModal
+            roomConfig={roomConfig}
+            members={waitingMembers}
+            isHost={isLobbyHost}
+            onStartMatch={handleStartCoopMatch}
+            onLeaveRoom={handleLeaveToLobby}
+          />
+        )}
+
+        <MetaProgressionModal
+          isOpen={showMetaModal}
+          meta={meta}
+          onClose={() => setShowMetaModal(false)}
+          onUpgradeTrait={handleUpgradeTrait}
+          onSelectOrUnlockTitle={handleSelectOrUnlockTitle}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#1a331a]">
@@ -74,10 +132,18 @@ export function App() {
         onAddTestResources={() => GameEvents.emit('add-test-resources')}
       />
 
+      <MissionHudBanner
+        progress={missionProgress}
+        roomMode={roomConfig.mode}
+        onTogglePause={toggleSoloPause}
+      />
+
       <PhaserGame
-        key="phaser-engine"
+        key={roomConfig.roomId}
         playerName={profile.name}
         playerColor={profile.color}
+        roomConfig={roomConfig}
+        metaBonuses={metaBonuses}
         inventory={inventory}
         onUpdateInventory={handleUpdateInventory}
         onlineCount={onlineCount}
@@ -141,10 +207,32 @@ export function App() {
 
       <TowerPlacementBanner />
 
-      <DefenseFailedModal
-        isOpen={Boolean(defenseFailedResetAt)}
-        onConfirm={handleConfirmDefenseFailed}
-      />
+      {sessionStatus === 'paused' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xs rounded-3xl border border-amber-400/50 bg-slate-900 p-6 text-center text-white space-y-4 shadow-2xl">
+            <h2 className="text-xl font-black text-amber-300">일시정지</h2>
+            <p className="text-xs text-slate-300">솔로 원정 진행이 일시정지되었습니다.</p>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={toggleSoloPause}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm font-bold transition"
+              >
+                계속하기 (ESC)
+              </button>
+              <button
+                type="button"
+                onClick={handleLeaveToLobby}
+                className="w-full py-2.5 rounded-xl bg-red-600/80 hover:bg-red-500 text-sm font-bold transition"
+              >
+                원정 포기 및 로비로
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <MissionResultModal result={missionResult} onReturnToLobby={handleLeaveToLobby} />
     </div>
   );
 }

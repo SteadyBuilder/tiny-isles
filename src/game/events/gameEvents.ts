@@ -11,6 +11,11 @@ import {
   WaveState,
   WorldSyncState,
 } from '../../types/game';
+import {
+  MissionProgressState,
+  MissionResultPayload,
+  RoomMember,
+} from '../../types/room';
 import { EventBus } from '../phaser/EventBus';
 
 /**
@@ -72,6 +77,12 @@ export interface GameEventPayloads {
   'garrisons-updated': GarrisonUnit[];
   'world-state-synced': WorldSyncState;
   'world-defense-failed': { resetAt: string; attackerName: string };
+
+  // 인스턴스 룸 & 미션 시스템
+  'mission-progress-updated': MissionProgressState;
+  'mission-ended': MissionResultPayload;
+  'game-pause-toggled': boolean;
+  'room-members-updated': RoomMember[];
 
   // 자원 및 인벤토리
   'add-test-resources': void;
