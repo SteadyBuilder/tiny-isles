@@ -32,6 +32,7 @@ export interface IWaveSystemContext {
   playExplosionAt: (x: number, y: number) => void;
   addRewardResources: (wood: number, stone: number, gold: number) => void;
   broadcastWaveSpawn?: (isBossWave: boolean) => void;
+  broadcastWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
   broadcastMonstersSync?: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
   broadcastMonsterHit?: (monsterId: string, damage: number, attackerName: string) => void;
   broadcastThreatAdded?: (amount: number) => void;
@@ -132,7 +133,15 @@ export class WaveSystem {
   }
 
   public setHostMode(isHost: boolean): void {
+    const becameHost = !this.isHost && isHost;
     this.isHost = isHost;
+    if (becameHost && this.monsters.size > 0) {
+      this.ctx.broadcastMonstersSync?.(
+        this.getMonsters(),
+        this.waveState.waveCount,
+        this.waveState.bossWaveCount
+      );
+    }
   }
 
   public getIsHost(): boolean {
@@ -249,27 +258,48 @@ export class WaveSystem {
    * 준비된 플레이어가 웨이브를 즉시 소환 (처치 보상 보너스 적용)
    */
   public summonEarlyWave(isBossWave: boolean): void {
+    if (!this.isHost) {
+      this.ctx.broadcastWaveSummonRequest?.(isBossWave, true);
+      return;
+    }
+
     this.waveState.threatPercent = 0;
     this.warningIssuedForCurrentCycle = false;
     this.activeBonusMultiplier = THREAT_WAVE_CONFIG.earlySummonRewardMultiplier;
     this.spawnMonsterWave(isBossWave, true, true);
-    if (this.isHost) {
-      this.ctx.broadcastThreatSync?.(
-        this.waveState.threatPercent,
-        this.waveState.waveCount,
-        this.waveState.bossWaveCount
-      );
-    }
+    this.ctx.broadcastThreatSync?.(
+      this.waveState.threatPercent,
+      this.waveState.waveCount,
+      this.waveState.bossWaveCount
+    );
   }
 
   public triggerRegularWave(): void {
+    if (!this.isHost) {
+      this.ctx.broadcastWaveSummonRequest?.(false, false);
+      return;
+    }
     this.activeBonusMultiplier = 1.0;
     this.spawnMonsterWave(false, true, false);
   }
 
   public triggerBossWave(): void {
+    if (!this.isHost) {
+      this.ctx.broadcastWaveSummonRequest?.(true, false);
+      return;
+    }
     this.activeBonusMultiplier = 1.0;
     this.spawnMonsterWave(true, true, false);
+  }
+
+  public handleRemoteWaveSummonRequest(isBossWave: boolean, isEarlySummon: boolean): void {
+    if (!this.isHost) return;
+    if (isEarlySummon) {
+      this.summonEarlyWave(isBossWave);
+      return;
+    }
+    this.activeBonusMultiplier = 1.0;
+    this.spawnMonsterWave(isBossWave, true, false);
   }
 
   public emitWaveState(): void {
@@ -296,6 +326,35 @@ export class WaveSystem {
 
   public update(time: number, delta: number): void {
     this.combatAI.updateMonsters(time, delta);
+
+    if (!this.isHost) {
+      this.monsterSyncAccumMs = 0;
+      this.hadMonstersLastTick = this.monsters.size > 0;
+      return;
+    }
+
+    const hasMonsters = this.monsters.size > 0;
+    if (hasMonsters) {
+      this.monsterSyncAccumMs += delta;
+      if (this.monsterSyncAccumMs >= WORLD_CLOCK_CONFIG.monsterSyncIntervalMs) {
+        this.monsterSyncAccumMs = 0;
+        this.ctx.broadcastMonstersSync?.(
+          this.getMonsters(),
+          this.waveState.waveCount,
+          this.waveState.bossWaveCount
+        );
+      }
+    } else if (this.hadMonstersLastTick) {
+      this.monsterSyncAccumMs = 0;
+      this.ctx.broadcastMonstersSync?.(
+        [],
+        this.waveState.waveCount,
+        this.waveState.bossWaveCount
+      );
+    } else {
+      this.monsterSyncAccumMs = 0;
+    }
+    this.hadMonstersLastTick = hasMonsters;
   }
 
   public spawnMonsterWave(
@@ -353,6 +412,7 @@ export class WaveSystem {
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
     this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
     this.spawner.applyRemoteSync(monsters);
+    this.combatAI.pruneStaleMonsterState(new Set(this.monsters.keys()));
     this.emitWaveState();
   }
 

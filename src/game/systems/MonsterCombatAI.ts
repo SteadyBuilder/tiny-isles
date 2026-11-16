@@ -298,6 +298,19 @@ export class MonsterCombatAI {
     }
   }
 
+  public pruneStaleMonsterState(validIds: Set<string>): void {
+    for (const id of this.blockerCache.keys()) {
+      if (!validIds.has(id)) {
+        this.blockerCache.delete(id);
+      }
+    }
+    for (const id of this.aggroTargets.keys()) {
+      if (!validIds.has(id)) {
+        this.aggroTargets.delete(id);
+      }
+    }
+  }
+
   private tryUpdatePlayerAggro(
     mv: MonsterVisual,
     time: number,

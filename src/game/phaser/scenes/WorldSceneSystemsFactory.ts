@@ -122,6 +122,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
       addRewardResources: host.addResources,
       broadcastWaveSpawn: (isBossWave) => multiplayerSync?.broadcastWaveSpawn(isBossWave),
+      broadcastWaveSummonRequest: (isBossWave, isEarlySummon) =>
+        multiplayerSync?.broadcastWaveSummonRequest(isBossWave, isEarlySummon),
       broadcastMonstersSync: (monsters, waveCount, bossWaveCount) =>
         multiplayerSync?.broadcastMonstersSync(monsters, waveCount, bossWaveCount),
       broadcastMonsterHit: (monsterId, damage, attackerName) =>
@@ -196,6 +198,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
           : '🧟 외곽 영지 경계에서 마물 웨이브가 진입했습니다!'
       );
     },
+    onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
+      waveSystem.handleRemoteWaveSummonRequest(isBossWave, isEarlySummon),
     onRemoteMonstersSync: (monsters, waveCount, bossWaveCount) =>
       waveSystem.applyRemoteMonstersSync(monsters, waveCount, bossWaveCount),
     onRemoteMonsterHit: (monsterId, damage, attackerName) => {

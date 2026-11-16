@@ -28,6 +28,7 @@ export interface IMultiplayerSyncContext {
   onRemoteVillageUpgraded: (territoryId: number) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
+  onRemoteWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
   onRemoteMonstersSync: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
   onRemoteMonsterHit: (monsterId: string, damage: number, attackerName: string) => void;
   onRemoteThreatAdded?: (amount: number) => void;
@@ -65,6 +66,8 @@ export class MultiplayerSyncController {
       onRemoteBuildingConstructed: (building) =>
         this.ctx.onRemoteBuildingConstructed(building),
       onRemoteWaveSpawned: (isBossWave) => this.ctx.onRemoteWaveSpawned(isBossWave),
+      onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
+        this.ctx.onRemoteWaveSummonRequest?.(isBossWave, isEarlySummon),
       onRemoteMonstersSync: (monsters, waveCount, bossWaveCount) =>
         this.ctx.onRemoteMonstersSync(monsters, waveCount, bossWaveCount),
       onRemoteMonsterHit: (monsterId, damage, attackerName) =>
@@ -127,6 +130,10 @@ export class MultiplayerSyncController {
 
   public broadcastWaveSpawn(isBossWave: boolean): void {
     this.router.emit('wave_spawned', 'wave_spawned', { isBossWave });
+  }
+
+  public broadcastWaveSummonRequest(isBossWave: boolean, isEarlySummon: boolean): void {
+    this.router.emit('wave_summon_request', 'wave_summon_request', { isBossWave, isEarlySummon });
   }
 
   public broadcastMonstersSync(

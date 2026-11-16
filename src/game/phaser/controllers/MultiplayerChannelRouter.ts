@@ -23,6 +23,7 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteVillageUpgraded: (territoryId: number) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
+  onRemoteWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
   onRemoteMonstersSync: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
   onRemoteMonsterHit: (monsterId: string, damage: number, attackerName: string) => void;
   onRemoteThreatAdded?: (amount: number) => void;
@@ -132,6 +133,14 @@ export class MultiplayerChannelRouter {
         case 'wave_spawned': {
           const { isBossWave } = data.payload as { isBossWave: boolean };
           this.callbacks.onRemoteWaveSpawned(isBossWave);
+          break;
+        }
+        case 'wave_summon_request': {
+          const { isBossWave, isEarlySummon } = data.payload as {
+            isBossWave: boolean;
+            isEarlySummon: boolean;
+          };
+          this.callbacks.onRemoteWaveSummonRequest?.(Boolean(isBossWave), Boolean(isEarlySummon));
           break;
         }
         case 'monsters_sync': {
@@ -249,6 +258,22 @@ export class MultiplayerChannelRouter {
         { event: 'wave_spawned' },
         ({ payload }: { payload: { isBossWave: boolean } & BroadcastMeta }) => {
           if (isValid(payload)) this.callbacks.onRemoteWaveSpawned(payload.isBossWave);
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'wave_summon_request' },
+        ({
+          payload,
+        }: {
+          payload: { isBossWave: boolean; isEarlySummon: boolean } & BroadcastMeta;
+        }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteWaveSummonRequest?.(
+              Boolean(payload.isBossWave),
+              Boolean(payload.isEarlySummon)
+            );
+          }
         }
       )
       .on(

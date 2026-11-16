@@ -8,6 +8,7 @@ import {
 } from '../utils/waveUtils';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
 import { getTerritoryCorePos } from '../constants';
+import { setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 
 export interface IWaveSpawnerContext {
@@ -167,8 +168,15 @@ export class WaveSpawner {
         existing.monster.maxHp = incoming.maxHp;
         existing.monster.direction = incoming.direction;
         existing.monster.targetTerritoryId = incoming.targetTerritoryId;
+
+        existing.container.setPosition(incoming.x, incoming.y);
+        setDepthIfChanged(existing.container, ySortDepth(incoming.y, 28));
+        existing.sprite.setFlipX(incoming.direction === 'left');
+
         if (incoming.hp < prevHp) {
           this.ctx.shakeObject(existing.container);
+          MonsterVisualManager.updateHpBar(existing);
+        } else if (incoming.hp !== prevHp) {
           MonsterVisualManager.updateHpBar(existing);
         }
       } else {
