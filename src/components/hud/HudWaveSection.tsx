@@ -11,6 +11,7 @@ export interface HudWaveSectionProps {
   onSummonEarlyWave?: () => void;
   onCycleTimeScale: () => void;
   onAddTestResources?: () => void;
+  showTestMenu?: boolean;
 }
 
 export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
@@ -21,6 +22,7 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
   onSummonEarlyWave,
   onCycleTimeScale,
   onAddTestResources,
+  showTestMenu = false,
 }) => {
   return (
     <>
@@ -77,58 +79,60 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
             </span>
           </div>
 
-          {/* Compact Wave Trigger & Speed Test Badges */}
-          <div className="flex items-center gap-1.5">
-            {onSummonEarlyWave && (
+          {/* Compact Wave Trigger & Speed Test Badges (Easter Egg) */}
+          {showTestMenu && (
+            <div className="flex items-center gap-1.5">
+              {onSummonEarlyWave && (
+                <button
+                  id="summon-early-wave-btn"
+                  onClick={onSummonEarlyWave}
+                  className="px-2.5 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
+                  title="준비 완료 시 웨이브 즉시 소환 (처치 보상 +35% 보너스)"
+                >
+                  ⚔️ 조기 소환 (+35%)
+                </button>
+              )}
+
               <button
-                id="summon-early-wave-btn"
-                onClick={onSummonEarlyWave}
-                className="px-2.5 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
-                title="준비 완료 시 웨이브 즉시 소환 (처치 보상 +35% 보너스)"
+                id="trigger-regular-wave-btn"
+                onClick={onTriggerRegularWave}
+                className="px-2 py-1 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-black border border-emerald-400/50 transition active:scale-95"
+                title="마물 웨이브 즉시 출현"
               >
-                ⚔️ 조기 소환 (+35%)
+                🧟 +Wave
               </button>
-            )}
 
-            <button
-              id="trigger-regular-wave-btn"
-              onClick={onTriggerRegularWave}
-              className="px-2 py-1 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-black border border-emerald-400/50 transition active:scale-95"
-              title="마물 웨이브 즉시 출현"
-            >
-              🧟 +Wave
-            </button>
-
-            <button
-              id="trigger-boss-wave-btn"
-              onClick={onTriggerBossWave}
-              className="px-2 py-1 rounded-lg bg-red-700/85 hover:bg-red-600 text-white text-[11px] font-black border border-red-400/50 transition active:scale-95"
-              title="보스몬스터 즉시 출현"
-            >
-              👹 +Boss
-            </button>
-
-            <button
-              id="toggle-timescale-btn"
-              onClick={onCycleTimeScale}
-              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold border border-slate-600 flex items-center gap-1 transition active:scale-95 tabular-nums"
-              title="웨이브 타이머 배속 전환 (1x / 60x / 300x)"
-            >
-              <FastForward className="w-3 h-3" />
-              <span>{waveState.timeScale}x</span>
-            </button>
-
-            {onAddTestResources && (
               <button
-                id="add-test-resources-btn"
-                onClick={onAddTestResources}
-                className="px-2 py-1 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
-                title="테스트 자원 +500 지급"
+                id="trigger-boss-wave-btn"
+                onClick={onTriggerBossWave}
+                className="px-2 py-1 rounded-lg bg-red-700/85 hover:bg-red-600 text-white text-[11px] font-black border border-red-400/50 transition active:scale-95"
+                title="보스몬스터 즉시 출현"
               >
-                🎁 +500
+                👹 +Boss
               </button>
-            )}
-          </div>
+
+              <button
+                id="toggle-timescale-btn"
+                onClick={onCycleTimeScale}
+                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold border border-slate-600 flex items-center gap-1 transition active:scale-95 tabular-nums"
+                title="웨이브 타이머 배속 전환 (1x / 60x / 300x)"
+              >
+                <FastForward className="w-3 h-3" />
+                <span>{waveState.timeScale}x</span>
+              </button>
+
+              {onAddTestResources && (
+                <button
+                  id="add-test-resources-btn"
+                  onClick={onAddTestResources}
+                  className="px-2 py-1 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
+                  title="테스트 자원 +500 지급"
+                >
+                  🎁 +500
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

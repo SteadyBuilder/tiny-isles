@@ -55,6 +55,7 @@ export const HUD: React.FC<HUDProps> = ({
   const [showSoundModal, setShowSoundModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showTestMenu, setShowTestMenu] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -119,6 +120,7 @@ export const HUD: React.FC<HUDProps> = ({
           onSummonEarlyWave={onSummonEarlyWave}
           onCycleTimeScale={cycleTimeScale}
           onAddTestResources={onAddTestResources}
+          showTestMenu={showTestMenu}
         />
       </div>
 
@@ -135,6 +137,7 @@ export const HUD: React.FC<HUDProps> = ({
         onOpenSettings={openSettings}
         onTriggerRegularWave={onTriggerRegularWave}
         onTriggerBossWave={onTriggerBossWave}
+        showTestMenu={showTestMenu}
       />
 
       <HudSettingsModal
@@ -149,6 +152,8 @@ export const HUD: React.FC<HUDProps> = ({
         onToggleSound={toggleSound}
         onOpenSoundModal={() => setShowSoundModal(true)}
         onOpenHelp={() => setShowHelp(true)}
+        isTestMenuVisible={showTestMenu}
+        onToggleTestMenu={() => setShowTestMenu((prev) => !prev)}
       />
 
       <HudHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />

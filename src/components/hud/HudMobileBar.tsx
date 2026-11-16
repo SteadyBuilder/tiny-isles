@@ -15,6 +15,7 @@ export interface HudMobileBarProps {
   onOpenSettings: () => void;
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
+  showTestMenu?: boolean;
 }
 
 export const HudMobileBar: React.FC<HudMobileBarProps> = ({
@@ -29,6 +30,7 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
   onOpenSettings,
   onTriggerRegularWave,
   onTriggerBossWave,
+  showTestMenu = false,
 }) => {
   return (
     <div
@@ -92,22 +94,24 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
             <span>👹 <b className="text-red-300">{formatHudSeconds(waveState.bossWaveRemainingSec)}</b></span>
             <span>⚔️ <b className="text-amber-300">{waveState.activeMonstersCount}</b></span>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onTriggerRegularWave}
-              className="px-1.5 py-0.5 rounded bg-emerald-700 text-white font-bold"
-              title="마물 웨이브 출현"
-            >
-              🧟⚡
-            </button>
-            <button
-              onClick={onTriggerBossWave}
-              className="px-1.5 py-0.5 rounded bg-red-700 text-white font-bold"
-              title="보스 출현"
-            >
-              👹⚡
-            </button>
-          </div>
+          {showTestMenu && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onTriggerRegularWave}
+                className="px-1.5 py-0.5 rounded bg-emerald-700 text-white font-bold"
+                title="마물 웨이브 출현"
+              >
+                🧟⚡
+              </button>
+              <button
+                onClick={onTriggerBossWave}
+                className="px-1.5 py-0.5 rounded bg-red-700 text-white font-bold"
+                title="보스 출현"
+              >
+                👹⚡
+              </button>
+            </div>
+          )}
         </div>
       )}
 

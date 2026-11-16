@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PlayerColor } from '../types/game';
 import { sound, SoundSettings } from '../lib/sound';
 import { GameEvents } from '../game/events/gameEvents';
 import { ADMIN_RESET_CONFIG } from '../data/adminReset';
+import { TEST_MENU_EASTER_EGG_CONFIG } from '../data/testMenuEasterEgg';
+import { useMultiClickTrigger } from '../hooks/useMultiClickTrigger';
 import { AdminResetEasterEggModal } from './AdminResetEasterEggModal';
 
 interface HudSettingsModalProps {
@@ -17,6 +19,8 @@ interface HudSettingsModalProps {
   onToggleSound: () => void;
   onOpenSoundModal: () => void;
   onOpenHelp: () => void;
+  isTestMenuVisible?: boolean;
+  onToggleTestMenu?: () => void;
 }
 
 export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
@@ -31,47 +35,37 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
   onToggleSound,
   onOpenSoundModal,
   onOpenHelp,
+  isTestMenuVisible = false,
+  onToggleTestMenu,
 }) => {
   const [tempName, setTempName] = useState(playerName);
   const [showAdminReset, setShowAdminReset] = useState(false);
-  const clickCountRef = useRef(0);
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setTempName(playerName);
   }, [playerName]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      clickCountRef.current = 0;
-      if (clickTimerRef.current) {
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-      }
-    }
-  }, [isOpen]);
+  const handleSecretTitleClick = useMultiClickTrigger({
+    requiredClicks: ADMIN_RESET_CONFIG.requiredClicks,
+    clickWindowMs: ADMIN_RESET_CONFIG.clickWindowMs,
+    isActive: isOpen,
+    onTrigger: () => setShowAdminReset(true),
+  });
+
+  const handleSecretTestMenuClick = useMultiClickTrigger({
+    requiredClicks: TEST_MENU_EASTER_EGG_CONFIG.requiredClicks,
+    clickWindowMs: TEST_MENU_EASTER_EGG_CONFIG.clickWindowMs,
+    isActive: isOpen,
+    onTrigger: () => {
+      sound.playClick();
+      onToggleTestMenu?.();
+    },
+  });
 
   if (!isOpen) return null;
 
   const toggleColor = () => {
     setPlayerColor(playerColor === 'blue' ? 'red' : 'blue');
-  };
-
-  const handleSecretTitleClick = () => {
-    clickCountRef.current += 1;
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-    }
-    if (clickCountRef.current >= ADMIN_RESET_CONFIG.requiredClicks) {
-      clickCountRef.current = 0;
-      clickTimerRef.current = null;
-      setShowAdminReset(true);
-      return;
-    }
-    clickTimerRef.current = setTimeout(() => {
-      clickCountRef.current = 0;
-      clickTimerRef.current = null;
-    }, ADMIN_RESET_CONFIG.clickWindowMs);
   };
 
   return (
@@ -194,7 +188,15 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
 
         {/* Screen / Zoom Presets */}
         <div className="bg-black/40 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2">
-          <div className="text-xs font-semibold text-slate-300">화면 & 카메라 줌 프리셋</div>
+          <div
+            className="text-xs font-semibold text-slate-300 select-none cursor-default flex items-center justify-between"
+            onClick={handleSecretTestMenuClick}
+          >
+            <span>화면 & 카메라 줌 프리셋</span>
+            {isTestMenuVisible && (
+              <span className="text-[10px] font-bold text-amber-300/90">🧪</span>
+            )}
+          </div>
           <div className="grid grid-cols-4 gap-1.5">
             {[0.75, 1.0, 1.25, 1.5].map((z) => (
               <button
