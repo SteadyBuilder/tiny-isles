@@ -74,9 +74,14 @@ export function createWorldControllersBundle(
   const territoryPassive = new TerritoryPassiveSystem({
     getIslands: host.getIslands,
     getConstructedBuildings: host.getConstructedBuildings,
+    isHost: () => host.systems.waveSystem.getIsHost(),
     addResources: host.addResources,
     updateCoreGemVisual: (id) => host.systems.coreGemSystem.updateCoreGemVisual(id),
     updateConstructedBuildingHpBar: (id) => host.constructedBuildingRenderer.updateHpBar(id),
+    onCoreHealed: (territoryId, coreHp, coreMaxHp) =>
+      host.systems.multiplayerSync?.broadcastCoreHpSync(territoryId, coreHp, coreMaxHp),
+    onBuildingHealed: (buildingId, hp, maxHp) =>
+      host.systems.multiplayerSync?.broadcastBuildingHpSync(buildingId, hp, maxHp),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     saveWorldState: (immediate = false) => host.persistence.saveWorldState(immediate),
     emitWorldStateToReact: (immediate = false) => host.persistence.emitWorldStateToReact(immediate),
@@ -116,6 +121,17 @@ export function createWorldControllersBundle(
       host.systems.multiplayerSync?.broadcastVillageUpgrade(id, tier),
     broadcastBuildingConstructed: (cb) =>
       host.systems.multiplayerSync?.broadcastBuildingConstructed(cb),
+    isHost: () => host.systems.waveSystem.getIsHost(),
+    getConstructedVisualContainer: (id) => host.constructedBuildingRenderer.getContainer(id),
+    shakeObject: (target) => host.effectsRenderer.shakeObject(target),
+    broadcastBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
+      host.systems.multiplayerSync?.broadcastBuildingHpSync(buildingId, hp, maxHp, damageDelta),
+    broadcastBuildingDestroyed: (buildingId) =>
+      host.systems.multiplayerSync?.broadcastBuildingDestroyed(buildingId),
+    broadcastCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) =>
+      host.systems.multiplayerSync?.broadcastCoreHpSync(territoryId, coreHp, coreMaxHp, damageDelta),
+    broadcastRepairTerritoryRequest: (territoryId) =>
+      host.systems.multiplayerSync?.broadcastRepairTerritoryRequest(territoryId),
   });
 
   playerInteraction = new PlayerInteractionController({

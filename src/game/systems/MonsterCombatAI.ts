@@ -21,7 +21,8 @@ export interface IMonsterCombatContext {
   updateConstructedBuildingHpBar: (buildingId: string) => void;
   getConstructedVisualContainer: (buildingId: string) => Phaser.GameObjects.Container | undefined;
   destroyConstructedBuilding: (buildingId: string) => void;
-  onBuildingDamaged?: () => void;
+  onBuildingDamaged?: (buildingId: string, hp: number, maxHp: number, damageDelta: number) => void;
+  isHost: () => boolean;
   damageTerritoryCore: (territoryId: number, damage: number, attackerName: string) => void;
   getLocalPlayerId: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
@@ -192,6 +193,7 @@ export class MonsterCombatAI {
 
       if (canAttackNow && time - mv.lastAttackTime >= 1100) {
         mv.lastAttackTime = time;
+        if (!this.ctx.isHost()) continue;
 
         if (blockingBuilding) {
           blockingBuilding.hp = Math.max(0, blockingBuilding.hp - m.attack);
@@ -204,7 +206,12 @@ export class MonsterCombatAI {
           if (blockingBuilding.hp <= 0) {
             this.ctx.destroyConstructedBuilding(blockingBuilding.id);
           } else {
-            this.ctx.onBuildingDamaged?.();
+            this.ctx.onBuildingDamaged?.(
+              blockingBuilding.id,
+              blockingBuilding.hp,
+              blockingBuilding.maxHp,
+              m.attack
+            );
           }
         } else {
           // 2순위: 점령 영지의 코어 보석 직접 공격

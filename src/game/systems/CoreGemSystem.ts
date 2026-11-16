@@ -24,6 +24,12 @@ export interface ICoreGemSystemContext {
   emitWorldState: (immediate?: boolean) => void;
   refreshTerritoryDecorations: () => void;
   broadcastTerritoryLost?: (territoryId: number) => void;
+  broadcastCoreHpSync?: (
+    territoryId: number,
+    coreHp: number,
+    coreMaxHp: number,
+    damageDelta?: number
+  ) => void;
 }
 
 /**
@@ -89,10 +95,39 @@ export class CoreGemSystem {
       this.loseTerritory(territoryId, attackerName, isLocalTrigger);
       return true;
     } else {
+      if (isLocalTrigger) {
+        this.ctx.broadcastCoreHpSync?.(territoryId, isl.coreHp, isl.coreMaxHp, damage);
+      }
       this.ctx.saveWorldState(false);
       this.ctx.emitWorldState(false);
       return false;
     }
+  }
+
+  public applyRemoteCoreHpSync(
+    territoryId: number,
+    coreHp: number,
+    coreMaxHp: number,
+    damageDelta?: number
+  ): void {
+    const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
+    if (!isl || !isl.unlocked) return;
+
+    isl.coreMaxHp = Math.max(1, coreMaxHp);
+    isl.coreHp = Math.max(0, Math.min(isl.coreMaxHp, coreHp));
+    this.updateCoreGemVisual(territoryId);
+
+    if (damageDelta && damageDelta > 0) {
+      const cv = this.coreVisuals.get(territoryId);
+      if (cv) {
+        this.ctx.shakeObject(cv.container);
+      }
+      const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+      this.ctx.showFloatingText(cPos.x, cPos.y - 40, `💥 코어 피격 -${damageDelta}`, '#ef4444');
+    }
+
+    this.ctx.saveWorldState(false);
+    this.ctx.emitWorldState(false);
   }
 
   /**

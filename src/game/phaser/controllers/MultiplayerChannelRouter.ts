@@ -29,6 +29,20 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteThreatAdded?: (amount: number) => void;
   onRemoteThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
+  onRemoteBuildingHpSync?: (
+    buildingId: string,
+    hp: number,
+    maxHp: number,
+    damageDelta?: number
+  ) => void;
+  onRemoteBuildingDestroyed?: (buildingId: string) => void;
+  onRemoteCoreHpSync?: (
+    territoryId: number,
+    coreHp: number,
+    coreMaxHp: number,
+    damageDelta?: number
+  ) => void;
+  onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
 }
 
 interface BroadcastMeta {
@@ -187,6 +201,36 @@ export class MultiplayerChannelRouter {
           this.callbacks.onRemoteTerritoryLost(territoryId, reason || '마물 군단');
           break;
         }
+        case 'building_hp_sync': {
+          const { buildingId, hp, maxHp, damageDelta } = data.payload as {
+            buildingId: string;
+            hp: number;
+            maxHp: number;
+            damageDelta?: number;
+          };
+          this.callbacks.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta);
+          break;
+        }
+        case 'building_destroyed': {
+          const { buildingId } = data.payload as { buildingId: string };
+          this.callbacks.onRemoteBuildingDestroyed?.(buildingId);
+          break;
+        }
+        case 'core_hp_sync': {
+          const { territoryId, coreHp, coreMaxHp, damageDelta } = data.payload as {
+            territoryId: number;
+            coreHp: number;
+            coreMaxHp: number;
+            damageDelta?: number;
+          };
+          this.callbacks.onRemoteCoreHpSync?.(territoryId, coreHp, coreMaxHp, damageDelta);
+          break;
+        }
+        case 'repair_territory_request': {
+          const { territoryId } = data.payload as { territoryId: number };
+          this.callbacks.onRemoteRepairTerritoryRequest?.(territoryId);
+          break;
+        }
       }
     };
   }
@@ -338,6 +382,70 @@ export class MultiplayerChannelRouter {
         ({ payload }: { payload: { territoryId: number; reason?: string } & BroadcastMeta }) => {
           if (isValid(payload)) {
             this.callbacks.onRemoteTerritoryLost(payload.territoryId, payload.reason || '마물 군단');
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'building_hp_sync' },
+        ({
+          payload,
+        }: {
+          payload: {
+            buildingId: string;
+            hp: number;
+            maxHp: number;
+            damageDelta?: number;
+          } & BroadcastMeta;
+        }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteBuildingHpSync?.(
+              payload.buildingId,
+              payload.hp,
+              payload.maxHp,
+              payload.damageDelta
+            );
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'building_destroyed' },
+        ({ payload }: { payload: { buildingId: string } & BroadcastMeta }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteBuildingDestroyed?.(payload.buildingId);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'core_hp_sync' },
+        ({
+          payload,
+        }: {
+          payload: {
+            territoryId: number;
+            coreHp: number;
+            coreMaxHp: number;
+            damageDelta?: number;
+          } & BroadcastMeta;
+        }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteCoreHpSync?.(
+              payload.territoryId,
+              payload.coreHp,
+              payload.coreMaxHp,
+              payload.damageDelta
+            );
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'repair_territory_request' },
+        ({ payload }: { payload: { territoryId: number } & BroadcastMeta }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteRepairTerritoryRequest?.(payload.territoryId);
           }
         }
       )

@@ -21,7 +21,7 @@ export interface IWaveSystemContext {
   getConstructedBuildings: () => ConstructedBuilding[];
   destroyConstructedBuilding: (buildingId: string) => void;
   updateConstructedBuildingHpBar: (buildingId: string) => void;
-  onBuildingDamaged?: () => void;
+  onBuildingDamaged?: (buildingId: string, hp: number, maxHp: number, damageDelta: number) => void;
   getConstructedVisualContainer: (buildingId: string) => Phaser.GameObjects.Container | undefined;
   getLocalPlayerId: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
@@ -90,9 +90,11 @@ export class WaveSystem {
       updateConstructedBuildingHpBar: (id) => this.ctx.updateConstructedBuildingHpBar(id),
       getConstructedVisualContainer: (id) => this.ctx.getConstructedVisualContainer(id),
       destroyConstructedBuilding: (id) => this.ctx.destroyConstructedBuilding(id),
-      onBuildingDamaged: () => this.ctx.onBuildingDamaged?.(),
+      onBuildingDamaged: (id, hp, maxHp, damageDelta) =>
+        this.ctx.onBuildingDamaged?.(id, hp, maxHp, damageDelta),
+      isHost: () => this.isHost,
       damageTerritoryCore: (territoryId, dmg, attacker) =>
-        this.coreGemSystem.damageTerritoryCore(territoryId, dmg, attacker, false),
+        this.coreGemSystem.damageTerritoryCore(territoryId, dmg, attacker, this.isHost),
       getLocalPlayerId: () => this.ctx.getLocalPlayerId(),
       getLocalPlayerPosition: () => this.ctx.getLocalPlayerPosition(),
       isLocalPlayerFainted: () => this.ctx.isLocalPlayerFainted(),

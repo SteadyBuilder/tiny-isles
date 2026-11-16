@@ -34,6 +34,20 @@ export interface IMultiplayerSyncContext {
   onRemoteThreatAdded?: (amount: number) => void;
   onRemoteThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
+  onRemoteBuildingHpSync?: (
+    buildingId: string,
+    hp: number,
+    maxHp: number,
+    damageDelta?: number
+  ) => void;
+  onRemoteBuildingDestroyed?: (buildingId: string) => void;
+  onRemoteCoreHpSync?: (
+    territoryId: number,
+    coreHp: number,
+    coreMaxHp: number,
+    damageDelta?: number
+  ) => void;
+  onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
 }
 
 /**
@@ -77,6 +91,14 @@ export class MultiplayerSyncController {
         this.ctx.onRemoteThreatSync?.(threatPercent, waveCount, bossWaveCount),
       onRemoteTerritoryLost: (territoryId, reason) =>
         this.ctx.onRemoteTerritoryLost(territoryId, reason),
+      onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
+        this.ctx.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta),
+      onRemoteBuildingDestroyed: (buildingId) =>
+        this.ctx.onRemoteBuildingDestroyed?.(buildingId),
+      onRemoteCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) =>
+        this.ctx.onRemoteCoreHpSync?.(territoryId, coreHp, coreMaxHp, damageDelta),
+      onRemoteRepairTerritoryRequest: (territoryId) =>
+        this.ctx.onRemoteRepairTerritoryRequest?.(territoryId),
     });
   }
 
@@ -165,5 +187,41 @@ export class MultiplayerSyncController {
       territoryId,
       reason: '마물 군단',
     });
+  }
+
+  public broadcastBuildingHpSync(
+    buildingId: string,
+    hp: number,
+    maxHp: number,
+    damageDelta?: number
+  ): void {
+    this.router.emit('building_hp_sync', 'building_hp_sync', {
+      buildingId,
+      hp,
+      maxHp,
+      damageDelta,
+    });
+  }
+
+  public broadcastBuildingDestroyed(buildingId: string): void {
+    this.router.emit('building_destroyed', 'building_destroyed', { buildingId });
+  }
+
+  public broadcastCoreHpSync(
+    territoryId: number,
+    coreHp: number,
+    coreMaxHp: number,
+    damageDelta?: number
+  ): void {
+    this.router.emit('core_hp_sync', 'core_hp_sync', {
+      territoryId,
+      coreHp,
+      coreMaxHp,
+      damageDelta,
+    });
+  }
+
+  public broadcastRepairTerritoryRequest(territoryId: number): void {
+    this.router.emit('repair_territory_request', 'repair_territory_request', { territoryId });
   }
 }

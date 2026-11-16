@@ -4,9 +4,12 @@ import { ConstructedBuilding, Island } from '../../../types/game';
 export interface ITerritoryPassiveContext {
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
+  isHost?: () => boolean;
   addResources: (wood: number, stone: number, gold: number) => void;
   updateCoreGemVisual: (territoryId: number) => void;
   updateConstructedBuildingHpBar: (buildingId: string) => void;
+  onCoreHealed?: (territoryId: number, coreHp: number, coreMaxHp: number) => void;
+  onBuildingHealed?: (buildingId: string, hp: number, maxHp: number) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   saveWorldState: (immediate?: boolean) => void;
   emitWorldStateToReact: (immediate?: boolean) => void;
@@ -30,6 +33,7 @@ export class TerritoryPassiveSystem {
 
     const islands = this.ctx.getIslands();
     const constructedBuildings = this.ctx.getConstructedBuildings();
+    const isHost = this.ctx.isHost ? this.ctx.isHost() : true;
 
     let totalWoodGain = 0;
     let totalStoneGain = 0;
@@ -51,23 +55,28 @@ export class TerritoryPassiveSystem {
         totalGoldGain += 2;
         this.ctx.showFloatingText(cb.x, cb.y - 35, '🪙 +2', '#fde047');
       } else if (cb.type === 'basic_house') {
-        if (isl.coreHp < isl.coreMaxHp) {
+        if (isHost && isl.coreHp < isl.coreMaxHp) {
           isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 6);
           this.ctx.updateCoreGemVisual(isl.id);
+          this.ctx.onCoreHealed?.(isl.id, isl.coreHp, isl.coreMaxHp);
           healStateDirty = true;
         }
       } else if (cb.type === 'special_sanctuary') {
-        // 성소: 코어 보석 및 성벽 회복
-        if (isl.coreHp < isl.coreMaxHp) {
+        // 성소: 코어 보석 및 성벽 회복 (호스트 권위)
+        if (isHost && isl.coreHp < isl.coreMaxHp) {
           isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 20);
           this.ctx.updateCoreGemVisual(isl.id);
+          this.ctx.onCoreHealed?.(isl.id, isl.coreHp, isl.coreMaxHp);
           healStateDirty = true;
         }
-        for (const other of constructedBuildings) {
-          if (other.territoryId === isl.id && other.hp < other.maxHp) {
-            other.hp = Math.min(other.maxHp, other.hp + 35);
-            this.ctx.updateConstructedBuildingHpBar(other.id);
-            healStateDirty = true;
+        if (isHost) {
+          for (const other of constructedBuildings) {
+            if (other.territoryId === isl.id && other.hp < other.maxHp) {
+              other.hp = Math.min(other.maxHp, other.hp + 35);
+              this.ctx.updateConstructedBuildingHpBar(other.id);
+              this.ctx.onBuildingHealed?.(other.id, other.hp, other.maxHp);
+              healStateDirty = true;
+            }
           }
         }
         this.ctx.showFloatingText(cb.x, cb.y - 35, '✨ 성소 치유 오라', '#38bdf8');

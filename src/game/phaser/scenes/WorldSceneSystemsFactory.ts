@@ -50,6 +50,14 @@ export interface IWorldSystemsHost {
   unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean, ownerId?: string) => void;
   upgradeVillageRemotely: (territoryId: number) => void;
   onRemoteBuildingConstructed: (cb: ConstructedBuilding) => void;
+  onRemoteBuildingHpSync?: (
+    buildingId: string,
+    hp: number,
+    maxHp: number,
+    damageDelta?: number
+  ) => void;
+  onRemoteBuildingDestroyed?: (buildingId: string) => void;
+  onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
   effectsRenderer: WorldEffectsRenderer;
   territoryStructureRenderer: TerritoryStructureRenderer;
   constructedBuildingRenderer: ConstructedBuildingRenderer;
@@ -97,6 +105,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     refreshTerritoryDecorations: host.refreshTerritoryDecorations,
     broadcastTerritoryLost: (territoryId: number) =>
       multiplayerSync?.broadcastTerritoryLost(territoryId),
+    broadcastCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) =>
+      multiplayerSync?.broadcastCoreHpSync(territoryId, coreHp, coreMaxHp, damageDelta),
   });
 
   const waveSystem = new WaveSystem(
@@ -107,7 +117,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       destroyConstructedBuilding: host.destroyConstructedBuilding,
       updateConstructedBuildingHpBar: (buildingId: string) =>
         host.constructedBuildingRenderer.updateHpBar(buildingId),
-      onBuildingDamaged: () => {
+      onBuildingDamaged: (buildingId, hp, maxHp, damageDelta) => {
+        multiplayerSync?.broadcastBuildingHpSync(buildingId, hp, maxHp, damageDelta);
         host.saveWorldState(false);
         host.emitWorldStateToReact(false);
       },
@@ -216,6 +227,13 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       waveSystem.applyRemoteThreatSync(threatPercent, waveCount, bossWaveCount),
     onRemoteTerritoryLost: (territoryId, reason) =>
       coreGemSystem.loseTerritory(territoryId, reason, false),
+    onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
+      host.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta),
+    onRemoteBuildingDestroyed: (buildingId) => host.onRemoteBuildingDestroyed?.(buildingId),
+    onRemoteCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) =>
+      coreGemSystem.applyRemoteCoreHpSync(territoryId, coreHp, coreMaxHp, damageDelta),
+    onRemoteRepairTerritoryRequest: (territoryId) =>
+      host.onRemoteRepairTerritoryRequest?.(territoryId),
   });
   multiplayerSync.setup();
 

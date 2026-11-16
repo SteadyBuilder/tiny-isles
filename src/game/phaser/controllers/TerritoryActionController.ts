@@ -1,3 +1,4 @@
+import type Phaser from 'phaser';
 import confetti from 'canvas-confetti';
 import { GOLD_MINE_BIOME_CONFIG } from '../../../data/biomes';
 import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
@@ -44,6 +45,23 @@ export interface ITerritoryActionContext {
   broadcastUnlock: (islandId: number, unlockedBy: string, ownerId?: string) => void;
   broadcastVillageUpgrade: (territoryId: number, nextTier: VillageTier) => void;
   broadcastBuildingConstructed: (cb: ConstructedBuilding) => void;
+  isHost?: () => boolean;
+  getConstructedVisualContainer?: (buildingId: string) => Phaser.GameObjects.Container | undefined;
+  shakeObject?: (target: Phaser.GameObjects.Container) => void;
+  broadcastBuildingHpSync?: (
+    buildingId: string,
+    hp: number,
+    maxHp: number,
+    damageDelta?: number
+  ) => void;
+  broadcastBuildingDestroyed?: (buildingId: string) => void;
+  broadcastCoreHpSync?: (
+    territoryId: number,
+    coreHp: number,
+    coreMaxHp: number,
+    damageDelta?: number
+  ) => void;
+  broadcastRepairTerritoryRequest?: (territoryId: number) => void;
 }
 
 /**
@@ -252,20 +270,60 @@ export class TerritoryActionController {
 
     this.ctx.spendInventory(5, 5, 0);
 
-    isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 100);
-    // 영지 내 성벽/방책도 함께 수리
+    const isHost = this.ctx.isHost ? this.ctx.isHost() : true;
+    if (!isHost) {
+      // 게스트는 즉각적인 피드백만 낙관적으로 표시하고 권위 회복 연산은 호스트에 위임
+      isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 100);
+      for (const cb of constructedBuildings) {
+        if (cb.territoryId === territoryId) {
+          cb.hp = Math.min(cb.maxHp, cb.hp + 80);
+          this.ctx.updateConstructedBuildingHpBar(cb.id);
+        }
+      }
+      this.ctx.updateCoreGemVisual(territoryId);
+      sound.playUnlock();
+      this.ctx.showFloatingText(cPos.x, cPos.y - 60, '✨ 코어 보석 및 방책 수리 완료! (+100 HP)', '#4ade80');
+      this.ctx.broadcastRepairTerritoryRequest?.(territoryId);
+      return;
+    }
+
+    this.applyTerritoryRepairAndBroadcast(isl, constructedBuildings, true);
+  }
+
+  public handleRemoteRepairTerritoryRequest(territoryId: number): void {
+    const isHost = this.ctx.isHost ? this.ctx.isHost() : true;
+    if (!isHost) return;
+    const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
+    if (!isl || !isl.unlocked) return;
+    this.applyTerritoryRepairAndBroadcast(isl, this.ctx.getConstructedBuildings(), false);
+  }
+
+  private applyTerritoryRepairAndBroadcast(
+    isl: Island,
+    constructedBuildings: ConstructedBuilding[],
+    playFeedback: boolean
+  ): void {
+    const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+    if (isl.coreHp < isl.coreMaxHp) {
+      isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 100);
+      this.ctx.updateCoreGemVisual(isl.id);
+      this.ctx.broadcastCoreHpSync?.(isl.id, isl.coreHp, isl.coreMaxHp);
+    }
+
     for (const cb of constructedBuildings) {
-      if (cb.territoryId === territoryId) {
+      if (cb.territoryId === isl.id && cb.hp < cb.maxHp) {
         cb.hp = Math.min(cb.maxHp, cb.hp + 80);
         this.ctx.updateConstructedBuildingHpBar(cb.id);
+        this.ctx.broadcastBuildingHpSync?.(cb.id, cb.hp, cb.maxHp);
       }
     }
 
-    this.ctx.updateCoreGemVisual(territoryId);
     this.ctx.saveWorldState();
     this.ctx.emitWorldStateToReact();
-    sound.playUnlock();
-    this.ctx.showFloatingText(cPos.x, cPos.y - 60, '✨ 코어 보석 및 방책 수리 완료! (+100 HP)', '#4ade80');
+    if (playFeedback) {
+      sound.playUnlock();
+      this.ctx.showFloatingText(cPos.x, cPos.y - 60, '✨ 코어 보석 및 방책 수리 완료! (+100 HP)', '#4ade80');
+    }
   }
 
   public unlockIslandLocally(
@@ -314,7 +372,30 @@ export class TerritoryActionController {
     }
   }
 
-  public destroyConstructedBuilding(buildingId: string): void {
+  public applyRemoteBuildingHpSync(
+    buildingId: string,
+    hp: number,
+    maxHp: number,
+    damageDelta?: number
+  ): void {
+    const cb = this.ctx.getConstructedBuildings().find((b) => b.id === buildingId);
+    if (!cb) return;
+
+    cb.maxHp = Math.max(1, maxHp);
+    cb.hp = Math.max(0, Math.min(cb.maxHp, hp));
+    this.ctx.updateConstructedBuildingHpBar(buildingId);
+
+    if (damageDelta && damageDelta > 0) {
+      const bCont = this.ctx.getConstructedVisualContainer?.(buildingId);
+      if (bCont) this.ctx.shakeObject?.(bCont);
+      this.ctx.showFloatingText(cb.x, cb.y - 30, `🛡️ -${damageDelta}`, '#fb923c');
+    }
+
+    this.ctx.saveWorldState(false);
+    this.ctx.emitWorldStateToReact(false);
+  }
+
+  public destroyConstructedBuilding(buildingId: string, isLocalTrigger = true): void {
     const constructedBuildings = this.ctx.getConstructedBuildings();
     const idx = constructedBuildings.findIndex((b) => b.id === buildingId);
     if (idx === -1) return;
@@ -330,5 +411,9 @@ export class TerritoryActionController {
     this.ctx.showFloatingText(removed.x, removed.y - 40, `💥 ${removed.name} 파괴됨!`, '#ef4444');
     this.ctx.saveWorldState(false);
     this.ctx.emitWorldStateToReact(false);
+
+    if (isLocalTrigger && (this.ctx.isHost ? this.ctx.isHost() : true)) {
+      this.ctx.broadcastBuildingDestroyed?.(buildingId);
+    }
   }
 }

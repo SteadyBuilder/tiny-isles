@@ -184,6 +184,17 @@ export class WorldScene extends Phaser.Scene {
           this.persistence.emitWorldStateToReact();
         }
       },
+      onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
+        this.controllers?.territoryAction.applyRemoteBuildingHpSync(
+          buildingId,
+          hp,
+          maxHp,
+          damageDelta
+        ),
+      onRemoteBuildingDestroyed: (buildingId) =>
+        this.controllers?.territoryAction.destroyConstructedBuilding(buildingId, false),
+      onRemoteRepairTerritoryRequest: (territoryId) =>
+        this.controllers?.territoryAction.handleRemoteRepairTerritoryRequest(territoryId),
       effectsRenderer: this.effectsRenderer,
       territoryStructureRenderer: this.territoryStructureRenderer,
       constructedBuildingRenderer: this.constructedBuildingRenderer,
