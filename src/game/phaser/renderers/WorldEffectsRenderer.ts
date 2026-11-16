@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { WORLD_CLOUD_BOUNDS, WORLD_CLOUD_CONFIGS } from '../../../data/cloudConfig';
 import { Island } from '../../../types/game';
 import { DEPTH } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
@@ -30,19 +31,11 @@ export class WorldEffectsRenderer {
   }
 
   public createClouds(): void {
-    const cloudConfigs = [
-      { x: -1600, y: -800, speed: 0.35, scale: 0.9, type: 'cloud1' },
-      { x: 300, y: 200, speed: 0.42, scale: 1.1, type: 'cloud2' },
-      { x: 2200, y: -200, speed: 0.3, scale: 0.85, type: 'cloud1' },
-      { x: -500, y: 1800, speed: 0.38, scale: 1.0, type: 'cloud2' },
-      { x: 1800, y: 2200, speed: 0.28, scale: 0.95, type: 'cloud1' },
-      { x: -2200, y: 800, speed: 0.34, scale: 1.05, type: 'cloud2' },
-    ];
-
-    for (const c of cloudConfigs) {
+    for (const c of WORLD_CLOUD_CONFIGS) {
       const sprite = this.scene.add.image(c.x, c.y, c.type);
       sprite.setScale(c.scale);
-      sprite.setAlpha(0.55);
+      sprite.setAlpha(c.alpha);
+      sprite.setScrollFactor(c.scrollFactor);
       sprite.setDepth(DEPTH.CLOUDS);
       this.clouds.push({ sprite, speed: c.speed });
     }
@@ -50,11 +43,13 @@ export class WorldEffectsRenderer {
 
   public updateClouds(delta: number = 16.6667): void {
     const dtScale = Math.min(4, Math.max(0.1, delta / 16.6667));
+    const { wrapMinX, wrapMaxX, wrapMinY, wrapMaxY } = WORLD_CLOUD_BOUNDS;
+    const spanY = wrapMaxY - wrapMinY;
     for (const c of this.clouds) {
       c.sprite.x += c.speed * dtScale;
-      if (c.sprite.x > 3800) {
-        c.sprite.x = -3800;
-        c.sprite.y = -1500 + Math.random() * 4500;
+      if (c.sprite.x > wrapMaxX) {
+        c.sprite.x = wrapMinX;
+        c.sprite.y = wrapMinY + Math.random() * spanY;
       }
     }
   }
