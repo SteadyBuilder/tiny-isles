@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ConstructedBuilding, Island } from '../../../types/game';
 import { getBlueprint } from '../../constants';
-import { ySortDepth } from '../../depthLayers';
+import { CONSTRUCTED_DEPTH_BIAS, ySortDepth } from '../../depthLayers';
 import {
   getConstructedBuildingFootprintBox,
   getPerimeterWallSpan,
@@ -34,6 +34,7 @@ export class ConstructedBuildingRenderer {
   public clear(): void {
     this.visuals.forEach((cv) => {
       cv.colliders?.forEach((col) => col.destroy());
+      cv.extraVisuals?.forEach((ev) => ev.destroy());
       cv.container.destroy();
     });
     this.visuals.clear();
@@ -55,15 +56,22 @@ export class ConstructedBuildingRenderer {
   public spawnOne(cb: ConstructedBuilding, refreshColliders = true): void {
     const bp = getBlueprint(cb.type);
     const container = this.scene.add.container(cb.x, cb.y);
-    container.setDepth(ySortDepth(cb.y, 30));
+    const depthBias =
+      cb.category === 'tower'
+        ? CONSTRUCTED_DEPTH_BIAS.TOWER
+        : cb.category === 'wall'
+          ? CONSTRUCTED_DEPTH_BIAS.WALL
+          : CONSTRUCTED_DEPTH_BIAS.BUILDING;
+    container.setDepth(ySortDepth(cb.y, depthBias));
     const colliders: Phaser.Physics.Arcade.Sprite[] = [];
+    const extraVisuals: Phaser.GameObjects.Image[] = [];
 
     if (cb.category === 'wall') {
       const isHorizontal = cb.slotIndex === 0 || cb.slotIndex === 1;
       if (cb.type === 'wood_wall') {
-        this.renderWoodPalisade(container, cb.slotIndex, isHorizontal);
+        this.renderWoodPalisade(container, cb.slotIndex, isHorizontal, extraVisuals);
       } else {
-        this.renderStoneWall(container, cb.slotIndex, isHorizontal);
+        this.renderStoneWall(container, cb.slotIndex, isHorizontal, extraVisuals);
       }
 
       const wallBoxes = getWallCollisionBoxes(cb);
@@ -123,6 +131,7 @@ export class ConstructedBuildingRenderer {
       hpBar,
       lastFireTime: 0,
       colliders,
+      extraVisuals: extraVisuals.length > 0 ? extraVisuals : undefined,
     });
 
     this.updateHpBar(cb.id);
@@ -153,6 +162,7 @@ export class ConstructedBuildingRenderer {
       cv.colliders.forEach((col) => this.wallColliders.remove(col, true, true));
       this.wallColliders.refresh();
     }
+    cv.extraVisuals?.forEach((ev) => ev.destroy());
     cv.container.destroy();
     this.visuals.delete(buildingId);
   }
@@ -160,31 +170,45 @@ export class ConstructedBuildingRenderer {
   private renderWoodPalisade(
     container: Phaser.GameObjects.Container,
     slotIndex: number,
-    isHorizontal: boolean
+    isHorizontal: boolean,
+    extraVisuals: Phaser.GameObjects.Image[]
   ): void {
-    this.renderPerimeterWallSprites(container, slotIndex, isHorizontal, {
-      gateH: 'woodPalisadeGate',
-      gateV: 'woodPalisadeGateV',
-      wingH: 'woodPalisadeH',
-      wingV: 'woodPalisadeV',
-      corner: 'woodPalisadeCorner',
-      standalone: 'woodPalisade',
-    });
+    this.renderPerimeterWallSprites(
+      container,
+      slotIndex,
+      isHorizontal,
+      {
+        gateH: 'woodPalisadeGate',
+        gateV: 'woodPalisadeGateV',
+        wingH: 'woodPalisadeH',
+        wingV: 'woodPalisadeV',
+        corner: 'woodPalisadeCorner',
+        standalone: 'woodPalisade',
+      },
+      extraVisuals
+    );
   }
 
   private renderStoneWall(
     container: Phaser.GameObjects.Container,
     slotIndex: number,
-    isHorizontal: boolean
+    isHorizontal: boolean,
+    extraVisuals: Phaser.GameObjects.Image[]
   ): void {
-    this.renderPerimeterWallSprites(container, slotIndex, isHorizontal, {
-      gateH: 'stoneWallGate',
-      gateV: 'stoneWallGateV',
-      wingH: 'stoneWallH',
-      wingV: 'stoneWallV',
-      corner: 'stoneWallCorner',
-      standalone: 'stoneWall',
-    });
+    this.renderPerimeterWallSprites(
+      container,
+      slotIndex,
+      isHorizontal,
+      {
+        gateH: 'stoneWallGate',
+        gateV: 'stoneWallGateV',
+        wingH: 'stoneWallH',
+        wingV: 'stoneWallV',
+        corner: 'stoneWallCorner',
+        standalone: 'stoneWall',
+      },
+      extraVisuals
+    );
   }
 
   private renderPerimeterWallSprites(
@@ -198,7 +222,8 @@ export class ConstructedBuildingRenderer {
       wingV: string;
       corner: string;
       standalone: string;
-    }
+    },
+    extraVisuals: Phaser.GameObjects.Image[]
   ): void {
     const span = getPerimeterWallSpan(slotIndex);
 
@@ -226,8 +251,8 @@ export class ConstructedBuildingRenderer {
       gate.setDepth(2);
       container.add(gate);
 
-      this.addVerticalWallWing(container, span.negCorner, -60, keys.wingV);
-      this.addVerticalWallWing(container, 60, span.posCorner, keys.wingV);
+      this.addVerticalWallWing(container, span.negCorner, -60, keys.wingV, extraVisuals);
+      this.addVerticalWallWing(container, 60, span.posCorner, keys.wingV, extraVisuals);
     } else {
       const standalone = this.scene.add.image(0, -10, keys.standalone);
       standalone.setDisplaySize(128, 128);
@@ -257,17 +282,19 @@ export class ConstructedBuildingRenderer {
     container: Phaser.GameObjects.Container,
     startY: number,
     endY: number,
-    textureKey: string
+    textureKey: string,
+    extraVisuals: Phaser.GameObjects.Image[]
   ): void {
     const totalH = Math.max(64, endY - startY);
     const segments = Math.max(1, Math.round(totalH / 192));
     const segH = totalH / segments;
     for (let i = 0; i < segments; i++) {
       const cy = startY + (i + 0.5) * segH;
-      const wing = this.scene.add.image(0, cy, textureKey);
+      const worldY = container.y + cy;
+      const wing = this.scene.add.image(container.x, worldY, textureKey);
       wing.setDisplaySize(64, segH + 2);
-      wing.setDepth(1);
-      container.add(wing);
+      wing.setDepth(ySortDepth(worldY, CONSTRUCTED_DEPTH_BIAS.WALL));
+      extraVisuals.push(wing);
     }
   }
 }

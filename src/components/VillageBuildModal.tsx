@@ -219,7 +219,9 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                   ? '자원 부족'
                   : check.canBuild
                     ? '건설 가능'
-                    : '슬롯 부족';
+                    : bp.category === 'wall'
+                      ? '4면 완료'
+                      : '슬롯 부족';
 
             return (
               <div key={bp.type} className="bg-[#faecd1] border-2 border-[#b89568] rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-sm" title={bp.description}>

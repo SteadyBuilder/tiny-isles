@@ -150,7 +150,7 @@ export class BuildingSystem {
     const slots = this.getSlotStates(territoryId, tier, constructedBuildings);
     const bp = getBlueprint(type);
     const isAllowedForRole = (role: 'wall' | 'inner') =>
-      bp.category === 'wall' ? true : role === 'inner';
+      bp.category === 'wall' ? role === 'wall' : role === 'inner';
 
     // 지정 슬롯이 유효하고 비어있으며 해금된 경우 우선 선택
     if (
@@ -167,11 +167,10 @@ export class BuildingSystem {
     const emptySlots = slots.filter((s) => s.isUnlocked && !s.building);
     if (emptySlots.length === 0) return -1;
 
-    // 성벽 계열은 0~3(외곽 wall 슬롯) 우선
+    // 성벽 계열은 반드시 0~3(외곽 wall 슬롯)에만 배치 (내부 슬롯 침범 방지)
     if (bp.category === 'wall') {
       const wallSlot = emptySlots.find((s) => s.role === 'wall');
-      if (wallSlot) return wallSlot.slotIndex;
-      return emptySlots[0].slotIndex;
+      return wallSlot ? wallSlot.slotIndex : -1;
     }
 
     // 일반/타워/특수 건물은 반드시 inner 슬롯에만 배치 (외곽 성문 슬롯 침범 방지)
@@ -252,7 +251,7 @@ export class BuildingSystem {
         canBuild: false,
         reason:
           bp.category === 'wall'
-            ? '사용 가능한 건설 슬롯이 없습니다.'
+            ? '방책/성벽 슬롯(사방 4곳) 건설이 모두 완료되었습니다.'
             : '내부 건물 슬롯(📍)이 없습니다. 마을을 승급하여 내부 슬롯을 해금하세요.',
         blueprint: bp,
       };

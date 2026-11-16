@@ -126,6 +126,11 @@ export class ViewportCullingController {
       const inView = isPointInViewport(cv.container.x, cv.container.y, viewport, padding);
       if (cv.container.visible !== inView) {
         cv.container.setVisible(inView);
+        if (cv.extraVisuals) {
+          for (const ev of cv.extraVisuals) {
+            if (ev.scene) ev.setVisible(inView);
+          }
+        }
       }
     }
   }

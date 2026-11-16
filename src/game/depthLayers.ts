@@ -38,6 +38,12 @@ export const DEPTH = {
   TOUCH_INDICATOR: OVERLAY_BASE + 8000,
 } as const;
 
+export const CONSTRUCTED_DEPTH_BIAS = {
+  WALL: 0,
+  BUILDING: 30,
+  TOWER: 140,
+} as const;
+
 /** Y-sorted depth for a world object at `y`, with optional per-object bias. Pure. */
 export function ySortDepth(y: number, bias: number = 0): number {
   return Y_SORT_OFFSET + Math.round(y) + bias;
