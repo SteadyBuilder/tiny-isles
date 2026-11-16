@@ -1,7 +1,7 @@
 import React from 'react';
 import { Compass, Hammer } from 'lucide-react';
 import { Inventory, Island, WaveState } from '../../types/game';
-import { formatHudSeconds, HUD_RESOURCE_SLOTS } from './hudUtils';
+import { HUD_RESOURCE_SLOTS } from './hudUtils';
 
 export interface HudMobileBarProps {
   inventory: Inventory;
@@ -90,8 +90,12 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
       {waveState && (
         <div className="flex items-center justify-between bg-slate-950/90 border border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-white pointer-events-auto tabular-nums">
           <div className="flex items-center gap-2.5">
-            <span>🧟 <b>{formatHudSeconds(waveState.regularWaveRemainingSec)}</b></span>
-            <span>👹 <b className="text-red-300">{formatHudSeconds(waveState.bossWaveRemainingSec)}</b></span>
+            <span className={waveState.threatPercent >= waveState.warningThreshold ? 'text-red-300 animate-pulse' : 'text-amber-200'}>
+              🔥 위협도 <b>{waveState.threatPercent}%</b>
+            </span>
+            <span className="text-red-300">
+              👹 <b>{waveState.wavesUntilBoss <= 1 ? '보스!' : `${waveState.wavesUntilBoss}W`}</b>
+            </span>
             <span>⚔️ <b className="text-amber-300">{waveState.activeMonstersCount}</b></span>
           </div>
           {showTestMenu && (

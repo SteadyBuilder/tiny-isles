@@ -1,7 +1,6 @@
 import React from 'react';
-import { FastForward, Flame, ShieldAlert, Skull } from 'lucide-react';
+import { Flame, ShieldAlert, Skull } from 'lucide-react';
 import { WaveState } from '../../types/game';
-import { formatHudSeconds } from './hudUtils';
 
 export interface HudWaveSectionProps {
   waveState?: WaveState;
@@ -9,7 +8,7 @@ export interface HudWaveSectionProps {
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
   onSummonEarlyWave?: () => void;
-  onCycleTimeScale: () => void;
+  onAddTestThreat?: () => void;
   onAddTestResources?: () => void;
   showTestMenu?: boolean;
 }
@@ -20,34 +19,65 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
   onTriggerRegularWave,
   onTriggerBossWave,
   onSummonEarlyWave,
-  onCycleTimeScale,
+  onAddTestThreat,
   onAddTestResources,
   showTestMenu = false,
 }) => {
+  const threat = waveState?.threatPercent ?? 0;
+  const isWarning = threat >= (waveState?.warningThreshold ?? 80);
+
   return (
     <>
       {waveState && (
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/88 backdrop-blur-md border border-red-500/35 px-3 py-1.5 rounded-2xl shadow-xl pointer-events-auto">
+        <div
+          className={`flex flex-wrap items-center justify-between gap-2 bg-slate-950/88 backdrop-blur-md border px-3 py-1.5 rounded-2xl shadow-xl pointer-events-auto transition-colors ${
+            isWarning ? 'border-red-500/80 shadow-red-950/50' : 'border-red-500/35'
+          }`}
+        >
           <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
+            {/* 활동 기반 마물 위협도 게이지 */}
             <div
-              className="flex items-center gap-1 text-emerald-300 font-bold"
-              title={`${Math.round(waveState.regularWaveIntervalSec / 60)}분 주기 일반 마물 웨이브 남은 시간`}
+              className="flex items-center gap-2 font-bold"
+              title="자원 채집, 건물 건설, 새 마을 해금 시 마물 위협도가 상승하며 100% 도달 시 웨이브가 침공합니다."
             >
-              <Skull className="w-3.5 h-3.5 text-emerald-400" />
-              <span>🧟</span>
-              <span id="regular-wave-timer" className="font-mono font-black text-white bg-slate-800 px-1.5 py-0.5 rounded">
-                {formatHudSeconds(waveState.regularWaveRemainingSec)}
+              <Flame className={`w-3.5 h-3.5 ${isWarning ? 'text-red-400 animate-pulse' : 'text-amber-400'}`} />
+              <span className={isWarning ? 'text-red-300' : 'text-amber-200'}>위협도</span>
+              <div className="w-24 h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                <div
+                  id="threat-gauge-bar"
+                  className={`h-full transition-all duration-300 ${
+                    isWarning
+                      ? 'bg-gradient-to-r from-orange-500 to-red-500'
+                      : 'bg-gradient-to-r from-emerald-500 via-amber-400 to-orange-500'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(0, threat))}%` }}
+                />
+              </div>
+              <span
+                id="threat-percent-text"
+                className={`font-mono font-black px-1.5 py-0.5 rounded ${
+                  isWarning
+                    ? 'text-red-200 bg-red-950/80 border border-red-500/40 animate-pulse'
+                    : 'text-white bg-slate-800'
+                }`}
+              >
+                {threat}%
               </span>
+              {isWarning && (
+                <span className="text-[11px] font-black text-red-300 animate-pulse">
+                  곧 침공!
+                </span>
+              )}
             </div>
 
             <div
               className="flex items-center gap-1 text-red-300 font-bold"
-              title={`${Math.round(waveState.bossWaveIntervalSec / 60)}분 주기 보스몬스터 출현 남은 시간`}
+              title="보스 군단 출현까지 남은 웨이브 횟수"
             >
-              <Flame className="w-3.5 h-3.5 text-red-400" />
+              <Skull className="w-3.5 h-3.5 text-red-400" />
               <span>👹</span>
-              <span id="boss-wave-timer" className="font-mono font-black text-red-200 bg-red-950/70 border border-red-500/30 px-1.5 py-0.5 rounded">
-                {formatHudSeconds(waveState.bossWaveRemainingSec)}
+              <span className="font-mono font-black text-red-200 bg-red-950/70 border border-red-500/30 px-1.5 py-0.5 rounded">
+                {waveState.wavesUntilBoss <= 1 ? '다음 보스!' : `보스까지 ${waveState.wavesUntilBoss}웨이브`}
               </span>
             </div>
 
@@ -73,13 +103,13 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
 
             <span
               className="px-2 py-0.5 rounded-md bg-cyan-950/80 border border-cyan-400/40 text-cyan-200 text-[11px] font-bold"
-              title="함께 마을을 지키는 오프라인 유저 AI 수비대"
+              title="함께 마을을 지키는 수비대"
             >
               🛡️ 수비대 {waveState.activeGarrisonCount ?? 0}
             </span>
           </div>
 
-          {/* Compact Wave Trigger & Speed Test Badges (Easter Egg) */}
+          {/* Compact Wave Trigger & Test Badges (Easter Egg) */}
           {showTestMenu && (
             <div className="flex items-center gap-1.5">
               {onSummonEarlyWave && (
@@ -90,6 +120,17 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
                   title="준비 완료 시 웨이브 즉시 소환 (처치 보상 +35% 보너스)"
                 >
                   ⚔️ 조기 소환 (+35%)
+                </button>
+              )}
+
+              {onAddTestThreat && (
+                <button
+                  id="add-test-threat-btn"
+                  onClick={onAddTestThreat}
+                  className="px-2 py-1 rounded-lg bg-orange-700/85 hover:bg-orange-600 text-white text-[11px] font-black border border-orange-400/50 transition active:scale-95"
+                  title="마물 위협도 +25% 증가 테스트"
+                >
+                  🔥 +25%
                 </button>
               )}
 
@@ -109,16 +150,6 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
                 title="보스몬스터 즉시 출현"
               >
                 👹 +Boss
-              </button>
-
-              <button
-                id="toggle-timescale-btn"
-                onClick={onCycleTimeScale}
-                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold border border-slate-600 flex items-center gap-1 transition active:scale-95 tabular-nums"
-                title="웨이브 타이머 배속 전환 (1x / 60x / 300x)"
-              >
-                <FastForward className="w-3 h-3" />
-                <span>{waveState.timeScale}x</span>
               </button>
 
               {onAddTestResources && (

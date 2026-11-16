@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../../data/worldRules';
+import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import { Entity, Inventory, Island, PlayerAction } from '../../../types/game';
 import {
@@ -28,7 +28,7 @@ export interface IPlayerInteractionContext {
   findGatherableEntityVisual: (x: number, y: number) => EntityVisual | null;
   updateEntityHpBar: (entityId: string) => void;
   removeAndRespawnEntity: (ent: Entity) => void;
-  reduceWaveCooldown: (seconds: number) => void;
+  addThreat: (amount: number) => void;
   broadcastEntityHit: (entityId: string, damage: number) => void;
   unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean) => void;
   updateCoreGemVisual: (territoryId: number) => void;
@@ -155,7 +155,7 @@ export class PlayerInteractionController {
       if (ent.hp <= 0) {
         sound.playBreak();
         this.ctx.removeAndRespawnEntity(ent);
-        this.ctx.reduceWaveCooldown(ACTIVE_WAVE_ACCELERATION_CONFIG.gatherCooldownReductionSec);
+        this.ctx.addThreat(THREAT_WAVE_CONFIG.gatherThreatGain);
       }
       return;
     }

@@ -1,12 +1,6 @@
 import { MonsterType } from '../types/game';
 
 /**
- * 웨이브 주기 및 시간 상수
- */
-export const REGULAR_WAVE_INTERVAL_SEC = 8 * 60;  // 8분 (480초) 마다 정규 마물 침공 (접속 중 타이머)
-export const BOSS_WAVE_INTERVAL_SEC = 24 * 60;    // 24분 (1,440초) 마다 보스 마물 출현 (접속 중 타이머)
-
-/**
  * 몬스터 기본 스탯 템플릿 인터페이스
  */
 export interface MonsterDataTemplate {

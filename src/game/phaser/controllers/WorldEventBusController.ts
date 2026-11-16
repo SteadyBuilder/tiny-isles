@@ -23,8 +23,7 @@ export interface IWorldEventBusContext {
   triggerRegularWave: () => void;
   triggerBossWave: () => void;
   summonEarlyWave: (isBossWave: boolean) => void;
-  reduceWaveCooldown: (seconds: number) => void;
-  setWaveTimeScale: (scale: number) => void;
+  addThreat: (amount: number) => void;
   damageTerritoryCore: (territoryId: number, damage: number) => void;
   onWindowUnload: () => void;
 }
@@ -97,12 +96,8 @@ export class WorldEventBusController {
       this.ctx.summonEarlyWave(Boolean(data?.isBossWave));
     });
 
-    this.register('reduce-wave-cooldown', (seconds) => {
-      this.ctx.reduceWaveCooldown(seconds);
-    });
-
-    this.register('set-wave-timescale', (scale) => {
-      this.ctx.setWaveTimeScale(scale);
+    this.register('add-threat', (amount) => {
+      this.ctx.addThreat(amount);
     });
 
     this.register('damage-territory-core', (data) => {

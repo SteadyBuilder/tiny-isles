@@ -144,20 +144,6 @@ export class WaveSpawner {
     };
   }
 
-  public restoreMonsters(incoming: Monster[]): void {
-    const monsters = this.ctx.getMonsters();
-    for (const mv of monsters.values()) {
-      mv.container.destroy();
-    }
-    monsters.clear();
-
-    for (const m of incoming) {
-      if (m.hp <= 0) continue;
-      const cloned: Monster = { ...m };
-      monsters.set(cloned.id, MonsterVisualManager.create(this.ctx.scene, cloned));
-    }
-  }
-
   public applyRemoteSync(incomingList: Monster[]): void {
     const monsters = this.ctx.getMonsters();
     const incomingIds = new Set(incomingList.map((m) => m.id));

@@ -34,7 +34,7 @@ export interface IWorldSystemsHost {
   getCurrentTerritoryId: () => number;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
-  applyOfflineWorldUpdate: (
+  applySyncedWorldState: (
     updatedIslands: Island[],
     updatedBuildings: ConstructedBuilding[]
   ) => void;
@@ -107,6 +107,9 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
         multiplayerSync?.broadcastMonstersSync(monsters, waveCount, bossWaveCount),
       broadcastMonsterHit: (monsterId, damage, attackerName) =>
         multiplayerSync?.broadcastMonsterHit(monsterId, damage, attackerName),
+      broadcastThreatAdded: (amount) => multiplayerSync?.broadcastThreatAdded(amount),
+      broadcastThreatSync: (threatPercent, waveCount, bossWaveCount) =>
+        multiplayerSync?.broadcastThreatSync(threatPercent, waveCount, bossWaveCount),
       onMonstersChanged: () => livingWorldCoordinator?.requestImmediateSnapshot(),
     },
     coreGemSystem
@@ -134,7 +137,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       getCurrentTerritoryId: host.getCurrentTerritoryId,
       getIslands: host.getIslands,
       getConstructedBuildings: host.getConstructedBuildings,
-      applyOfflineWorldUpdate: host.applyOfflineWorldUpdate,
+      applySyncedWorldState: host.applySyncedWorldState,
     },
     waveSystem,
     garrisonSystem
@@ -146,7 +149,13 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getPlayerName: host.getPlayerName,
     getPlayerColor: host.getPlayerColor,
     getLocalPlayerState: host.getLocalPlayerState,
-    onOnlineCountChanged: (count) => waveSystem.setOnlineCount(count),
+    onOnlineCountChanged: (count) => {
+      waveSystem.setOnlineCount(count);
+      if (waveSystem.getIsHost()) {
+        const ws = waveSystem.getWaveState();
+        multiplayerSync?.broadcastThreatSync(ws.threatPercent, ws.waveCount, ws.bossWaveCount);
+      }
+    },
     onHostStatusChanged: (isHost) => {
       waveSystem.setHostMode(isHost);
       if (isHost) {
@@ -175,6 +184,13 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
         waveSystem.damageMonster(monsterId, damage, attackerName, true);
       }
     },
+    onRemoteThreatAdded: (amount) => {
+      if (waveSystem.getIsHost()) {
+        waveSystem.addThreat(amount, false);
+      }
+    },
+    onRemoteThreatSync: (threatPercent, waveCount, bossWaveCount) =>
+      waveSystem.applyRemoteThreatSync(threatPercent, waveCount, bossWaveCount),
     onRemoteTerritoryLost: (territoryId, reason) =>
       coreGemSystem.loseTerritory(territoryId, reason, false),
   });

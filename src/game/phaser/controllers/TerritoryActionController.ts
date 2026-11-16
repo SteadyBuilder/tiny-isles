@@ -1,6 +1,6 @@
 import confetti from 'canvas-confetti';
 import { GOLD_MINE_BIOME_CONFIG } from '../../../data/biomes';
-import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../../data/worldRules';
+import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { serverSync } from '../../../lib/serverSync';
 import { sound } from '../../../lib/sound';
 import {
@@ -37,7 +37,7 @@ export interface ITerritoryActionContext {
   spawnGoldMineClusterAndAnnounce: () => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   playExplosionAt: (x: number, y: number) => void;
-  reduceWaveCooldown: (seconds: number) => void;
+  addThreat: (amount: number) => void;
   broadcastUnlock: (islandId: number, unlockedBy: string) => void;
   broadcastVillageUpgrade: (territoryId: number, nextTier: VillageTier) => void;
   broadcastBuildingConstructed: (cb: ConstructedBuilding) => void;
@@ -106,6 +106,7 @@ export class TerritoryActionController {
 
     if (isLocalTrigger) {
       this.ctx.broadcastVillageUpgrade(territoryId, nextTier);
+      this.ctx.addThreat(THREAT_WAVE_CONFIG.upgradeThreatGain);
     }
     return true;
   }
@@ -171,7 +172,7 @@ export class TerritoryActionController {
 
     if (isLocal) {
       this.ctx.broadcastBuildingConstructed(newBuilding);
-      this.ctx.reduceWaveCooldown(ACTIVE_WAVE_ACCELERATION_CONFIG.buildCooldownReductionSec);
+      this.ctx.addThreat(THREAT_WAVE_CONFIG.buildThreatGain);
     }
     return true;
   }
@@ -254,6 +255,7 @@ export class TerritoryActionController {
     if (isLocalTrigger) {
       serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);
       this.ctx.broadcastUnlock(islandId, unlockedBy);
+      this.ctx.addThreat(THREAT_WAVE_CONFIG.unlockThreatGain);
     }
   }
 

@@ -67,7 +67,7 @@ export function App() {
         onTriggerRegularWave={() => GameEvents.emit('trigger-regular-wave')}
         onTriggerBossWave={() => GameEvents.emit('trigger-boss-wave')}
         onSummonEarlyWave={() => GameEvents.emit('summon-early-wave', { isBossWave: false })}
-        onChangeTimeScale={(scale) => GameEvents.emit('set-wave-timescale', scale)}
+        onAddTestThreat={() => GameEvents.emit('add-threat', 25)}
         onAddTestResources={() => GameEvents.emit('add-test-resources')}
       />
 

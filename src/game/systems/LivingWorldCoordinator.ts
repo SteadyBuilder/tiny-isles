@@ -23,7 +23,7 @@ export interface ILivingWorldContext {
   getCurrentTerritoryId: () => number;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
-  applyOfflineWorldUpdate: (
+  applySyncedWorldState: (
     updatedIslands: Island[],
     updatedBuildings: ConstructedBuilding[]
   ) => void;
@@ -101,14 +101,7 @@ export class LivingWorldCoordinator {
         if (Array.isArray(savedWorld.constructedBuildings)) {
           baseBuildings = savedWorld.constructedBuildings;
         }
-        this.ctx.applyOfflineWorldUpdate(baseIslands, baseBuildings);
-      }
-
-      const savedMonsters = Array.isArray(savedWorld.activeMonsters)
-        ? savedWorld.activeMonsters.filter((m) => m.hp > 0)
-        : [];
-      if (savedMonsters.length > 0) {
-        this.waveSystem.restoreMonsters(savedMonsters);
+        this.ctx.applySyncedWorldState(baseIslands, baseBuildings);
       }
     }
 
@@ -185,7 +178,7 @@ export class LivingWorldCoordinator {
       villageTiers,
       coreHps,
       constructedBuildings: this.ctx.getConstructedBuildings(),
-      activeMonsters: this.waveSystem.getMonsters(),
+      activeMonsters: [],
     };
 
     return worldStateSync.saveWorldState(state);

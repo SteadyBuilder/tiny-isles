@@ -170,10 +170,9 @@ export interface Monster {
 }
 
 export interface WaveState {
-  regularWaveIntervalSec: number; // 480 (8분)
-  bossWaveIntervalSec: number; // 1440 (24분)
-  regularWaveRemainingSec: number;
-  bossWaveRemainingSec: number;
+  threatPercent: number;
+  warningThreshold: number;
+  wavesUntilBoss: number;
   waveCount: number;
   bossWaveCount: number;
   activeMonstersCount: number;
@@ -185,10 +184,8 @@ export interface WaveState {
     targetTerritoryName: string;
   } | null;
   lastWaveMessage: string | null;
-  timeScale: number;
   onlineScaleLabel?: string;
   activeGarrisonCount?: number;
-  isGlobalClockSynced?: boolean;
 }
 
 export interface DynamicScalingProfile {

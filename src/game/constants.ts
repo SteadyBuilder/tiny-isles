@@ -9,10 +9,6 @@ import {
   VILLAGE_TIER_CONFIG,
   VILLAGE_TIER_CONFIGS,
 } from '../data/buildings';
-import {
-  BOSS_WAVE_INTERVAL_SEC,
-  REGULAR_WAVE_INTERVAL_SEC,
-} from '../data/waves';
 import { INITIAL_ISLANDS } from '../data/territories';
 import {
   TILE_SIZE,
@@ -46,8 +42,6 @@ export {
   VILLAGE_PROGRESSION_TEXT,
   VILLAGE_TIER_CONFIG,
   VILLAGE_TIER_CONFIGS,
-  REGULAR_WAVE_INTERVAL_SEC,
-  BOSS_WAVE_INTERVAL_SEC,
   INITIAL_ISLANDS,
   TILE_SIZE,
   TERRITORY_TILES,

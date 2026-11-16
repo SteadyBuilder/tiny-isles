@@ -26,7 +26,7 @@ interface HUDProps {
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
   onSummonEarlyWave?: () => void;
-  onChangeTimeScale?: (scale: number) => void;
+  onAddTestThreat?: () => void;
   onAddTestResources?: () => void;
 }
 
@@ -47,7 +47,7 @@ export const HUD: React.FC<HUDProps> = ({
   onTriggerRegularWave,
   onTriggerBossWave,
   onSummonEarlyWave,
-  onChangeTimeScale,
+  onAddTestThreat,
   onAddTestResources,
 }) => {
   const [soundSettings, setSoundSettings] = useState<SoundSettings>(() => sound.getSettings());
@@ -82,12 +82,6 @@ export const HUD: React.FC<HUDProps> = ({
     setShowSettingsModal(true);
   };
 
-  const cycleTimeScale = () => {
-    if (!waveState || !onChangeTimeScale) return;
-    const next = waveState.timeScale === 1 ? 60 : waveState.timeScale === 60 ? 300 : 1;
-    onChangeTimeScale(next);
-  };
-
   const curTierCfg = currentTerritory
     ? VILLAGE_TIER_CONFIGS[currentTerritory.villageTier]
     : VILLAGE_TIER_CONFIGS[2];
@@ -118,7 +112,7 @@ export const HUD: React.FC<HUDProps> = ({
           onTriggerRegularWave={onTriggerRegularWave}
           onTriggerBossWave={onTriggerBossWave}
           onSummonEarlyWave={onSummonEarlyWave}
-          onCycleTimeScale={cycleTimeScale}
+          onAddTestThreat={onAddTestThreat}
           onAddTestResources={onAddTestResources}
           showTestMenu={showTestMenu}
         />

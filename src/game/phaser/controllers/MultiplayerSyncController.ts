@@ -30,6 +30,8 @@ export interface IMultiplayerSyncContext {
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
   onRemoteMonstersSync: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
   onRemoteMonsterHit: (monsterId: string, damage: number, attackerName: string) => void;
+  onRemoteThreatAdded?: (amount: number) => void;
+  onRemoteThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
 }
 
@@ -67,6 +69,9 @@ export class MultiplayerSyncController {
         this.ctx.onRemoteMonstersSync(monsters, waveCount, bossWaveCount),
       onRemoteMonsterHit: (monsterId, damage, attackerName) =>
         this.ctx.onRemoteMonsterHit(monsterId, damage, attackerName),
+      onRemoteThreatAdded: (amount) => this.ctx.onRemoteThreatAdded?.(amount),
+      onRemoteThreatSync: (threatPercent, waveCount, bossWaveCount) =>
+        this.ctx.onRemoteThreatSync?.(threatPercent, waveCount, bossWaveCount),
       onRemoteTerritoryLost: (territoryId, reason) =>
         this.ctx.onRemoteTerritoryLost(territoryId, reason),
     });
@@ -134,6 +139,18 @@ export class MultiplayerSyncController {
 
   public broadcastMonsterHit(monsterId: string, damage: number, attackerName: string): void {
     this.router.emit('monster_hit', 'monster_hit', { monsterId, damage, attackerName });
+  }
+
+  public broadcastThreatAdded(amount: number): void {
+    this.router.emit('threat_added', 'threat_added', { amount });
+  }
+
+  public broadcastThreatSync(
+    threatPercent: number,
+    waveCount: number,
+    bossWaveCount: number
+  ): void {
+    this.router.emit('threat_sync', 'threat_sync', { threatPercent, waveCount, bossWaveCount });
   }
 
   public broadcastTerritoryLost(territoryId: number): void {

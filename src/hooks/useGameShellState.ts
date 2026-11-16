@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  BOSS_WAVE_INTERVAL_SEC,
-  INITIAL_ISLANDS,
-  REGULAR_WAVE_INTERVAL_SEC,
-} from '../game/constants';
+import { THREAT_WAVE_CONFIG } from '../data/worldRules';
+import { INITIAL_ISLANDS } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
 import { serverSync } from '../lib/serverSync';
 import { storage } from '../lib/storage';
@@ -38,16 +35,14 @@ export function useGameShellState() {
     storage.loadConstructedBuildings()
   );
   const [waveState, setWaveState] = useState<WaveState>({
-    regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC,
-    bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,
-    regularWaveRemainingSec: REGULAR_WAVE_INTERVAL_SEC,
-    bossWaveRemainingSec: BOSS_WAVE_INTERVAL_SEC,
+    threatPercent: 0,
+    warningThreshold: THREAT_WAVE_CONFIG.warningThreshold,
+    wavesUntilBoss: THREAT_WAVE_CONFIG.bossEveryNWaves,
     waveCount: 0,
     bossWaveCount: 0,
     activeMonstersCount: 0,
     activeBoss: null,
     lastWaveMessage: null,
-    timeScale: 1,
   });
 
   const [showVillageModal, setShowVillageModal] = useState<boolean>(false);

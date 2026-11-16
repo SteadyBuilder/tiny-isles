@@ -4,11 +4,7 @@ import {
   Monster,
   WaveState,
 } from '../../types/game';
-import {
-  BOSS_WAVE_INTERVAL_SEC,
-  REGULAR_WAVE_INTERVAL_SEC,
-} from '../constants';
-import { ACTIVE_WAVE_ACCELERATION_CONFIG } from '../../data/worldRules';
+import { THREAT_WAVE_CONFIG } from '../../data/worldRules';
 import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
@@ -34,11 +30,19 @@ export interface IWaveSystemContext {
   broadcastWaveSpawn?: (isBossWave: boolean) => void;
   broadcastMonstersSync?: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
   broadcastMonsterHit?: (monsterId: string, damage: number, attackerName: string) => void;
+  broadcastThreatAdded?: (amount: number) => void;
+  broadcastThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   onMonstersChanged?: () => void;
 }
 
+function computeWavesUntilBoss(waveCount: number): number {
+  const mod = waveCount % THREAT_WAVE_CONFIG.bossEveryNWaves;
+  return THREAT_WAVE_CONFIG.bossEveryNWaves - mod;
+}
+
 /**
- * 접속 중 활성 타이머 기반 8분/24분 침공 타이머, 접속자 수 동적 스케일링, 조기 소환 및 전투 오케스트레이션 시스템
+ * 활동 기반 마물 위협도(Threat %) + 난입형(Drop-in/Out) 오픈월드 웨이브 오케스트레이션 시스템
+ * - 시간 경과/오프라인 상태에서는 절대 웨이브가 발생하지 않습니다.
  */
 export class WaveSystem {
   private ctx: IWaveSystemContext;
@@ -46,25 +50,22 @@ export class WaveSystem {
   private combatAI: MonsterCombatAI;
   private spawner: WaveSpawner;
   private monsters = new Map<string, MonsterVisual>();
-  private waveTimerAccum = 0;
   private isHost = true;
   private onlineCount = 1;
   private activeBonusMultiplier = 1.0;
+  private warningIssuedForCurrentCycle = false;
 
   private waveState: WaveState = {
-    regularWaveIntervalSec: REGULAR_WAVE_INTERVAL_SEC,
-    bossWaveIntervalSec: BOSS_WAVE_INTERVAL_SEC,
-    regularWaveRemainingSec: REGULAR_WAVE_INTERVAL_SEC,
-    bossWaveRemainingSec: BOSS_WAVE_INTERVAL_SEC,
+    threatPercent: 0,
+    warningThreshold: THREAT_WAVE_CONFIG.warningThreshold,
+    wavesUntilBoss: THREAT_WAVE_CONFIG.bossEveryNWaves,
     waveCount: 0,
     bossWaveCount: 0,
     activeMonstersCount: 0,
     activeBoss: null,
     lastWaveMessage: null,
-    timeScale: 1.0,
     onlineScaleLabel: getDynamicScalingProfile(1).label,
     activeGarrisonCount: 0,
-    isGlobalClockSynced: false,
   };
 
   private onTerritoryLost = (data: { territoryId: number }) => {
@@ -131,11 +132,6 @@ export class WaveSystem {
     return this.monsters;
   }
 
-  public setTimeScale(scale: number): void {
-    this.waveState.timeScale = scale;
-    this.emitWaveState();
-  }
-
   public setOnlineCount(count: number): void {
     this.onlineCount = Math.max(1, count);
     this.waveState.onlineScaleLabel = getDynamicScalingProfile(this.onlineCount).label;
@@ -150,36 +146,83 @@ export class WaveSystem {
   public syncCountsFromWorldState(waveCount: number, bossWaveCount: number): void {
     this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
+    this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
     this.emitWaveState();
   }
 
   /**
-   * 자원 채집 또는 건설 시 다음 웨이브 대기 시간을 단축 (능동적 가속)
-   * - 다인 접속 시 중첩 과속을 방지하기 위해 onlineCount로 분산 적용
-   * - 기본 주기의 maxCooldownReductionRatio(40%) 이상은 단축되지 않도록 하한 보장
+   * 플레이어 활동(자원 채집, 건물 건설, 새 마을 해금) 시 월드 공용 마물 위협도를 증가시킵니다.
+   * - 80% 도달 시 경고 알림
+   * - 100% 도달 시 웨이브 즉시 소환 (정규 N회마다 보스 웨이브)
    */
-  public reduceCooldown(seconds: number): void {
-    if (seconds <= 0) return;
+  public addThreat(amount: number, isLocalTrigger = true): void {
+    if (amount <= 0) return;
 
-    const scaledReduction = Math.max(1, Math.round(seconds / Math.max(1, this.onlineCount)));
-    const keepRatio = Math.max(0, 1 - ACTIVE_WAVE_ACCELERATION_CONFIG.maxCooldownReductionRatio);
-    const minRegularRemaining = Math.round(REGULAR_WAVE_INTERVAL_SEC * keepRatio);
-    const minBossRemaining = Math.round(BOSS_WAVE_INTERVAL_SEC * keepRatio);
-
-    if (this.waveState.regularWaveRemainingSec > minRegularRemaining) {
-      this.waveState.regularWaveRemainingSec = Math.max(
-        minRegularRemaining,
-        this.waveState.regularWaveRemainingSec - scaledReduction
-      );
+    if (!this.isHost && isLocalTrigger) {
+      this.ctx.broadcastThreatAdded?.(amount);
+      return;
     }
 
-    if (this.waveState.bossWaveRemainingSec > minBossRemaining) {
-      this.waveState.bossWaveRemainingSec = Math.max(
-        minBossRemaining,
-        this.waveState.bossWaveRemainingSec - scaledReduction
-      );
+    const prevThreat = this.waveState.threatPercent;
+    const nextThreat = Math.min(THREAT_WAVE_CONFIG.maxThreat, prevThreat + amount);
+    this.waveState.threatPercent = nextThreat;
+
+    if (
+      !this.warningIssuedForCurrentCycle &&
+      prevThreat < THREAT_WAVE_CONFIG.warningThreshold &&
+      nextThreat >= THREAT_WAVE_CONFIG.warningThreshold &&
+      nextThreat < THREAT_WAVE_CONFIG.maxThreat
+    ) {
+      this.warningIssuedForCurrentCycle = true;
+      const warnMsg = '⚠️ 마물 위협도가 80%에 도달했습니다! 곧 마물 대군이 몰려옵니다!';
+      this.waveState.lastWaveMessage = warnMsg;
+      sound.playBreak();
+      GameEvents.emit('game-alert', warnMsg);
     }
 
+    if (nextThreat >= THREAT_WAVE_CONFIG.maxThreat) {
+      this.waveState.threatPercent = 0;
+      this.warningIssuedForCurrentCycle = false;
+      const isBossWave =
+        (this.waveState.waveCount + 1) % THREAT_WAVE_CONFIG.bossEveryNWaves === 0;
+      this.activeBonusMultiplier = 1.0;
+      this.spawnMonsterWave(isBossWave, true, false);
+      this.ctx.broadcastThreatSync?.(
+        this.waveState.threatPercent,
+        this.waveState.waveCount,
+        this.waveState.bossWaveCount
+      );
+      return;
+    }
+
+    this.emitWaveState();
+    if (this.isHost) {
+      this.ctx.broadcastThreatSync?.(
+        this.waveState.threatPercent,
+        this.waveState.waveCount,
+        this.waveState.bossWaveCount
+      );
+    }
+  }
+
+  public applyRemoteThreatSync(
+    threatPercent: number,
+    waveCount: number,
+    bossWaveCount: number
+  ): void {
+    if (this.isHost) return;
+    const prevThreat = this.waveState.threatPercent;
+    this.waveState.threatPercent = Math.max(0, Math.min(THREAT_WAVE_CONFIG.maxThreat, threatPercent));
+    this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
+    this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
+    this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
+
+    if (
+      prevThreat < THREAT_WAVE_CONFIG.warningThreshold &&
+      this.waveState.threatPercent >= THREAT_WAVE_CONFIG.warningThreshold
+    ) {
+      GameEvents.emit('game-alert', '⚠️ 마물 위협도가 80%에 도달했습니다! 곧 마물 대군이 몰려옵니다!');
+    }
     this.emitWaveState();
   }
 
@@ -187,8 +230,17 @@ export class WaveSystem {
    * 준비된 플레이어가 웨이브를 즉시 소환 (처치 보상 보너스 적용)
    */
   public summonEarlyWave(isBossWave: boolean): void {
-    this.activeBonusMultiplier = ACTIVE_WAVE_ACCELERATION_CONFIG.earlySummonRewardMultiplier;
+    this.waveState.threatPercent = 0;
+    this.warningIssuedForCurrentCycle = false;
+    this.activeBonusMultiplier = THREAT_WAVE_CONFIG.earlySummonRewardMultiplier;
     this.spawnMonsterWave(isBossWave, true, true);
+    if (this.isHost) {
+      this.ctx.broadcastThreatSync?.(
+        this.waveState.threatPercent,
+        this.waveState.waveCount,
+        this.waveState.bossWaveCount
+      );
+    }
   }
 
   public triggerRegularWave(): void {
@@ -224,35 +276,7 @@ export class WaveSystem {
   }
 
   public update(time: number, delta: number): void {
-    this.updateWaveTimers(delta);
     this.combatAI.updateMonsters(time, delta);
-  }
-
-  private updateWaveTimers(delta: number): void {
-    this.waveTimerAccum += delta * this.waveState.timeScale;
-    if (this.waveTimerAccum < 1000) return;
-
-    const elapsedSec = Math.floor(this.waveTimerAccum / 1000);
-    this.waveTimerAccum -= elapsedSec * 1000;
-
-    this.waveState.regularWaveRemainingSec = Math.max(
-      0,
-      this.waveState.regularWaveRemainingSec - elapsedSec
-    );
-    this.waveState.bossWaveRemainingSec = Math.max(
-      0,
-      this.waveState.bossWaveRemainingSec - elapsedSec
-    );
-
-    if (this.waveState.regularWaveRemainingSec <= 0) {
-      this.activeBonusMultiplier = 1.0;
-      this.spawnMonsterWave(false, true, false);
-    }
-    if (this.waveState.bossWaveRemainingSec <= 0) {
-      this.activeBonusMultiplier = 1.0;
-      this.spawnMonsterWave(true, true, false);
-    }
-    this.emitWaveState();
   }
 
   public spawnMonsterWave(
@@ -262,11 +286,11 @@ export class WaveSystem {
   ): void {
     if (isBossWave) {
       this.waveState.bossWaveCount += 1;
-      this.waveState.bossWaveRemainingSec = BOSS_WAVE_INTERVAL_SEC;
+      this.waveState.waveCount += 1;
     } else {
       this.waveState.waveCount += 1;
-      this.waveState.regularWaveRemainingSec = REGULAR_WAVE_INTERVAL_SEC;
     }
+    this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
 
     const result = this.spawner.spawnWave({
       isBossWave,
@@ -300,11 +324,6 @@ export class WaveSystem {
     }
   }
 
-  public restoreMonsters(monsters: Monster[]): void {
-    this.spawner.restoreMonsters(monsters);
-    this.emitWaveState();
-  }
-
   public applyRemoteMonstersSync(
     monsters: Monster[],
     waveCount: number,
@@ -313,6 +332,7 @@ export class WaveSystem {
     if (this.isHost) return;
     this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
+    this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
     this.spawner.applyRemoteSync(monsters);
     this.emitWaveState();
   }

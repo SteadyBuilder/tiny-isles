@@ -106,7 +106,7 @@ export function createWorldControllersBundle(
       host.resourceEntityRenderer.spawnGoldMineClusterAndAnnounce(),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
-    reduceWaveCooldown: (seconds) => host.systems.waveSystem.reduceCooldown(seconds),
+    addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
     broadcastUnlock: (id, by) => host.systems.multiplayerSync?.broadcastUnlock(id, by),
     broadcastVillageUpgrade: (id, tier) =>
       host.systems.multiplayerSync?.broadcastVillageUpgrade(id, tier),
@@ -131,7 +131,7 @@ export function createWorldControllersBundle(
       host.resourceEntityRenderer.findGatherableVisual(x, y),
     updateEntityHpBar: (id) => host.resourceEntityRenderer.updateHpBar(id),
     removeAndRespawnEntity: (ent) => host.resourceEntityRenderer.removeAndRespawn(ent),
-    reduceWaveCooldown: (seconds) => host.systems.waveSystem.reduceCooldown(seconds),
+    addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
     broadcastEntityHit: (id, dmg) => host.systems.multiplayerSync?.broadcastHit(id, dmg),
     unlockIslandLocally: (id, by, local) => territoryAction.unlockIslandLocally(id, by, local),
     updateCoreGemVisual: (id) => host.systems.coreGemSystem.updateCoreGemVisual(id),
@@ -206,8 +206,7 @@ export function createWorldControllersBundle(
     triggerRegularWave: () => host.systems.waveSystem.triggerRegularWave(),
     triggerBossWave: () => host.systems.waveSystem.triggerBossWave(),
     summonEarlyWave: (isBoss) => host.systems.waveSystem.summonEarlyWave(isBoss),
-    reduceWaveCooldown: (sec) => host.systems.waveSystem.reduceCooldown(sec),
-    setWaveTimeScale: (scale) => host.systems.waveSystem.setTimeScale(scale),
+    addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
     damageTerritoryCore: (id, dmg) =>
       host.systems.coreGemSystem.damageTerritoryCore(id, dmg, '마물 침공 테스트', true),
     onWindowUnload: () => {

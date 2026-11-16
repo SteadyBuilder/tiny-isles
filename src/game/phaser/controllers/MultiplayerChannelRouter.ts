@@ -25,6 +25,8 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
   onRemoteMonstersSync: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
   onRemoteMonsterHit: (monsterId: string, damage: number, attackerName: string) => void;
+  onRemoteThreatAdded?: (amount: number) => void;
+  onRemoteThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
 }
 
@@ -149,6 +151,24 @@ export class MultiplayerChannelRouter {
           this.callbacks.onRemoteMonsterHit(monsterId, damage, attackerName);
           break;
         }
+        case 'threat_added': {
+          const { amount } = data.payload as { amount: number };
+          this.callbacks.onRemoteThreatAdded?.(Number(amount ?? 0));
+          break;
+        }
+        case 'threat_sync': {
+          const { threatPercent, waveCount, bossWaveCount } = data.payload as {
+            threatPercent: number;
+            waveCount: number;
+            bossWaveCount: number;
+          };
+          this.callbacks.onRemoteThreatSync?.(
+            Number(threatPercent ?? 0),
+            Number(waveCount ?? 0),
+            Number(bossWaveCount ?? 0)
+          );
+          break;
+        }
         case 'territory_lost': {
           const { territoryId, reason } = data.payload as {
             territoryId: number;
@@ -255,6 +275,32 @@ export class MultiplayerChannelRouter {
         }) => {
           if (isValid(payload)) {
             this.callbacks.onRemoteMonsterHit(payload.monsterId, payload.damage, payload.attackerName);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'threat_added' },
+        ({ payload }: { payload: { amount: number } & BroadcastMeta }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteThreatAdded?.(Number(payload.amount ?? 0));
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'threat_sync' },
+        ({
+          payload,
+        }: {
+          payload: { threatPercent: number; waveCount: number; bossWaveCount: number } & BroadcastMeta;
+        }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteThreatSync?.(
+              Number(payload.threatPercent ?? 0),
+              Number(payload.waveCount ?? 0),
+              Number(payload.bossWaveCount ?? 0)
+            );
           }
         }
       )

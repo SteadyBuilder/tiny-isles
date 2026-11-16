@@ -145,7 +145,7 @@ export class WorldScene extends Phaser.Scene {
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,
       getConstructedBuildings: () => this.constructedBuildings,
-      applyOfflineWorldUpdate: (updatedIslands, updatedBuildings) => {
+      applySyncedWorldState: (updatedIslands, updatedBuildings) => {
         if (!this.isSceneAlive()) return;
         this.islands = updatedIslands;
         this.constructedBuildings = updatedBuildings;

@@ -60,8 +60,7 @@ export interface GameEventPayloads {
   'trigger-regular-wave': void;
   'trigger-boss-wave': void;
   'summon-early-wave': { isBossWave: boolean };
-  'reduce-wave-cooldown': number; // seconds
-  'set-wave-timescale': number;
+  'add-threat': number; // percent
   'wave-state-updated': WaveState;
   'wave-spawned': { isBossWave: boolean; waveNumber: number };
   'monster-killed': { monsterId: string; monsterType: string; killer: string };
