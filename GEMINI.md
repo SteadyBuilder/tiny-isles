@@ -57,3 +57,16 @@
    - ③ **커밋 메시지 작성:** Conventional Commits 컨벤션(`feat:`, `fix:`, `refactor:`, `docs:` 등)에 맞추어 직관적인 한글/영문 메시지를 작성합니다.
    - ④ **원격 푸시 실행:** 현재 작업 브랜치로 `git push`를 실행합니다.
    - ⑤ **결과 보고:** 변경 내역 요약, 커밋 해시(Commit SHA), 푸시 상태 및 검증 절차를 사용자에게 안내합니다.
+
+---
+
+## 5. Notion Task Logging Automation (노션 작업 이력 자동 기록)
+1. **작업 완료 시 자동 기록:**
+   - 기능 구현, 버그 수정, 점검(체크), 기획/문서 작업 등을 완료한 직후에는 `.env.local`이 존재하는 경우 아래 명령어로 노션 DB에 작업 이력을 자동 등록합니다.
+   - ```bash
+     npm run notion:log -- --category "<카테고리>" --title "<작업 요약 제목>" --prompt "<사용자 요청 요약>" --summary "<작업/점검 결과 요약>" --commit "<커밋SHA(선택)>" --transcript "<transcript.jsonl 경로(선택)>"
+     ```
+2. **지원 카테고리:**
+   - `기능개선`, `🐛 버그 (Fix)`, `점검`, `시스템`, `✨ 기능 (Feat)`, `⚙️ 세팅 (Chore)`, `📝 기획/문서 (Docs)`, `♻️ 리팩토링 (Refactor)`, `🎨 UI/UX (Design)`, `💾 데이터 (Data)` (또는 영문 별칭 `feat`, `fix`, `check`, `chore`, `docs`, `refactor`, `improve`)
+3. **토큰 절약 원칙:**
+   - AI는 전체 대화 원문을 직접 출력하지 말고 핵심 요약만 전달하며, 전체 대화 원문 첨부가 필요할 때는 `--transcript` 또는 `--conversation-id`를 넘겨 로컬 `transcript.jsonl`을 직접 파싱하도록 합니다.
