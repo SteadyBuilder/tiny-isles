@@ -63,6 +63,7 @@ export function useRoomLobbyState(
       lobbyTransportRef.current.disconnect();
       lobbyTransportRef.current = null;
     }
+    setWaitingMembers([]);
   }, []);
 
   const connectLobbyTransport = useCallback(
@@ -245,12 +246,19 @@ export function useRoomLobbyState(
   );
 
   const handleStartCoopMatch = useCallback(() => {
-    lobbyTransportRef.current?.emit('room_start', { roomConfig });
-    disconnectLobbyTransport();
+    const transport = lobbyTransportRef.current;
+    lobbyTransportRef.current = null;
+    transport?.emit('room_start', { roomConfig });
+    if (transport) {
+      setTimeout(() => {
+        transport.disconnect();
+      }, 150);
+    }
+    setWaitingMembers([]);
     setMissionProgress(null);
     setMissionResult(null);
     setSessionStatus('playing');
-  }, [disconnectLobbyTransport, roomConfig]);
+  }, [roomConfig]);
 
   const handleLeaveToLobby = useCallback(() => {
     disconnectLobbyTransport();

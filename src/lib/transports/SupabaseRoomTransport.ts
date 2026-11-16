@@ -45,7 +45,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
     playerId: string,
     meta: Omit<NetworkPresenceMeta, 'joinedAt'>
   ): void {
-    this.disconnect();
+    this.cleanupChannel();
     this.localPlayerId = playerId;
     this.status = 'connecting';
 
@@ -107,12 +107,16 @@ export class SupabaseRoomTransport implements INetworkTransport {
       });
   }
 
-  public disconnect(): void {
+  private cleanupChannel(): void {
     if (this.channel) {
       void this.channel.unsubscribe();
       this.channel = null;
     }
     this.status = 'disconnected';
+  }
+
+  public disconnect(): void {
+    this.cleanupChannel();
     this.eventHandlers.clear();
     this.presenceHandlers.clear();
     this.leaveHandlers.clear();
