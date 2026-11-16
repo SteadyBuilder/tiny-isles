@@ -83,6 +83,8 @@ export function createWorldControllersBundle(
   });
 
   territoryAction = new TerritoryActionController({
+    getPlayerId: host.getPlayerId,
+    getPlayerStandingTerritoryId: () => playerMovement.getCurrentStandingTerritoryId(),
     getIslands: host.getIslands,
     getConstructedBuildings: host.getConstructedBuildings,
     getInventory: host.getInventory,
@@ -108,7 +110,8 @@ export function createWorldControllersBundle(
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
-    broadcastUnlock: (id, by) => host.systems.multiplayerSync?.broadcastUnlock(id, by),
+    broadcastUnlock: (id, by, ownerId) =>
+      host.systems.multiplayerSync?.broadcastUnlock(id, by, ownerId),
     broadcastVillageUpgrade: (id, tier) =>
       host.systems.multiplayerSync?.broadcastVillageUpgrade(id, tier),
     broadcastBuildingConstructed: (cb) =>
@@ -147,6 +150,8 @@ export function createWorldControllersBundle(
 
   const towerPlacement = new TowerPlacementController({
     scene: host.scene,
+    getPlayerId: host.getPlayerId,
+    getPlayerStandingTerritoryId: () => playerMovement.getCurrentStandingTerritoryId(),
     getIslands: host.getIslands,
     getConstructedBuildings: host.getConstructedBuildings,
     getInventory: host.getInventory,

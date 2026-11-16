@@ -9,6 +9,7 @@ import {
   getTerritoryCorePos,
 } from '../../constants';
 import { GameEvents } from '../../events/gameEvents';
+import { canClaimTerritory } from '../../territoryAccessRules';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
 
@@ -104,6 +105,14 @@ export class PlayerInteractionController {
         const dist = Math.hypot(px - signX, py - signY);
 
         if (dist < 260) {
+          const claimCheck = canClaimTerritory(islands, isl, this.ctx.getPlayerId());
+          if (!claimCheck.allowed) {
+            const reason = claimCheck.reason || '1인당 1곳만 점령할 수 있습니다.';
+            this.ctx.showFloatingText(signX, signY - 40, reason, '#f87171');
+            GameEvents.emit('game-alert', reason);
+            return;
+          }
+
           if (
             inventory.wood >= isl.costWood &&
             inventory.stone >= isl.costStone &&

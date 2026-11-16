@@ -11,6 +11,7 @@ import {
   VillageTier,
 } from '../../../types/game';
 import { BuildingSystem } from '../../BuildingSystem';
+import { canBuildInTerritory } from '../../territoryAccessRules';
 import {
   VILLAGE_TIER_CONFIGS,
   getIslandOrigin,
@@ -19,6 +20,8 @@ import {
 import { GameEvents } from '../../events/gameEvents';
 
 export interface ITerritoryActionContext {
+  getPlayerId: () => string;
+  getPlayerStandingTerritoryId: () => number | null;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
   getInventory: () => Inventory;
@@ -38,7 +41,7 @@ export interface ITerritoryActionContext {
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   playExplosionAt: (x: number, y: number) => void;
   addThreat: (amount: number) => void;
-  broadcastUnlock: (islandId: number, unlockedBy: string) => void;
+  broadcastUnlock: (islandId: number, unlockedBy: string, ownerId?: string) => void;
   broadcastVillageUpgrade: (territoryId: number, nextTier: VillageTier) => void;
   broadcastBuildingConstructed: (cb: ConstructedBuilding) => void;
 }
@@ -60,6 +63,21 @@ export class TerritoryActionController {
   public handleUpgradeVillage(territoryId: number, isLocalTrigger = true): boolean {
     const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return false;
+
+    if (isLocalTrigger) {
+      const access = canBuildInTerritory(
+        isl,
+        this.ctx.getPlayerId(),
+        this.ctx.getPlayerStandingTerritoryId()
+      );
+      if (!access.allowed) {
+        const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+        const reason = access.reason || '이 마을에서는 발전시킬 수 없습니다.';
+        this.ctx.showFloatingText(cPos.x, cPos.y - 60, reason, '#f87171');
+        GameEvents.emit('game-alert', reason);
+        return false;
+      }
+    }
 
     if (isl.villageTier >= 6) {
       if (isLocalTrigger) {
@@ -126,6 +144,22 @@ export class TerritoryActionController {
 
     const slotIdx = typeof preferredSlotIndex === 'number' ? preferredSlotIndex : undefined;
     const isLocal = typeof preferredSlotIndex === 'boolean' ? preferredSlotIndex : isLocalTrigger;
+
+    if (isLocal) {
+      const access = canBuildInTerritory(
+        isl,
+        this.ctx.getPlayerId(),
+        this.ctx.getPlayerStandingTerritoryId()
+      );
+      if (!access.allowed) {
+        const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+        const reason = access.reason || '이 마을에서는 건설할 수 없습니다.';
+        this.ctx.showFloatingText(cPos.x, cPos.y - 60, reason, '#f87171');
+        GameEvents.emit('game-alert', reason);
+        return false;
+      }
+    }
+
     const constructedBuildings = this.ctx.getConstructedBuildings();
 
     const check = BuildingSystem.checkBuild(
@@ -181,6 +215,19 @@ export class TerritoryActionController {
     const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return;
 
+    const access = canBuildInTerritory(
+      isl,
+      this.ctx.getPlayerId(),
+      this.ctx.getPlayerStandingTerritoryId()
+    );
+    if (!access.allowed) {
+      const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
+      const reason = access.reason || '이 마을에서는 수리할 수 없습니다.';
+      this.ctx.showFloatingText(cPos.x, cPos.y - 60, reason, '#f87171');
+      GameEvents.emit('game-alert', reason);
+      return;
+    }
+
     const constructedBuildings = this.ctx.getConstructedBuildings();
     const hasDamagedBuilding = constructedBuildings.some(
       (cb) => cb.territoryId === territoryId && cb.hp < cb.maxHp
@@ -221,11 +268,19 @@ export class TerritoryActionController {
     this.ctx.showFloatingText(cPos.x, cPos.y - 60, '✨ 코어 보석 및 방책 수리 완료! (+100 HP)', '#4ade80');
   }
 
-  public unlockIslandLocally(islandId: number, unlockedBy: string, isLocalTrigger: boolean): void {
+  public unlockIslandLocally(
+    islandId: number,
+    unlockedBy: string,
+    isLocalTrigger: boolean,
+    ownerId?: string
+  ): void {
     const target = this.ctx.getIslands().find((i) => i.id === islandId);
     if (!target || target.unlocked) return;
 
+    const resolvedOwnerId = isLocalTrigger ? ownerId ?? this.ctx.getPlayerId() : ownerId;
     target.unlocked = true;
+    target.ownerId = target.id === 0 ? undefined : resolvedOwnerId;
+    target.ownerName = target.id === 0 ? undefined : unlockedBy;
     target.villageTier = 0; // 새로 점령한 땅은 '점령지(0)'로 시작하며 이후 마을->중소마을->큰마을->소도시->중소도시->대도시로 발전 가능!
     target.coreMaxHp = VILLAGE_TIER_CONFIGS[0].coreMaxHp;
     target.coreHp = target.coreMaxHp;
@@ -254,7 +309,7 @@ export class TerritoryActionController {
 
     if (isLocalTrigger) {
       serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);
-      this.ctx.broadcastUnlock(islandId, unlockedBy);
+      this.ctx.broadcastUnlock(islandId, unlockedBy, resolvedOwnerId);
       this.ctx.addThreat(THREAT_WAVE_CONFIG.unlockThreatGain);
     }
   }

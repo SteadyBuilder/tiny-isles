@@ -19,7 +19,7 @@ export interface IMultiplayerChannelCallbacks {
   onRemotePlayerMove: (player: Player) => void;
   onRemotePlayerLeave: (playerId: string) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
-  onRemoteIslandUnlocked: (islandId: number, unlockedBy: string) => void;
+  onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
   onRemoteVillageUpgraded: (territoryId: number) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
@@ -113,11 +113,12 @@ export class MultiplayerChannelRouter {
           break;
         }
         case 'island_unlocked': {
-          const { islandId, unlockedBy } = data.payload as {
+          const { islandId, unlockedBy, ownerId } = data.payload as {
             islandId: number;
             unlockedBy: string;
+            ownerId?: string;
           };
-          this.callbacks.onRemoteIslandUnlocked(islandId, unlockedBy);
+          this.callbacks.onRemoteIslandUnlocked(islandId, unlockedBy, ownerId);
           break;
         }
         case 'village_upgraded': {
@@ -221,8 +222,10 @@ export class MultiplayerChannelRouter {
       .on(
         'broadcast',
         { event: 'island_unlocked' },
-        ({ payload }: { payload: { islandId: number; unlockedBy: string } & BroadcastMeta }) => {
-          if (isValid(payload)) this.callbacks.onRemoteIslandUnlocked(payload.islandId, payload.unlockedBy);
+        ({ payload }: { payload: { islandId: number; unlockedBy: string; ownerId?: string } & BroadcastMeta }) => {
+          if (isValid(payload)) {
+            this.callbacks.onRemoteIslandUnlocked(payload.islandId, payload.unlockedBy, payload.ownerId);
+          }
         }
       )
       .on(

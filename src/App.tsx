@@ -10,6 +10,7 @@ import { useGameShellState } from './hooks/useGameShellState';
 
 export function App() {
   const {
+    playerId,
     profile,
     inventory,
     onlineCount,
@@ -25,8 +26,6 @@ export function App() {
     setWaveState,
     showVillageModal,
     setShowVillageModal,
-    selectedTerritoryId,
-    setSelectedTerritoryId,
     alertMessage,
     zoom,
     nearIsland,
@@ -35,6 +34,7 @@ export function App() {
     setShowMinimapModal,
     playerGridPos,
     setPlayerGridPos,
+    playerStandingTerritoryId,
     playerHp,
     joystickRef,
     currentTerritory,
@@ -111,6 +111,8 @@ export function App() {
         unlockedIslandIds={unlockedIslandIds}
         inventory={inventory}
         playerGridPos={playerGridPos}
+        playerId={playerId}
+        playerStandingTerritoryId={playerStandingTerritoryId}
         playerColor={profile.color}
         playerName={profile.name}
         onManageTerritory={handleOpenVillageModalById}
@@ -120,8 +122,8 @@ export function App() {
         isOpen={showVillageModal}
         onClose={() => setShowVillageModal(false)}
         territories={territories}
-        selectedTerritoryId={selectedTerritoryId}
-        onSelectTerritory={setSelectedTerritoryId}
+        playerId={playerId}
+        playerStandingTerritoryId={playerStandingTerritoryId}
         constructedBuildings={constructedBuildings}
         inventory={inventory}
         onUpgradeVillage={(territoryId) => GameEvents.emit('upgrade-village', territoryId)}

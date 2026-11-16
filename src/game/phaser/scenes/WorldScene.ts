@@ -172,8 +172,8 @@ export class WorldScene extends Phaser.Scene {
       saveWorldState: (immediate = false) => this.persistence.saveWorldState(immediate),
       emitWorldStateToReact: (immediate = false) =>
         this.persistence.emitWorldStateToReact(immediate),
-      unlockIslandLocally: (id, by, local) =>
-        this.controllers.territoryAction.unlockIslandLocally(id, by, local),
+      unlockIslandLocally: (id, by, local, ownerId) =>
+        this.controllers.territoryAction.unlockIslandLocally(id, by, local, ownerId),
       upgradeVillageRemotely: (id) =>
         this.controllers.territoryAction.handleUpgradeVillage(id, false),
       onRemoteBuildingConstructed: (cb) => {

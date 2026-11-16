@@ -71,6 +71,7 @@ export async function resetAllPlayData(): Promise<AdminResetResult> {
         wave_count: 0,
         boss_wave_count: 0,
         unlocked_island_ids: [0],
+        island_owners: {},
         village_tiers: { 0: 2 },
         core_hps: { 0: initialCoreHp },
         constructed_buildings: initialBuildings,

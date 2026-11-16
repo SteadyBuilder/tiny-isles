@@ -51,6 +51,7 @@ export class WorldPersistenceController {
     constructedBuildings: ConstructedBuilding[];
   } {
     const savedUnlocked = storage.loadUnlockedIslands();
+    const savedOwners = storage.loadIslandOwners();
     const savedTiers = storage.loadVillageTiers();
     const savedCoreHps = storage.loadCoreHps();
     const constructedBuildings = storage.loadConstructedBuildings();
@@ -68,10 +69,13 @@ export class WorldPersistenceController {
         savedCoreHps[isl.id] !== undefined
           ? Math.min(maxHp, Math.max(1, savedCoreHps[isl.id]))
           : maxHp;
+      const ownerInfo = isUnlocked && isl.id !== 0 ? savedOwners[isl.id] : undefined;
 
       return {
         ...isl,
         unlocked: isUnlocked,
+        ownerId: ownerInfo?.ownerId,
+        ownerName: ownerInfo?.ownerName,
         villageTier: tier,
         coreHp: curHp,
         coreMaxHp: maxHp,
@@ -177,12 +181,20 @@ export class WorldPersistenceController {
 
     const tiers: Record<number, VillageTier> = {};
     const coreHps: Record<number, number> = {};
+    const owners: Record<number, { ownerId: string; ownerName: string }> = {};
     for (const isl of islands) {
       if (isl.unlocked) {
         tiers[isl.id] = isl.villageTier;
         coreHps[isl.id] = isl.coreHp;
+        if (isl.id !== 0 && isl.ownerId) {
+          owners[isl.id] = {
+            ownerId: isl.ownerId,
+            ownerName: isl.ownerName || '탐험가',
+          };
+        }
       }
     }
+    storage.saveIslandOwners(owners);
     storage.saveVillageTiers(tiers);
     storage.saveCoreHps(coreHps);
     storage.saveConstructedBuildings(this.ctx.getConstructedBuildings());

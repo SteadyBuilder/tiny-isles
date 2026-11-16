@@ -3,6 +3,7 @@ import { ConstructableType, ConstructedBuilding, Inventory, Island } from '../..
 import { getBlueprint, getIslandOrigin } from '../../constants';
 import { DEPTH } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
+import { canBuildInTerritory } from '../../territoryAccessRules';
 import {
   getOuterPerimeterBandRects,
   validateOuterTowerPosition,
@@ -10,6 +11,8 @@ import {
 
 export interface ITowerPlacementContext {
   scene: Phaser.Scene;
+  getPlayerId: () => string;
+  getPlayerStandingTerritoryId: () => number | null;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
   getInventory: () => Inventory;
@@ -55,6 +58,17 @@ export class TowerPlacementController {
     const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return;
 
+    const access = canBuildInTerritory(
+      isl,
+      this.ctx.getPlayerId(),
+      this.ctx.getPlayerStandingTerritoryId()
+    );
+    if (!access.allowed) {
+      const reason = access.reason || '이 마을에서는 방어 타워를 배치할 수 없습니다.';
+      GameEvents.emit('game-alert', reason);
+      return;
+    }
+
     const bp = getBlueprint(type);
     if (bp.category !== 'tower') return;
 
@@ -83,6 +97,20 @@ export class TowerPlacementController {
     }
 
     const { territoryId, type, selectedPos } = this.active;
+    const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
+    const access = canBuildInTerritory(
+      isl,
+      this.ctx.getPlayerId(),
+      this.ctx.getPlayerStandingTerritoryId()
+    );
+    if (!access.allowed) {
+      const reason = access.reason || '현재 위치한 마을 영역에서만 건설할 수 있습니다.';
+      this.ctx.showFloatingText(selectedPos.x, selectedPos.y - 30, reason, '#f87171');
+      GameEvents.emit('game-alert', reason);
+      this.cancel();
+      return false;
+    }
+
     const built = this.ctx.onConstructAt(territoryId, type, selectedPos);
     if (built) {
       this.active = null;

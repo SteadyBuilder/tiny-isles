@@ -47,7 +47,7 @@ export interface IWorldSystemsHost {
   refreshTerritoryDecorations: () => void;
   saveWorldState: (immediate?: boolean) => void;
   emitWorldStateToReact: (immediate?: boolean) => void;
-  unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean) => void;
+  unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean, ownerId?: string) => void;
   upgradeVillageRemotely: (territoryId: number) => void;
   onRemoteBuildingConstructed: (cb: ConstructedBuilding) => void;
   effectsRenderer: WorldEffectsRenderer;
@@ -183,8 +183,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     },
     onRemoteEntityHit: (entityId, damage) =>
       host.resourceEntityRenderer.handleRemoteHit(entityId, damage),
-    onRemoteIslandUnlocked: (islandId, unlockedBy) =>
-      host.unlockIslandLocally(islandId, unlockedBy, false),
+    onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) =>
+      host.unlockIslandLocally(islandId, unlockedBy, false, ownerId),
     onRemoteVillageUpgraded: (territoryId) => host.upgradeVillageRemotely(territoryId),
     onRemoteBuildingConstructed: host.onRemoteBuildingConstructed,
     onRemoteWaveSpawned: (isBossWave) => {

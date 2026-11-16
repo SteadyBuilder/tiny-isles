@@ -126,6 +126,14 @@ export class PlayerMovementController {
     }
   }
 
+  public getCurrentStandingTerritoryId(): number | null {
+    const islands = this.ctx.getIslands();
+    const { x, y } = this.getPosition();
+    const gx = Math.round((x - 320) / TERRITORY_STEP);
+    const gy = Math.round((y - 320) / TERRITORY_STEP);
+    return islands.find((i) => i.gridX === gx && i.gridY === gy)?.id ?? null;
+  }
+
   public getCurrentTerritory(): Island {
     const islands = this.ctx.getIslands();
     const { x, y } = this.getPosition();

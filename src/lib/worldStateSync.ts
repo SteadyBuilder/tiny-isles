@@ -6,6 +6,7 @@ import {
 import {
   ConstructedBuilding,
   GarrisonUnit,
+  IslandOwnerInfo,
   Monster,
   VillageTier,
   WorldSyncState,
@@ -24,6 +25,7 @@ function readLocalWorldState(): WorldSyncState | null {
     if (parsed && typeof parsed.lastActiveAt === 'string') {
       return {
         ...parsed,
+        islandOwners: parsed.islandOwners ?? {},
         activeMonsters: Array.isArray(parsed.activeMonsters) ? parsed.activeMonsters : [],
       };
     }
@@ -86,6 +88,7 @@ export const worldStateSync = {
         unlockedIslandIds: Array.isArray(data.unlocked_island_ids)
           ? (data.unlocked_island_ids as number[])
           : [0],
+        islandOwners: (data.island_owners as Record<number, IslandOwnerInfo>) ?? {},
         villageTiers: (data.village_tiers as Record<number, VillageTier>) ?? { 0: 2 },
         coreHps: (data.core_hps as Record<number, number>) ?? { 0: 350 },
         constructedBuildings: Array.isArray(data.constructed_buildings)
@@ -112,6 +115,7 @@ export const worldStateSync = {
           wave_count: state.waveCount,
           boss_wave_count: state.bossWaveCount,
           unlocked_island_ids: state.unlockedIslandIds,
+          island_owners: state.islandOwners ?? {},
           village_tiers: state.villageTiers,
           core_hps: state.coreHps,
           constructed_buildings: state.constructedBuildings,

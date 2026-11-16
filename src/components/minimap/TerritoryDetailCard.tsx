@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle, Hammer, Lock, Sparkles } from 'lucide-react';
 import { VILLAGE_TIER_CONFIGS } from '../../game/constants';
+import { canBuildInTerritory } from '../../game/territoryAccessRules';
 import { Inventory, Island } from '../../types/game';
 
 export interface TerritoryDetailCardProps {
@@ -8,6 +9,8 @@ export interface TerritoryDetailCardProps {
   isUnlocked: boolean;
   canAfford: boolean;
   inventory: Inventory;
+  playerId: string;
+  playerStandingTerritoryId: number | null;
   onCloseModal: () => void;
   onManageTerritory?: (territoryId: number) => void;
 }
@@ -17,10 +20,13 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
   isUnlocked,
   canAfford,
   inventory,
+  playerId,
+  playerStandingTerritoryId,
   onCloseModal,
   onManageTerritory,
 }) => {
   const selectedTierCfg = VILLAGE_TIER_CONFIGS[selectedIsland.villageTier || 0];
+  const buildAccess = canBuildInTerritory(selectedIsland, playerId, playerStandingTerritoryId);
 
   return (
     <div className="bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 shrink-0">
@@ -35,6 +41,9 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
             </h3>
             <p className="text-xs text-emerald-300 font-semibold">
               {selectedIsland.resourceRichLabel || '마을 영지'}
+              {selectedIsland.id !== 0 && isUnlocked && selectedIsland.ownerName
+                ? ` · 점령: ${selectedIsland.ownerName}`
+                : ''}
             </p>
           </div>
         </div>
@@ -57,14 +66,14 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
       </div>
 
       {isUnlocked ? (
-        <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between">
+        <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between gap-2">
           <div className="text-xs text-slate-300">
             💎 코어 보석 체력:{' '}
             <span className="font-black text-cyan-300">
               {selectedIsland.coreHp} / {selectedIsland.coreMaxHp} HP
             </span>
           </div>
-          {onManageTerritory && (
+          {onManageTerritory && buildAccess.allowed ? (
             <button
               onClick={() => {
                 onCloseModal();
@@ -75,6 +84,10 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
               <Hammer className="w-3.5 h-3.5" />
               <span>마을 발전 & 건물 건설</span>
             </button>
+          ) : (
+            <span className="text-[11px] font-semibold text-slate-400">
+              {buildAccess.reason || '건설 불가'}
+            </span>
           )}
         </div>
       ) : (

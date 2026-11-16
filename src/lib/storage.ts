@@ -1,21 +1,47 @@
 import {
   ConstructedBuilding,
   Inventory,
+  IslandOwnerInfo,
   PlayerColor,
   VillageTier,
 } from '../types/game';
 import { getInitialConstructedBuildings, VILLAGE_TIER_CONFIGS } from '../game/constants';
+
+const PLAY_DATA_VERSION = '2';
 
 const STORAGE_KEYS = {
   PROFILE: 'tiny_isles_profile',
   PLAYER_ID: 'tiny_isles_player_id',
   INVENTORY: 'tiny_isles_inventory',
   UNLOCKED_ISLANDS: 'tiny_isles_unlocked_islands',
+  ISLAND_OWNERS: 'tiny_isles_island_owners',
   VILLAGE_TIERS: 'tiny_isles_village_tiers',
   CONSTRUCTED_BUILDINGS: 'tiny_isles_constructed_buildings',
   CORE_HPS: 'tiny_isles_core_hps',
   ZOOM: 'tiny_isles_zoom',
+  DATA_VERSION: 'tiny_isles_data_version',
 } as const;
+
+function ensureCleanPlayDataVersion(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (localStorage.getItem(STORAGE_KEYS.DATA_VERSION) === PLAY_DATA_VERSION) return;
+
+    localStorage.removeItem(STORAGE_KEYS.INVENTORY);
+    localStorage.removeItem(STORAGE_KEYS.UNLOCKED_ISLANDS);
+    localStorage.removeItem(STORAGE_KEYS.ISLAND_OWNERS);
+    localStorage.removeItem(STORAGE_KEYS.VILLAGE_TIERS);
+    localStorage.removeItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
+    localStorage.removeItem(STORAGE_KEYS.CORE_HPS);
+    localStorage.removeItem('tiny_isles_world_sync_state');
+    localStorage.removeItem('tiny_isles_garrisons');
+    localStorage.setItem(STORAGE_KEYS.DATA_VERSION, PLAY_DATA_VERSION);
+  } catch (e) {
+    console.warn('Failed to migrate play data version:', e);
+  }
+}
+
+ensureCleanPlayDataVersion();
 
 export interface SavedProfile {
   id?: string;
@@ -220,18 +246,43 @@ export const storage = {
     }
   },
 
+  loadIslandOwners: (): Record<number, IslandOwnerInfo> => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.ISLAND_OWNERS);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed && typeof parsed === 'object') {
+          return parsed as Record<number, IslandOwnerInfo>;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load island owners:', e);
+    }
+    return {};
+  },
+
+  saveIslandOwners: (owners: Record<number, IslandOwnerInfo>): void => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.ISLAND_OWNERS, JSON.stringify(owners));
+    } catch (e) {
+      console.warn('Failed to save island owners:', e);
+    }
+  },
+
   resetAll: (): void => {
     try {
       localStorage.removeItem(STORAGE_KEYS.PROFILE);
       localStorage.removeItem(STORAGE_KEYS.PLAYER_ID);
       localStorage.removeItem(STORAGE_KEYS.INVENTORY);
       localStorage.removeItem(STORAGE_KEYS.UNLOCKED_ISLANDS);
+      localStorage.removeItem(STORAGE_KEYS.ISLAND_OWNERS);
       localStorage.removeItem(STORAGE_KEYS.VILLAGE_TIERS);
       localStorage.removeItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
       localStorage.removeItem(STORAGE_KEYS.CORE_HPS);
       localStorage.removeItem(STORAGE_KEYS.ZOOM);
       localStorage.removeItem('tiny_isles_world_sync_state');
       localStorage.removeItem('tiny_isles_garrisons');
+      localStorage.setItem(STORAGE_KEYS.DATA_VERSION, PLAY_DATA_VERSION);
     } catch (e) {
       console.warn('Failed to reset storage:', e);
     }

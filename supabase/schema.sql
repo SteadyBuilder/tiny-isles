@@ -102,12 +102,16 @@ create table if not exists public.world_state (
   wave_count integer not null default 0,
   boss_wave_count integer not null default 0,
   unlocked_island_ids jsonb not null default '[0]'::jsonb,
+  island_owners jsonb not null default '{}'::jsonb,
   village_tiers jsonb not null default '{"0": 2}'::jsonb,
   core_hps jsonb not null default '{"0": 350}'::jsonb,
   constructed_buildings jsonb not null default '[]'::jsonb,
   active_monsters jsonb not null default '[]'::jsonb,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+alter table public.world_state
+  add column if not exists island_owners jsonb not null default '{}'::jsonb;
 
 alter table public.world_state
   add column if not exists active_monsters jsonb not null default '[]'::jsonb;

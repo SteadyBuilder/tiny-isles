@@ -24,7 +24,7 @@ export interface IMultiplayerSyncContext {
   onOnlineCountChanged: (count: number) => void;
   onHostStatusChanged?: (isHost: boolean) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
-  onRemoteIslandUnlocked: (islandId: number, unlockedBy: string) => void;
+  onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
   onRemoteVillageUpgraded: (territoryId: number) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
@@ -58,8 +58,8 @@ export class MultiplayerSyncController {
       onRemotePlayerLeave: (playerId) => this.remoteRenderer.removePlayer(playerId),
       onRemoteEntityHit: (entityId, damage, hitByName) =>
         this.ctx.onRemoteEntityHit(entityId, damage, hitByName),
-      onRemoteIslandUnlocked: (islandId, unlockedBy) =>
-        this.ctx.onRemoteIslandUnlocked(islandId, unlockedBy),
+      onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) =>
+        this.ctx.onRemoteIslandUnlocked(islandId, unlockedBy, ownerId),
       onRemoteVillageUpgraded: (territoryId) =>
         this.ctx.onRemoteVillageUpgraded(territoryId),
       onRemoteBuildingConstructed: (building) =>
@@ -113,8 +113,8 @@ export class MultiplayerSyncController {
     this.router.emit('hit', 'entity_hit', payload);
   }
 
-  public broadcastUnlock(islandId: number, unlockedBy: string): void {
-    this.router.emit('island_unlocked', 'island_unlocked', { islandId, unlockedBy });
+  public broadcastUnlock(islandId: number, unlockedBy: string, ownerId?: string): void {
+    this.router.emit('island_unlocked', 'island_unlocked', { islandId, unlockedBy, ownerId });
   }
 
   public broadcastVillageUpgrade(territoryId: number, tier: VillageTier): void {

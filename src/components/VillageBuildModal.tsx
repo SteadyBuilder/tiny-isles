@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { BuildingCategory, ConstructableType, ConstructedBuilding, Inventory, Island } from '../types/game';
 import { CONSTRUCTABLE_BLUEPRINTS, VILLAGE_TIER_CONFIGS } from '../game/constants';
 import { BuildingSystem } from '../game/BuildingSystem';
+import { canBuildInTerritory } from '../game/territoryAccessRules';
 import { Hammer, Heart, ArrowUpCircle } from 'lucide-react';
 
 interface VillageBuildModalProps {
   isOpen: boolean;
   onClose: () => void;
   territories: Island[];
-  selectedTerritoryId: number;
-  onSelectTerritory: (id: number) => void;
+  playerId: string;
+  playerStandingTerritoryId: number | null;
   constructedBuildings: ConstructedBuilding[];
   inventory: Inventory;
   onUpgradeVillage: (territoryId: number) => void;
@@ -52,8 +53,8 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   isOpen,
   onClose,
   territories,
-  selectedTerritoryId,
-  onSelectTerritory,
+  playerId,
+  playerStandingTerritoryId,
   constructedBuildings,
   inventory,
   onUpgradeVillage,
@@ -64,14 +65,14 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   const [activeCategory, setActiveCategory] = useState<BuildingCategory>('tower');
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
 
-  const unlocked = territories.filter((t) => t.unlocked);
-  const curTerritory = unlocked.find((t) => t.id === selectedTerritoryId) || unlocked[0] || territories[0];
+  const curTerritory = territories.find((t) => t.id === playerStandingTerritoryId);
+  const access = canBuildInTerritory(curTerritory, playerId, playerStandingTerritoryId);
 
   useEffect(() => {
     setSelectedSlotIndex(null);
-  }, [selectedTerritoryId, isOpen]);
+  }, [playerStandingTerritoryId, isOpen]);
 
-  if (!isOpen || !curTerritory) return null;
+  if (!isOpen || !curTerritory || !access.allowed) return null;
 
   const curTier = curTerritory.villageTier;
   const tierCfg = VILLAGE_TIER_CONFIGS[curTier];
@@ -105,27 +106,16 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
     <div id="village-build-modal" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/65 backdrop-blur-sm" onClick={onClose}>
       <div className="relative w-full max-w-3xl bg-[#543d2b] border-4 border-[#322013] rounded-2xl p-3 sm:p-4 shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto text-[#3a2211]" onClick={(e) => e.stopPropagation()}>
         {/* Header - Tiny Swords Wood Table Banner */}
-        <div className="flex items-center justify-between pb-2 border-b-2 border-[#7c5a3f]">
+        <div className="flex items-center justify-between pb-2 mb-2 border-b-2 border-[#7c5a3f]">
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-lg bg-[#b58750] text-[#2e1b0d] border border-[#d8aa6d]"><Hammer className="w-5 h-5" /></span>
             <h2 className="text-base sm:text-lg font-black text-[#faecd1] drop-shadow">
-              🏰 #{curTerritory.id} Lv.{curTier} {tierCfg.name}
+              🏰 #{curTerritory.id} {curTerritory.name} · Lv.{curTier} {tierCfg.name}
             </h2>
           </div>
           <button id="close-village-modal-btn" onClick={onClose} className="w-7 h-7 active:scale-95 transition-transform flex items-center justify-center">
             <img src="/assets/ui/Buttons/SmallRedRoundButton_Regular.png" alt="X" className="w-full h-full pixel-art" />
           </button>
-        </div>
-
-        {/* Territory Selector */}
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 pb-1.5">
-          {unlocked.map((t) => (
-            <button key={t.id} onClick={() => onSelectTerritory(t.id)} className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition tabular-nums ${
-              t.id === curTerritory.id ? 'bg-[#e2a85c] text-[#2b1708] border-[#ffe2a8] shadow' : 'bg-[#3b2719] text-[#c9ab8d] border-[#291a10] hover:bg-[#4a3221]'
-            }`} title={t.name}>
-              #{t.id} Lv.{t.villageTier}
-            </button>
-          ))}
         </div>
 
         {/* Paper Panel: Tier Tech & Core Status */}

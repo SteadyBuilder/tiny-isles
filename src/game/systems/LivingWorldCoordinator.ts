@@ -84,7 +84,6 @@ export class LivingWorldCoordinator {
       let baseIslands = this.ctx.getIslands();
       let baseBuildings = this.ctx.getConstructedBuildings();
 
-      // 서버 DB(world_state)를 단일 진실 공급원(SSOT)으로 사용하여 영지 및 건물 상태 동기화
       if (Array.isArray(savedWorld.unlockedIslandIds) && savedWorld.unlockedIslandIds.length > 0) {
         baseIslands = baseIslands.map((isl) => {
           const isUnlocked = savedWorld.unlockedIslandIds.includes(isl.id) || isl.id === 0;
@@ -96,7 +95,16 @@ export class LivingWorldCoordinator {
             isUnlocked && savedWorld.coreHps?.[isl.id] !== undefined
               ? savedWorld.coreHps[isl.id]
               : isl.coreHp;
-          return { ...isl, unlocked: isUnlocked, villageTier: tier, coreMaxHp: maxHp, coreHp };
+          const ownerInfo = isUnlocked && isl.id !== 0 ? savedWorld.islandOwners?.[isl.id] : undefined;
+          return {
+            ...isl,
+            unlocked: isUnlocked,
+            ownerId: ownerInfo?.ownerId ?? isl.ownerId,
+            ownerName: ownerInfo?.ownerName ?? isl.ownerName,
+            villageTier: tier,
+            coreMaxHp: maxHp,
+            coreHp,
+          };
         });
         if (Array.isArray(savedWorld.constructedBuildings)) {
           baseBuildings = savedWorld.constructedBuildings;
@@ -158,6 +166,7 @@ export class LivingWorldCoordinator {
     const waveState = this.waveSystem.getWaveState();
 
     const unlockedIslandIds: number[] = [];
+    const islandOwners: Record<number, { ownerId: string; ownerName: string }> = {};
     const villageTiers: Record<number, VillageTier> = {};
     const coreHps: Record<number, number> = {};
 
@@ -166,6 +175,12 @@ export class LivingWorldCoordinator {
         unlockedIslandIds.push(isl.id);
         villageTiers[isl.id] = isl.villageTier;
         coreHps[isl.id] = isl.coreHp;
+        if (isl.id !== 0 && isl.ownerId) {
+          islandOwners[isl.id] = {
+            ownerId: isl.ownerId,
+            ownerName: isl.ownerName || '탐험가',
+          };
+        }
       }
     }
 
@@ -175,6 +190,7 @@ export class LivingWorldCoordinator {
       waveCount: waveState.waveCount,
       bossWaveCount: waveState.bossWaveCount,
       unlockedIslandIds,
+      islandOwners,
       villageTiers,
       coreHps,
       constructedBuildings: this.ctx.getConstructedBuildings(),

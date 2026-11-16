@@ -5,6 +5,7 @@ import { GameEvents } from '../game/events/gameEvents';
 import { serverSync } from '../lib/serverSync';
 import { storage } from '../lib/storage';
 import { isPlayDataResetting } from '../lib/adminResetService';
+import { canBuildInTerritory } from '../game/territoryAccessRules';
 import {
   ConstructedBuilding,
   Inventory,
@@ -172,18 +173,26 @@ export function useGameShellState() {
     storage.saveZoom(newZoom);
   }, []);
 
+  const playerStandingTerritory = territories.find(
+    (t) => t.gridX === playerGridPos.gridX && t.gridY === playerGridPos.gridY
+  );
+
   const currentTerritory =
-    territories.find(
-      (t) =>
-        t.gridX === playerGridPos.gridX &&
-        t.gridY === playerGridPos.gridY &&
-        t.unlocked
-    ) || territories[0];
+    (playerStandingTerritory?.unlocked ? playerStandingTerritory : undefined) || territories[0];
 
   const handleOpenVillageModalForCurrent = useCallback(() => {
-    setSelectedTerritoryId(currentTerritory.id);
+    const access = canBuildInTerritory(
+      playerStandingTerritory,
+      playerIdRef.current,
+      playerStandingTerritory?.id ?? null
+    );
+    if (!access.allowed || !playerStandingTerritory) {
+      handleShowAlert(access.reason || '메인 마을과 본인이 점령한 마을 영역 안에서만 건설할 수 있습니다.');
+      return;
+    }
+    setSelectedTerritoryId(playerStandingTerritory.id);
     setShowVillageModal(true);
-  }, [currentTerritory.id]);
+  }, [playerStandingTerritory, handleShowAlert]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -197,12 +206,28 @@ export function useGameShellState() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleOpenVillageModalForCurrent]);
 
-  const handleOpenVillageModalById = useCallback((territoryId: number) => {
-    setSelectedTerritoryId(territoryId);
-    setShowVillageModal(true);
-  }, []);
+  const handleOpenVillageModalById = useCallback(
+    (territoryId: number) => {
+      const target = territories.find((t) => t.id === territoryId);
+      const access = canBuildInTerritory(
+        target,
+        playerIdRef.current,
+        playerStandingTerritory?.id ?? null
+      );
+      if (!access.allowed) {
+        handleShowAlert(
+          access.reason || '메인 마을과 본인이 점령한 마을 영역 안에서만 건설할 수 있습니다.'
+        );
+        return;
+      }
+      setSelectedTerritoryId(territoryId);
+      setShowVillageModal(true);
+    },
+    [territories, playerStandingTerritory?.id, handleShowAlert]
+  );
 
   return {
+    playerId: playerIdRef.current,
     profile,
     inventory,
     onlineCount,
@@ -228,6 +253,7 @@ export function useGameShellState() {
     setShowMinimapModal,
     playerGridPos,
     setPlayerGridPos,
+    playerStandingTerritoryId: playerStandingTerritory?.id ?? null,
     playerHp,
     joystickRef,
     currentTerritory,

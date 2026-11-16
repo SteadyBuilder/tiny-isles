@@ -139,6 +139,11 @@ export interface ConstructedBuilding {
   slotIndex: number;
 }
 
+export interface IslandOwnerInfo {
+  ownerId: string;
+  ownerName: string;
+}
+
 export interface Island {
   id: number;
   gridX: number; // e.g. 0, 1, -1
@@ -147,6 +152,8 @@ export interface Island {
   costStone: number;
   costGold: number;
   unlocked: boolean;
+  ownerId?: string;
+  ownerName?: string;
   name: string;
   isAdjacentRich?: boolean;
   resourceRichLabel?: string;
@@ -220,6 +227,7 @@ export interface WorldSyncState {
   waveCount: number;
   bossWaveCount: number;
   unlockedIslandIds: number[];
+  islandOwners?: Record<number, IslandOwnerInfo>;
   villageTiers: Record<number, VillageTier>;
   coreHps: Record<number, number>;
   constructedBuildings: ConstructedBuilding[];

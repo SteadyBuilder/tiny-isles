@@ -11,6 +11,8 @@ interface MinimapModalProps {
   unlockedIslandIds: number[];
   inventory: Inventory;
   playerGridPos: { gridX: number; gridY: number };
+  playerId: string;
+  playerStandingTerritoryId: number | null;
   playerColor: PlayerColor;
   playerName: string;
   onManageTerritory?: (territoryId: number) => void;
@@ -23,6 +25,8 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
   unlockedIslandIds,
   inventory,
   playerGridPos,
+  playerId,
+  playerStandingTerritoryId,
   playerColor,
   onManageTerritory,
 }) => {
@@ -200,6 +204,8 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
           isUnlocked={isUnlocked(selectedIsland.id)}
           canAfford={canAffordIsland(selectedIsland)}
           inventory={inventory}
+          playerId={playerId}
+          playerStandingTerritoryId={playerStandingTerritoryId}
           onCloseModal={onClose}
           onManageTerritory={onManageTerritory}
         />
