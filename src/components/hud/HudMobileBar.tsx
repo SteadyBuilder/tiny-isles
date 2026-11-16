@@ -1,5 +1,5 @@
-import React from 'react';
-import { Compass, Hammer, Heart } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Compass, Flame, Hammer, Heart } from 'lucide-react';
 import { Inventory, Island, PlayerHpState, WaveState } from '../../types/game';
 import { HUD_RESOURCE_SLOTS } from './hudUtils';
 
@@ -34,9 +34,29 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
   onTriggerBossWave,
   showTestMenu = false,
 }) => {
+  const [isSurging, setIsSurging] = useState(false);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const handleArrived = () => {
+      setIsSurging(true);
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => setIsSurging(false), 320);
+    };
+    window.addEventListener('threat-orb-arrived', handleArrived);
+    return () => {
+      window.removeEventListener('threat-orb-arrived', handleArrived);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
   const hpValue = playerHp?.hp ?? 100;
   const hpMax = playerHp?.maxHp ?? 100;
   const isFainted = playerHp?.isFainted ?? false;
+  const threat = waveState?.threatPercent ?? 0;
+  const countdown = waveState?.countdownSecondsRemaining ?? null;
+  const isCountingDown = countdown !== null;
+  const isWarning = isCountingDown || threat >= (waveState?.warningThreshold ?? 80);
 
   return (
     <div
@@ -92,33 +112,66 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
         </div>
       </div>
 
-      {/* Mobile Compact Icon Wave Bar */}
+      {/* Mobile Compact Icon Wave & Threat Liquid Bar */}
       {waveState && (
-        <div className="flex items-center justify-between bg-slate-950/90 border border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-white pointer-events-auto tabular-nums">
-          <div className="flex items-center gap-2">
-            <span className={`flex items-center gap-0.5 font-black ${isFainted ? 'text-red-300 animate-pulse' : 'text-rose-200'}`}>
+        <div
+          className={`flex flex-wrap items-center justify-between gap-1.5 bg-slate-950/90 backdrop-blur-md border px-2.5 py-1.5 rounded-xl text-[11px] text-white pointer-events-auto tabular-nums shadow-lg transition-colors ${
+            isWarning ? 'border-red-500/80' : 'border-red-500/40'
+          }`}
+        >
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className={`flex items-center gap-0.5 font-black shrink-0 ${isFainted ? 'text-red-300 animate-pulse' : 'text-rose-200'}`}>
               <Heart className="w-3 h-3 text-rose-400 fill-rose-500" />
-              {isFainted ? '기절' : `${hpValue}/${hpMax}`}
+              {isFainted ? '기절' : `${hpValue}`}
             </span>
-            <span
-              id="threat-mobile-badge"
-              className={
-                waveState.countdownSecondsRemaining !== null ||
-                waveState.threatPercent >= waveState.warningThreshold
-                  ? 'text-red-300 animate-pulse'
-                  : 'text-amber-200'
-              }
-            >
-              {waveState.countdownSecondsRemaining !== null ? (
-                <>⏳ <b>{waveState.countdownSecondsRemaining}s</b></>
+
+            {/* Mobile Liquid Threat Gauge */}
+            <div id="threat-mobile-badge" className="flex items-center gap-1.5 flex-1 min-w-[96px] max-w-[165px]">
+              <Flame
+                className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                  isSurging ? 'scale-125 text-yellow-300' : isWarning ? 'text-red-400 animate-pulse' : 'text-amber-400'
+                }`}
+              />
+              <div
+                id="threat-mobile-gauge-container"
+                className={`flex-1 h-2.5 bg-slate-800/95 rounded-full overflow-hidden border transition-all duration-300 ${
+                  isSurging
+                    ? 'border-yellow-300 threat-liquid-surge scale-y-110'
+                    : isWarning
+                    ? 'border-red-400/70'
+                    : 'border-slate-700'
+                }`}
+              >
+                <div
+                  id="threat-mobile-gauge-bar"
+                  className="h-full threat-liquid-fill transition-all duration-700 ease-out rounded-full"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, threat))}%`,
+                    backgroundImage: isWarning
+                      ? 'linear-gradient(90deg, #ea580c 0%, #ef4444 35%, #facc15 50%, #ef4444 65%, #ea580c 100%)'
+                      : 'linear-gradient(90deg, #ca8a04 0%, #facc15 35%, #fef08a 50%, #f59e0b 65%, #ca8a04 100%)',
+                  }}
+                />
+              </div>
+              {isCountingDown ? (
+                <span className="px-1.5 py-0.5 rounded bg-red-600/90 text-white font-black text-[10px] animate-pulse shrink-0">
+                  ⏳{countdown}s
+                </span>
               ) : (
-                <>🔥 <b>{waveState.threatPercent}%</b></>
+                <span
+                  className={`font-mono font-black text-[10px] shrink-0 ${
+                    isSurging ? 'text-yellow-200 scale-110' : isWarning ? 'text-red-300 animate-pulse' : 'text-amber-200'
+                  }`}
+                >
+                  {threat}%
+                </span>
               )}
-            </span>
-            <span className="text-red-300">
+            </div>
+
+            <span className="text-red-300 shrink-0">
               👹 <b>{waveState.wavesUntilBoss <= 1 ? '보스!' : `${waveState.wavesUntilBoss}W`}</b>
             </span>
-            <span>⚔️ <b className="text-amber-300">{waveState.activeMonstersCount}</b></span>
+            <span className="shrink-0">⚔️ <b className="text-amber-300">{waveState.activeMonstersCount}</b></span>
           </div>
           {showTestMenu && (
             <div className="flex items-center gap-1">

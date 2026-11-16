@@ -31,9 +31,9 @@ function getThreatTargetCenter(): { x: number; y: number } {
       return { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.5 };
     }
   }
-  const mobileBadge = document.getElementById('threat-mobile-badge');
-  if (mobileBadge) {
-    const rect = mobileBadge.getBoundingClientRect();
+  const mobileGauge = document.getElementById('threat-mobile-gauge-container') ?? document.getElementById('threat-mobile-badge');
+  if (mobileGauge) {
+    const rect = mobileGauge.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       return { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.5 };
     }
