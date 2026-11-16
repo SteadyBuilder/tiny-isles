@@ -32,6 +32,8 @@ export interface IResourceEntityContext {
   isSceneAlive: () => boolean;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
+  isHost?: () => boolean;
+  broadcastEntityRespawned?: (entity: Entity) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
 }
@@ -263,6 +265,9 @@ export class ResourceEntityRenderer {
 
     this.ctx.scene.time.delayedCall(RESOURCE_DISTRIBUTION_CONFIG.respawnDelayMs, () => {
       if (!this.ctx.isSceneAlive()) return;
+      const isHost = this.ctx.isHost ? this.ctx.isHost() : true;
+      if (!isHost) return;
+
       const activeEntities = this.getEntities();
       const nextSpot = pickRespawnSpot(
         ent.type,
@@ -284,8 +289,19 @@ export class ResourceEntityRenderer {
         ent.maxHp = nextSpot.maxHp;
         ent.zoneTag = nextSpot.zoneTag;
         this.spawnEntity(ent);
+        this.ctx.broadcastEntityRespawned?.({ ...ent });
       }
     });
+  }
+
+  public applyRemoteEntityRespawn(entity: Entity): void {
+    if (!this.ctx.isSceneAlive()) return;
+    const existing = this.entityVisuals.get(entity.id);
+    if (existing) {
+      existing.container.destroy();
+      this.entityVisuals.delete(entity.id);
+    }
+    this.spawnEntity({ ...entity });
   }
 
   public spawnGoldMineClusterAndAnnounce(): void {

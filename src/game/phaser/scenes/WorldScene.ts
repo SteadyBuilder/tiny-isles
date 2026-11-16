@@ -128,6 +128,9 @@ export class WorldScene extends Phaser.Scene {
       isSceneAlive: () => this.isSceneAlive(),
       getIslands: () => this.islands,
       getConstructedBuildings: () => this.constructedBuildings,
+      isHost: () => this.systems?.waveSystem.getIsHost() ?? true,
+      broadcastEntityRespawned: (entity) =>
+        this.systems?.multiplayerSync?.broadcastEntityRespawned(entity),
       shakeObject: (target) => this.effectsRenderer.shakeObject(target),
       showFloatingText: (x, y, text, color) =>
         this.effectsRenderer.showFloatingText(x, y, text, color),

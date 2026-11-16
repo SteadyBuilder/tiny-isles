@@ -196,6 +196,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     },
     onRemoteEntityHit: (entityId, damage) =>
       host.resourceEntityRenderer.handleRemoteHit(entityId, damage),
+    onRemoteEntityRespawned: (entity) =>
+      host.resourceEntityRenderer.applyRemoteEntityRespawn(entity),
     onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) =>
       host.unlockIslandLocally(islandId, unlockedBy, false, ownerId),
     onRemoteVillageUpgraded: (territoryId) => host.upgradeVillageRemotely(territoryId),

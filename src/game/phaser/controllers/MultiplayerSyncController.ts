@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import {
   ConstructedBuilding,
+  Entity,
   Monster,
   Player,
   PlayerAction,
@@ -24,6 +25,7 @@ export interface IMultiplayerSyncContext {
   onOnlineCountChanged: (count: number) => void;
   onHostStatusChanged?: (isHost: boolean) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
+  onRemoteEntityRespawned?: (entity: Entity) => void;
   onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
   onRemoteVillageUpgraded: (territoryId: number) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
@@ -73,6 +75,7 @@ export class MultiplayerSyncController {
       onRemotePlayerLeave: (playerId) => this.remoteRenderer.removePlayer(playerId),
       onRemoteEntityHit: (entityId, damage, hitByName) =>
         this.ctx.onRemoteEntityHit(entityId, damage, hitByName),
+      onRemoteEntityRespawned: (entity) => this.ctx.onRemoteEntityRespawned?.(entity),
       onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) =>
         this.ctx.onRemoteIslandUnlocked(islandId, unlockedBy, ownerId),
       onRemoteVillageUpgraded: (territoryId) =>
@@ -223,5 +226,9 @@ export class MultiplayerSyncController {
 
   public broadcastRepairTerritoryRequest(territoryId: number): void {
     this.router.emit('repair_territory_request', 'repair_territory_request', { territoryId });
+  }
+
+  public broadcastEntityRespawned(entity: Entity): void {
+    this.router.emit('entity_respawned', 'entity_respawned', { entity });
   }
 }

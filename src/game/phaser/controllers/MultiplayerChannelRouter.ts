@@ -1,5 +1,6 @@
 import {
   ConstructedBuilding,
+  Entity,
   Monster,
   Player,
   PlayerColor,
@@ -19,6 +20,7 @@ export interface IMultiplayerChannelCallbacks {
   onRemotePlayerMove: (player: Player) => void;
   onRemotePlayerLeave: (playerId: string) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
+  onRemoteEntityRespawned?: (entity: Entity) => void;
   onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
   onRemoteVillageUpgraded: (territoryId: number) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
@@ -229,6 +231,13 @@ export class MultiplayerChannelRouter {
         case 'repair_territory_request': {
           const { territoryId } = data.payload as { territoryId: number };
           this.callbacks.onRemoteRepairTerritoryRequest?.(territoryId);
+          break;
+        }
+        case 'entity_respawned': {
+          const { entity } = data.payload as { entity: Entity };
+          if (entity) {
+            this.callbacks.onRemoteEntityRespawned?.(entity);
+          }
           break;
         }
       }
@@ -446,6 +455,15 @@ export class MultiplayerChannelRouter {
         ({ payload }: { payload: { territoryId: number } & BroadcastMeta }) => {
           if (isValid(payload)) {
             this.callbacks.onRemoteRepairTerritoryRequest?.(payload.territoryId);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'entity_respawned' },
+        ({ payload }: { payload: { entity: Entity } & BroadcastMeta }) => {
+          if (isValid(payload) && payload.entity) {
+            this.callbacks.onRemoteEntityRespawned?.(payload.entity);
           }
         }
       )
