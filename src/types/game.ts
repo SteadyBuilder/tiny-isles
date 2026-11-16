@@ -123,6 +123,7 @@ export interface ConstructableBlueprint {
   attack?: number;
   range?: number;
   fireRateMs?: number;
+  shortEffect: string;
   description: string;
 }
 

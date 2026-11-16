@@ -113,6 +113,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     attack: 22,
     range: 270,
     fireRateMs: 900,
+    shortEffect: '0.9초마다 사거리 내 마물 자동 사격',
     description: '사거리 내의 좀비, 스켈레톤 등 마물을 자동으로 조준 사격합니다.',
   },
   {
@@ -129,6 +130,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     attack: 45,
     range: 310,
     fireRateMs: 1200,
+    shortEffect: '1.2초마다 마물·보스에게 강력한 마법 포격',
     description: '강력한 마법 탄환을 발사하여 마물과 보스에게 큰 피해를 입힙니다.',
   },
 
@@ -144,6 +146,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 4,
     costGold: 0,
     maxHp: 280,
+    shortEffect: '외곽 배치 · 마물 진입 저지',
     description: '마을 외곽을 둘러싸 마물의 진입을 저지하는 튼튼한 나무 방책입니다.',
   },
   {
@@ -157,6 +160,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 25,
     costGold: 5,
     maxHp: 650,
+    shortEffect: '외곽 배치 · 높은 내구도로 마물·보스 방어',
     description: '높은 내구도로 마물 웨이브와 보스의 공격을 견뎌내는 석조 성벽입니다.',
   },
 
@@ -172,6 +176,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 8,
     costGold: 0,
     maxHp: 200,
+    shortEffect: '30초마다 코어 보석 +6 회복',
     description: '마을 주민이 거주하며 주기적으로 코어 보석의 내구도를 회복(+6 HP)합니다.',
   },
 
@@ -190,6 +195,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     attack: 30,
     range: 250,
     fireRateMs: 1100,
+    shortEffect: '영지 타워 공격력 +25% · 1.1초마다 침입 마물 요격',
     description: '영지 내 타워 공격력을 25% 강화하고 침입한 마물을 참격으로 요격합니다.',
   },
   {
@@ -203,6 +209,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 28,
     costGold: 15,
     maxHp: 380,
+    shortEffect: '30초마다 코어 +20 · 영지 건물 +35 수리',
     description: '영지 내 코어 보석(+20 HP)과 성벽/방책(+35 HP)을 주기적으로 수리합니다.',
   },
   {
@@ -216,6 +223,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 18,
     costGold: 8,
     maxHp: 280,
+    shortEffect: '30초마다 목재 +2 자동 채집',
     description: '주기적으로 목재(🪵+2)를 자동 채집하는 특수 경제 건물입니다.',
   },
   {
@@ -229,6 +237,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 24,
     costGold: 8,
     maxHp: 280,
+    shortEffect: '30초마다 석재 +2 자동 채집',
     description: '주기적으로 석재(🪨+2)를 자동 채집하는 특수 경제 건물입니다.',
   },
   {
@@ -242,6 +251,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 25,
     costGold: 12,
     maxHp: 320,
+    shortEffect: '30초마다 금화 +2 자동 채집',
     description: '주기적으로 금화(🪙+2)를 자동 채집하는 특수 경제 건물입니다.',
   },
 ];

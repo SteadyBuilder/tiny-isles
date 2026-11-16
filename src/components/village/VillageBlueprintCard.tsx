@@ -92,6 +92,10 @@ export const VillageBlueprintCard: React.FC<VillageBlueprintCardProps> = ({
               </span>
             ) : null}
           </div>
+
+          <p className="mt-1 px-1.5 py-0.5 rounded bg-[#f3e2c7]/85 border border-[#c7a97e]/70 text-[10px] font-bold text-[#4a2e19] leading-snug">
+            {bp.shortEffect}
+          </p>
         </div>
       </div>
 
