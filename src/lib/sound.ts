@@ -135,12 +135,22 @@ class SoundSystem {
 
   public playChop() { if (!this.playBuffer('chop', 0.9)) this.playTone('triangle', 160, 40, 0.12, 0.4); }
   public playMine() { if (!this.playBuffer('mine', 0.85)) this.playTone('sawtooth', 600, 120, 0.09, 0.3); }
-  public playPop() { if (!this.playBuffer('pop', 0.75)) this.playTone('sine', 320, 680, 0.08, 0.35); }
+  public playPop() {
+    if (this.playBuffer('pop', 0.8, 0.0)) return;
+    this.playTone('sine', 987.77, 987.77, 0.08, 0.3);
+    setTimeout(() => this.playTone('sine', 1318.51, 1318.51, 0.35, 0.35), 80);
+  }
   public playStep() { this.playBuffer('step', 0.35, 0.05); }
   public playBreak() { if (!this.playBuffer('break', 0.9)) this.playTone('triangle', 220, 50, 0.2, 0.45); }
   public playUnlock() {
-    if (this.playBuffer('unlock', 0.95)) return;
-    [261.6, 329.6, 392.0, 523.2].forEach((f, i) => setTimeout(() => this.playTone('square', f, f, 0.2, 0.25), i * 90));
+    if (this.playBuffer('unlock', 0.95, 0.0)) return;
+    [
+      { freq: 392.0, delay: 0, dur: 0.13 },
+      { freq: 523.25, delay: 160, dur: 0.13 },
+      { freq: 783.99, delay: 330, dur: 0.55 },
+    ].forEach(({ freq, delay, dur }) =>
+      setTimeout(() => this.playTone('sawtooth', freq, freq, dur, 0.22), delay),
+    );
   }
   public playTowerShoot() { this.playTone('sine', 880, 220, 0.15, 0.35); }
   public playClick() { if (!this.playBuffer('click', 0.6)) this.playTone('sine', 800, 400, 0.04, 0.2); }
