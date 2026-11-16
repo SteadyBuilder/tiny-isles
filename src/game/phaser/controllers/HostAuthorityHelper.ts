@@ -33,3 +33,25 @@ export function electHostFromPresence(
     onlineCount: Math.max(1, keys.length),
   };
 }
+
+/**
+ * 후발 접속자의 PC 시스템 시계가 과거로 설정되어 있어도
+ * 기존 접속자보다 앞선 joinedAt으로 호스트를 탈취하지 않도록 단조 증가 값을 계산합니다.
+ */
+export function computeMonotonicJoinedAt(
+  presenceState: Record<string, PresenceEntryMeta[]>,
+  now: number = Date.now()
+): number {
+  let maxExistingJoinedAt = 0;
+  for (const entries of Object.values(presenceState)) {
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (typeof entry?.joinedAt === 'number' && Number.isFinite(entry.joinedAt)) {
+        if (entry.joinedAt > maxExistingJoinedAt) {
+          maxExistingJoinedAt = entry.joinedAt;
+        }
+      }
+    }
+  }
+  return maxExistingJoinedAt > 0 ? Math.max(now, maxExistingJoinedAt + 1) : now;
+}

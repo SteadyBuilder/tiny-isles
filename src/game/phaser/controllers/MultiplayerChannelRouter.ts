@@ -9,7 +9,11 @@ import {
 import { supabase } from '../../../lib/supabase';
 import { serverSync } from '../../../lib/serverSync';
 import { GameEvents } from '../../events/gameEvents';
-import { electHostFromPresence, PresenceEntryMeta } from './HostAuthorityHelper';
+import {
+  computeMonotonicJoinedAt,
+  electHostFromPresence,
+  PresenceEntryMeta,
+} from './HostAuthorityHelper';
 
 export interface IMultiplayerChannelCallbacks {
   getPlayerId: () => string;
@@ -470,10 +474,12 @@ export class MultiplayerChannelRouter {
       .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
           this.isSubscribed = true;
+          const currentPresence = channel.presenceState() as Record<string, PresenceEntryMeta[]>;
+          const joinedAt = computeMonotonicJoinedAt(currentPresence, Date.now());
           await channel.track({
             name: this.callbacks.getPlayerName(),
             color: this.callbacks.getPlayerColor(),
-            joinedAt: Date.now(),
+            joinedAt,
           });
         }
       });
