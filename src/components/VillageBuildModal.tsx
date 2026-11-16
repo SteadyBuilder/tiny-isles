@@ -78,18 +78,17 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   const upgrade = BuildingSystem.checkUpgrade(curTerritory, inventory);
   const slotStates = BuildingSystem.getSlotStates(curTerritory.id, curTier, constructedBuildings);
   const maxSlots = BuildingSystem.getMaxSlots(curTier);
-  const existingCount = constructedBuildings.filter((b) => b.territoryId === curTerritory.id).length;
+  const existingCount = BuildingSystem.getOccupiedSlotCount(curTerritory.id, constructedBuildings);
   const blueprints = CONSTRUCTABLE_BLUEPRINTS.filter((b) => b.category === activeCategory);
 
   const handleBuild = (type: ConstructableType) => {
     const bp = blueprints.find((b) => b.type === type);
     if (bp?.category === 'tower' && onSelectTowerPlacement) {
-      const hasSlot = existingCount < maxSlots;
       const canAfford =
         inventory.wood >= bp.costWood &&
         inventory.stone >= bp.costStone &&
         inventory.gold >= bp.costGold;
-      if (!hasSlot || !canAfford) return;
+      if (!canAfford) return;
       onSelectTowerPlacement(curTerritory.id, type);
       onClose();
       return;
@@ -141,7 +140,7 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                 </button>
               </div>
               <span className="text-xs font-bold text-[#714d2e]">
-                🏗️ <b className="text-[#322013]">{constructedBuildings.filter((b) => b.territoryId === curTerritory.id).length}</b>/{maxSlots}
+                🏗️ <b className="text-[#322013]">{existingCount}</b>/{maxSlots}
               </span>
             </div>
 
@@ -209,13 +208,15 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
               constructedBuildings,
               selectedSlotIndex ?? undefined
             );
-            const isEnabled = isTower ? hasSlot && canAfford : check.canBuild;
-            const statusText = !hasSlot
-              ? '슬롯 부족'
-              : !canAfford
-                ? '자원 부족'
-                : isTower
-                  ? '외곽 배치'
+            const isEnabled = isTower ? canAfford : check.canBuild;
+            const statusText = isTower
+              ? canAfford
+                ? '외곽 배치'
+                : '자원 부족'
+              : !hasSlot
+                ? '슬롯 부족'
+                : !canAfford
+                  ? '자원 부족'
                   : check.canBuild
                     ? '건설 가능'
                     : '슬롯 부족';

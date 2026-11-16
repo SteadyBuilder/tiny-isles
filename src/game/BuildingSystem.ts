@@ -68,6 +68,18 @@ export class BuildingSystem {
   }
 
   /**
+   * 해당 영지에서 실제 슬롯(#0~#15)을 점유 중인 건물 수 계산 (외곽 자유 배치 타워 slotIndex === -1 제외)
+   */
+  public static getOccupiedSlotCount(
+    territoryId: number,
+    constructedBuildings: ConstructedBuilding[]
+  ): number {
+    return constructedBuildings.filter(
+      (b) => b.territoryId === territoryId && b.slotIndex >= 0
+    ).length;
+  }
+
+  /**
    * 현재 영지의 슬롯 목록 및 건물 점유 상태 계산
    */
   public static getSlotStates(
@@ -76,7 +88,9 @@ export class BuildingSystem {
     constructedBuildings: ConstructedBuilding[]
   ): SlotState[] {
     const maxSlots = this.getMaxSlots(tier);
-    const existing = constructedBuildings.filter((b) => b.territoryId === territoryId);
+    const existing = constructedBuildings.filter(
+      (b) => b.territoryId === territoryId && b.slotIndex >= 0
+    );
     const buildingMap = new Map<number, ConstructedBuilding>();
     existing.forEach((b) => buildingMap.set(b.slotIndex, b));
 
@@ -177,13 +191,14 @@ export class BuildingSystem {
     customPos?: { x: number; y: number }
   ): BuildCheckResult {
     const bp = getBlueprint(type);
-    const existing = constructedBuildings.filter((b) => b.territoryId === territory.id);
+    const isOuterTower = bp.category === 'tower' && Boolean(customPos);
+    const occupiedSlots = this.getOccupiedSlotCount(territory.id, constructedBuildings);
     const maxSlots = this.getMaxSlots(territory.villageTier);
 
-    if (existing.length >= maxSlots) {
+    if (!isOuterTower && occupiedSlots >= maxSlots) {
       return {
         canBuild: false,
-        reason: `건물 슬롯이 꽉 찼습니다 (${existing.length}/${maxSlots}). 마을을 승급하세요.`,
+        reason: `건물 슬롯이 꽉 찼습니다 (${occupiedSlots}/${maxSlots}). 마을을 승급하세요.`,
         blueprint: bp,
       };
     }
