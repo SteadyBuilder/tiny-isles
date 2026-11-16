@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Inventory, PlayerColor, PlayerHpState, WaveState } from '../types/game';
+import { MissionProgressState, RoomMode } from '../types/room';
 import { sound, SoundSettings } from '../lib/sound';
 import { SoundModal } from './SoundModal';
 import { HudSettingsModal } from './HudSettingsModal';
@@ -21,6 +22,9 @@ interface HUDProps {
   totalIslands?: number;
   waveState?: WaveState;
   alertMessage?: string | null;
+  missionProgress?: MissionProgressState | null;
+  roomMode?: RoomMode;
+  onTogglePause?: () => void;
   onOpenMinimap?: () => void;
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
@@ -41,6 +45,9 @@ export const HUD: React.FC<HUDProps> = ({
   totalIslands = 21,
   waveState,
   alertMessage,
+  missionProgress,
+  roomMode,
+  onTogglePause,
   onOpenMinimap,
   onTriggerRegularWave,
   onTriggerBossWave,
@@ -119,6 +126,9 @@ export const HUD: React.FC<HUDProps> = ({
         totalIslands={totalIslands}
         waveState={waveState}
         alertMessage={alertMessage}
+        missionProgress={missionProgress}
+        roomMode={roomMode}
+        onTogglePause={onTogglePause}
         onOpenMinimap={onOpenMinimap}
         onOpenSettings={openSettings}
         onTriggerRegularWave={onTriggerRegularWave}

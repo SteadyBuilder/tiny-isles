@@ -6,6 +6,10 @@ import { ADMIN_RESET_CONFIG } from '../data/adminReset';
 import { TEST_MENU_EASTER_EGG_CONFIG } from '../data/testMenuEasterEgg';
 import { useMultiClickTrigger } from '../hooks/useMultiClickTrigger';
 import { AdminResetEasterEggModal } from './AdminResetEasterEggModal';
+import { WoodModalFrame } from './ui/WoodModalFrame';
+import { PixelGameButton } from './ui/PixelGameButton';
+import { PixelSquareButton } from './ui/PixelSquareButton';
+import { PixelRangeSlider } from './ui/PixelRangeSlider';
 
 interface HudSettingsModalProps {
   isOpen: boolean;
@@ -23,6 +27,8 @@ interface HudSettingsModalProps {
   onToggleTestMenu?: () => void;
 }
 
+const ZOOM_PRESETS: ReadonlyArray<number> = [0.75, 1.0, 1.25, 1.5];
+
 export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
   isOpen,
   onClose,
@@ -39,6 +45,7 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
   onToggleTestMenu,
 }) => {
   const [tempName, setTempName] = useState(playerName);
+  const [selectedZoom, setSelectedZoom] = useState<number>(1.0);
   const [showAdminReset, setShowAdminReset] = useState(false);
 
   useEffect(() => {
@@ -64,172 +71,194 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const toggleColor = () => {
-    setPlayerColor(playerColor === 'blue' ? 'red' : 'blue');
+  const isRed = playerColor === 'red';
+  const avatarSrc = isRed
+    ? '/assets/ui/Human Avatars/Avatars_06.png'
+    : '/assets/ui/Human Avatars/Avatars_01.png';
+
+  const commitName = () => {
+    setPlayerName(tempName.trim() || '수호자');
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm sm:max-w-md bg-[#162238] border-2 border-amber-600/60 rounded-3xl p-5 sm:p-6 shadow-2xl text-white flex flex-col gap-4 max-h-[88vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between pb-2 border-b border-amber-500/20">
-          <div
-            className="flex items-center gap-2 select-none cursor-default"
-            onClick={handleSecretTitleClick}
-          >
-            <img src="/assets/ui/Icons/Icon_10.png" alt="gear" className="w-5 h-5 pixel-art" />
-            <h3 className="font-black text-lg text-amber-300">게임 설정 & 메뉴</h3>
+    <>
+      <WoodModalFrame
+        title="게임 설정 & 메뉴"
+        ribbonVariant="blue"
+        frameVariant="wood"
+        maxWidthClass="max-w-md"
+        onClose={onClose}
+        onTitleClick={handleSecretTitleClick}
+        headerRight={
+          <div className="flex items-center gap-1.5 text-[11px] font-black text-[#fef3c7] pixel-btn-shadow">
+            <img src="/assets/ui/Icons/Icon_10.png" alt="" className="w-4 h-4 pixel-art" />
+            <span>수호자 환경설정</span>
           </div>
-          <button
-            onClick={onClose}
-            className="relative w-8 h-8 active:scale-90 transition-transform flex items-center justify-center"
-          >
-            <img
-              src="/assets/ui/Buttons/SmallRedRoundButton_Regular.png"
-              alt="close"
-              className="w-full h-full pixel-art select-none"
-            />
-            <img src="/assets/ui/Icons/Icon_09.png" alt="x" className="absolute w-3.5 h-3.5 pixel-art" />
-          </button>
-        </div>
+        }
+      >
+        {/* Guardian Profile Sheet */}
+        <div className="ts-paper-sheet p-2 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-[#3a200f] flex items-center gap-1.5">
+              <img src="/assets/ui/Icons/Icon_06.png" alt="" className="w-4 h-4 pixel-art" />
+              <span>내 수호자 프로필</span>
+            </span>
+            <span
+              className={`px-2 py-0.5 rounded text-[10px] font-black border ${
+                isRed
+                  ? 'bg-[#fee2e2] text-[#991b1b] border-[#dc2626]'
+                  : 'bg-[#dbeafe] text-[#1e40af] border-[#2563eb]'
+              }`}
+            >
+              {isRed ? '홍기사단' : '청기사단'}
+            </span>
+          </div>
 
-        {/* Profile Section */}
-        <div className="bg-black/40 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2.5">
-          <div className="text-xs font-semibold text-slate-300">내 수호자 프로필</div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1">
-              <button
-                onClick={toggleColor}
-                className={`w-9 h-9 rounded-full border-2 border-white/80 shadow-md transition transform active:scale-90 flex items-center justify-center ${
-                  playerColor === 'blue' ? 'bg-blue-500' : 'bg-red-500'
-                }`}
-              >
-                <span className="text-[10px] font-bold text-white">
-                  {playerColor === 'blue' ? '청' : '홍'}
-                </span>
-              </button>
+          <div className="flex items-center gap-2.5">
+            <PixelSquareButton
+              variant={isRed ? 'red' : 'blue'}
+              size="md"
+              iconSrc={avatarSrc}
+              iconClassName="w-7 h-7 object-contain"
+              alt="기사단 진영 전환"
+              title="클릭하여 청기사단 / 홍기사단 전환"
+              onClick={() => setPlayerColor(isRed ? 'blue' : 'red')}
+            />
+            <div className="flex-1 min-w-0 space-y-1">
               <input
                 type="text"
                 value={tempName}
                 maxLength={10}
                 onChange={(e) => setTempName(e.target.value)}
-                onBlur={() => setPlayerName(tempName.trim() || '수호자')}
-                className="bg-black/60 border border-white/20 text-white px-3 py-1.5 rounded-xl text-sm flex-1 outline-none focus:border-amber-400"
+                onBlur={commitName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    commitName();
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                className="w-full px-2.5 py-1 rounded-lg bg-[#fff7e6] border-2 border-[#8c5a32] text-[#2b1810] text-sm font-black outline-none focus:border-[#2563eb] select-text"
                 placeholder="수호자 이름"
               />
+              <p className="text-[10px] font-bold text-[#6e4625]">
+                초상화 클릭 시 진영(청/홍) 전환
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Audio Controls */}
-        <div className="bg-black/40 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-300">사운드 & 배경음악</span>
+        {/* Audio & Volume Sheet */}
+        <div className="ts-paper-sheet p-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-black text-[#3a200f] flex items-center gap-1.5">
+              <img src="/assets/ui/Icons/Icon_12.png" alt="" className="w-4 h-4 pixel-art" />
+              <span>사운드 & 배경음악</span>
+            </span>
             <button
+              type="button"
               onClick={onToggleSound}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-bold transition active:scale-95 ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border-2 text-[11px] font-black transition active:scale-95 ${
                 isMuted
-                  ? 'bg-red-500/20 border-red-500/40 text-red-300'
-                  : 'bg-green-500/20 border-green-500/40 text-green-300'
+                  ? 'bg-[#fee2e2] border-[#b91c1c] text-[#991b1b]'
+                  : 'bg-[#dcfce7] border-[#15803d] text-[#166534]'
               }`}
             >
               <img
                 src="/assets/ui/Icons/Icon_12.png"
-                alt="sound"
+                alt=""
                 className={`w-3.5 h-3.5 pixel-art ${isMuted ? 'grayscale opacity-50' : ''}`}
               />
-              <span>{isMuted ? '음소거' : '켜짐'}</span>
+              <span>{isMuted ? '음소거 중' : '소리 켜짐'}</span>
             </button>
           </div>
 
-          {/* Quick Sliders */}
-          <div className="flex flex-col gap-2 text-[11px] text-slate-300">
-            <div className="flex items-center justify-between">
-              <span>BGM: {Math.round(soundSettings.bgmVolume * 100)}%</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={soundSettings.bgmVolume}
-                onChange={(e) => sound.setBgmVolume(parseFloat(e.target.value))}
-                className="w-32 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span>SFX: {Math.round(soundSettings.sfxVolume * 100)}%</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={soundSettings.sfxVolume}
-                onChange={(e) => sound.setSfxVolume(parseFloat(e.target.value))}
-                className="w-32 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-400"
-              />
-            </div>
+          <div className="p-2 rounded-lg bg-[#e6cfab] border border-[#b89568] space-y-1.5">
+            <PixelRangeSlider
+              label="배경음악 (BGM)"
+              iconSrc="/assets/ui/Icons/Icon_12.png"
+              value={soundSettings.bgmVolume}
+              accentVariant="amber"
+              onChange={(val) => sound.setBgmVolume(val)}
+            />
+            <PixelRangeSlider
+              label="효과음 (SFX)"
+              iconSrc="/assets/ui/Icons/Icon_05.png"
+              value={soundSettings.sfxVolume}
+              accentVariant="emerald"
+              onChange={(val) => sound.setSfxVolume(val)}
+            />
           </div>
 
-          <button
+          <PixelGameButton
+            label="BGM 트랙 & 효과음 테스트"
+            iconSrc="/assets/ui/Icons/Icon_12.png"
+            variant="blue"
+            size="sm"
+            fullWidth
             onClick={() => {
               onClose();
               onOpenSoundModal();
             }}
-            className="w-full flex items-center justify-center py-2 px-3 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-xl text-amber-200 text-xs font-bold transition"
-          >
-            <span>BGM 트랙 변경 및 효과음 테스트</span>
-          </button>
+          />
         </div>
 
-        {/* Screen / Zoom Presets */}
-        <div className="bg-black/40 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2">
+        {/* Camera Zoom Presets Sheet */}
+        <div className="ts-paper-sheet p-2 space-y-1.5">
           <div
-            className="text-xs font-semibold text-slate-300 select-none cursor-default flex items-center justify-between"
+            className="text-xs font-black text-[#3a200f] select-none cursor-default flex items-center justify-between"
             onClick={handleSecretTestMenuClick}
           >
-            <span>화면 & 카메라 줌 프리셋</span>
+            <span className="flex items-center gap-1.5">
+              <img src="/assets/ui/Icons/Icon_Compass.png" alt="" className="w-4 h-4 pixel-art" />
+              <span>화면 & 카메라 줌 프리셋</span>
+            </span>
             {isTestMenuVisible && (
-              <span className="text-[10px] font-bold text-amber-300/90">🧪</span>
+              <span className="text-[10px] font-black text-[#b45309]">🧪 테스트 활성</span>
             )}
           </div>
           <div className="grid grid-cols-4 gap-1.5">
-            {[0.75, 1.0, 1.25, 1.5].map((z) => (
-              <button
-                key={z}
-                onClick={() => {
-                  GameEvents.emit('set-zoom', z);
-                }}
-                className="py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-200 active:scale-95 transition"
-              >
-                {z}x
-              </button>
-            ))}
+            {ZOOM_PRESETS.map((z) => {
+              const active = selectedZoom === z;
+              return (
+                <button
+                  key={z}
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setSelectedZoom(z);
+                    GameEvents.emit('set-zoom', z);
+                  }}
+                  className={`py-1 rounded-lg border-2 text-xs font-black transition active:scale-95 ${
+                    active
+                      ? 'bg-[#fde68a] border-[#92400e] text-[#3a200f] shadow-inner'
+                      : 'bg-[#e6cfab] border-[#b89568] text-[#5c3c24] hover:bg-[#f3e2c7]'
+                  }`}
+                >
+                  {z}x
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
-          <button
-            onClick={() => {
-              onClose();
-              onOpenHelp();
-            }}
-            className="flex-1 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
-          >
-            <img src="/assets/ui/Icons/Icon_11.png" alt="guide" className="w-4 h-4 pixel-art" />
-            타워디펜스 기획 & 조작 가이드
-          </button>
-        </div>
-      </div>
+        {/* Footer Guide Button */}
+        <PixelGameButton
+          label="게임 가이드 & 조작법"
+          iconSrc="/assets/ui/Icons/Icon_11.png"
+          variant="red"
+          size="sm"
+          fullWidth
+          onClick={() => {
+            onClose();
+            onOpenHelp();
+          }}
+        />
+      </WoodModalFrame>
 
       <AdminResetEasterEggModal
         isOpen={showAdminReset}
         onClose={() => setShowAdminReset(false)}
       />
-    </div>
+    </>
   );
 };

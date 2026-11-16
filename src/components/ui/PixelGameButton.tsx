@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { sound } from '../../lib/sound';
 
 export interface PixelGameButtonProps {
+  id?: string;
   label: string;
   subtitle?: string;
   iconSrc?: string;
@@ -22,6 +23,7 @@ const SIZE_CLASSES: Record<NonNullable<PixelGameButtonProps['size']>, string> = 
 };
 
 export const PixelGameButton: React.FC<PixelGameButtonProps> = ({
+  id,
   label,
   subtitle,
   iconSrc,
@@ -53,6 +55,7 @@ export const PixelGameButton: React.FC<PixelGameButtonProps> = ({
 
   return (
     <button
+      id={id}
       type={type}
       disabled={disabled}
       title={title}

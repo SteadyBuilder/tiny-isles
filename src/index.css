@@ -166,6 +166,14 @@ html, body {
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.65));
 }
 
+@media (max-width: 639px) {
+  .ts-wood-bar {
+    border-width: 8px 12px 9px 12px;
+    border-image-source: url('/assets/ui/bar_wood_tight.png');
+    border-image-slice: 14 22 16 22 fill;
+  }
+}
+
 .ts-btn-blue {
   border-style: solid;
   border-width: 16px 20px 18px 20px;
@@ -204,6 +212,68 @@ html, body {
   border-image-repeat: stretch;
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.ts-wood-bar-tight {
+  border-style: solid;
+  border-width: 10px 14px 11px 14px;
+  border-image-source: url('/assets/ui/bar_wood_tight.png');
+  border-image-slice: 14 22 16 22 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+}
+
+.ts-wood-bar-compact {
+  border-style: solid;
+  border-width: 7px 10px 8px 10px;
+  border-image-source: url('/assets/ui/bar_wood_tight.png');
+  border-image-slice: 14 22 16 22 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55));
+}
+
+.ts-bar-track {
+  border-style: solid;
+  border-width: 4px 7px;
+  border-image-source: url('/assets/ui/bar_small_tight.png');
+  border-image-slice: 6 15 6 15 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+}
+
+.ts-range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ts-range-slider::-webkit-slider-runnable-track {
+  height: 10px;
+  background: transparent;
+}
+
+.ts-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -6px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 32%, #fef3c7 0%, #eab308 55%, #92400e 100%);
+  border: 2px solid #2b1810;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.ts-range-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 32%, #fef3c7 0%, #eab308 55%, #92400e 100%);
+  border: 2px solid #2b1810;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
 }
 
 @keyframes floatSlow {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Lock, RotateCcw, ShieldAlert, X } from 'lucide-react';
 import { resetAllPlayData, verifyAdminResetCode } from '../lib/adminResetService';
+import { WoodModalFrame } from './ui/WoodModalFrame';
+import { PixelGameButton } from './ui/PixelGameButton';
 
 interface AdminResetEasterEggModalProps {
   isOpen: boolean;
@@ -47,70 +48,56 @@ export const AdminResetEasterEggModal: React.FC<AdminResetEasterEggModalProps> =
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
-      onClick={handleClose}
+    <WoodModalFrame
+      title="관리자 전용 초기화"
+      ribbonVariant="red"
+      frameVariant="special"
+      maxWidthClass="max-w-sm"
+      zIndexClass="z-[60]"
+      onClose={handleClose}
     >
-      <div
-        className="w-full max-w-sm bg-[#161c2e] border-2 border-red-500/60 rounded-3xl p-5 shadow-2xl text-white flex flex-col gap-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between pb-2 border-b border-red-500/20">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-red-400" />
-            <h3 className="font-black text-base text-red-300">관리자 전용 초기화</h3>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="ts-paper-sheet p-2.5 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-black text-[#991b1b]">
+            <img src="/assets/ui/Icons/Icon_Boss.png" alt="" className="w-4 h-4 pixel-art" />
+            <span>서버 & 로컬 저장소 전체 초기화</span>
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
+          <p className="text-[11px] font-bold text-[#4a301e] leading-relaxed">
+            Supabase 서버(월드 상태, 해금된 섬, 플레이어, 수비대)와 로컬 저장소의 모든 플레이
+            데이터를 초기 상태로 되돌립니다.
+          </p>
+          <input
+            type="password"
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+            placeholder="관리자 비밀 코드 입력"
+            autoFocus
             disabled={isResetting}
-            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition disabled:opacity-40"
-          >
-            <X className="w-4 h-4 text-slate-300" />
-          </button>
+            className="w-full px-3 py-2 rounded-lg bg-[#fff7e6] border-2 border-[#8c5a32] text-[#2b1810] text-sm font-black outline-none focus:border-[#dc2626] select-text"
+          />
+          {error && <div className="text-xs font-black text-[#b91c1c]">{error}</div>}
         </div>
 
-        <p className="text-xs text-slate-300 leading-relaxed">
-          Supabase 서버(월드 상태, 해금된 섬, 플레이어, 수비대)와 로컬 저장소의 모든 플레이
-          데이터를 초기 상태로 되돌립니다.
-        </p>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <div className="relative">
-            <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="password"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              placeholder="관리자 비밀 코드 입력"
-              autoFocus
-              disabled={isResetting}
-              className="w-full bg-black/60 border border-white/20 focus:border-red-400 text-white pl-9 pr-3 py-2 rounded-xl text-sm outline-none"
-            />
-          </div>
-
-          {error && <div className="text-xs text-red-400 font-semibold">{error}</div>}
-
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={isResetting}
-              className="flex-1 py-2 bg-white/10 hover:bg-white/15 rounded-xl text-xs font-bold text-slate-200 transition disabled:opacity-40"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={isResetting || !passcode.trim()}
-              className="flex-1 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-900/40 disabled:text-red-300/50 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition"
-            >
-              <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-              {isResetting ? '초기화 중...' : '전체 데이터 초기화'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="grid grid-cols-2 gap-2">
+          <PixelGameButton
+            label="취소"
+            variant="blue"
+            size="sm"
+            fullWidth
+            disabled={isResetting}
+            onClick={handleClose}
+          />
+          <PixelGameButton
+            type="submit"
+            label={isResetting ? '초기화 중...' : '전체 초기화'}
+            iconSrc="/assets/ui/Icons/Icon_09.png"
+            variant="red"
+            size="sm"
+            fullWidth
+            disabled={isResetting || !passcode.trim()}
+          />
+        </div>
+      </form>
+    </WoodModalFrame>
   );
 };

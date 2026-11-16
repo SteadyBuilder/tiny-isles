@@ -160,6 +160,9 @@ export function App() {
         totalIslands={islandStats.total}
         waveState={waveState}
         alertMessage={alertMessage}
+        missionProgress={missionProgress}
+        roomMode={roomConfig.mode}
+        onTogglePause={toggleSoloPause}
         onOpenMinimap={() => setShowMinimapModal(true)}
         onTriggerRegularWave={() => GameEvents.emit('trigger-regular-wave')}
         onTriggerBossWave={() => GameEvents.emit('trigger-boss-wave')}

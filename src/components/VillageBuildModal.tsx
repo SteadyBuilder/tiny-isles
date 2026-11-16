@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { BuildingCategory, ConstructableType, ConstructedBuilding, Inventory, Island } from '../types/game';
+import {
+  BuildingCategory,
+  ConstructableType,
+  ConstructedBuilding,
+  Inventory,
+  Island,
+} from '../types/game';
 import { CONSTRUCTABLE_BLUEPRINTS, VILLAGE_TIER_CONFIGS } from '../game/constants';
 import { BuildingSystem } from '../game/BuildingSystem';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
-import { Hammer, Heart, ArrowUpCircle } from 'lucide-react';
+import { WoodModalFrame } from './ui/WoodModalFrame';
+import { PixelGameButton } from './ui/PixelGameButton';
+import { VillageBlueprintCard } from './village/VillageBlueprintCard';
 
 interface VillageBuildModalProps {
   isOpen: boolean;
@@ -20,34 +28,12 @@ interface VillageBuildModalProps {
   onTestDestroyCore?: (territoryId: number) => void;
 }
 
-const CATEGORIES: { key: BuildingCategory; label: string; icon: string }[] = [
-  { key: 'tower', label: '방어 타워', icon: '🏹' },
-  { key: 'wall', label: '성벽', icon: '🪵' },
-  { key: 'basic', label: '기본 건물', icon: '🏠' },
-  { key: 'special', label: '특수 건물', icon: '✨' },
+const CATEGORIES: ReadonlyArray<{ key: BuildingCategory; label: string; iconSrc: string }> = [
+  { key: 'tower', label: '방어 타워', iconSrc: '/assets/buildings/Tower.png' },
+  { key: 'wall', label: '성벽', iconSrc: '/assets/buildings/Wood_Palisade.png' },
+  { key: 'basic', label: '기본 건물', iconSrc: '/assets/buildings/House1.png' },
+  { key: 'special', label: '특수 건물', iconSrc: '/assets/ui/Icons/Icon_07.png' },
 ];
-
-const SPRITES: Record<string, string> = {
-  woodPalisade: '/assets/buildings/Wood_Palisade.png',
-  stoneWall: '/assets/buildings/Stone_Wall.png',
-  castle: '/assets/buildings/Castle.png',
-  house1: '/assets/buildings/House1.png',
-  house2: '/assets/buildings/House2.png',
-  house3: '/assets/buildings/House3.png',
-  tower: '/assets/buildings/Tower.png',
-  magicTower: '/assets/buildings/Magic_Tower.png',
-  barracks: '/assets/buildings/Barracks.png',
-  archery: '/assets/buildings/Archery.png',
-  monastery: '/assets/buildings/Monastery.png',
-  lumberCamp: '/assets/buildings/Lumber_Camp.png',
-  stoneWorks: '/assets/buildings/Stone_Works.png',
-  alchemistLab: '/assets/buildings/Alchemist_Lab.png',
-  woodOutpost: '/assets/buildings/Wood_Outpost.png',
-  woodHut: '/assets/buildings/Wood_Hut.png',
-  blacksmith: '/assets/buildings/Blacksmith.png',
-  market: '/assets/buildings/Market.png',
-  windmill: '/assets/buildings/Windmill.png',
-};
 
 export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   isOpen,
@@ -95,95 +81,141 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
       return;
     }
 
-    const check = BuildingSystem.checkBuild(curTerritory, type, inventory, constructedBuildings, selectedSlotIndex ?? undefined);
+    const check = BuildingSystem.checkBuild(
+      curTerritory,
+      type,
+      inventory,
+      constructedBuildings,
+      selectedSlotIndex ?? undefined
+    );
     if (!check.canBuild) return;
-    const finalSlot = check.slotIndex!;
-    onConstructBuilding(curTerritory.id, type, finalSlot);
+    onConstructBuilding(curTerritory.id, type, check.slotIndex!);
     setSelectedSlotIndex(null);
   };
 
-  return (
-    <div id="village-build-modal" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/65 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-3xl bg-[#543d2b] border-4 border-[#322013] rounded-2xl p-3 sm:p-4 shadow-2xl flex flex-col max-h-[92vh] overflow-y-auto text-[#3a2211]" onClick={(e) => e.stopPropagation()}>
-        {/* Header - Tiny Swords Wood Table Banner */}
-        <div className="flex items-center justify-between pb-2 mb-2 border-b-2 border-[#7c5a3f]">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#b58750] text-[#2e1b0d] border border-[#d8aa6d]"><Hammer className="w-5 h-5" /></span>
-            <h2 className="text-base sm:text-lg font-black text-[#faecd1] drop-shadow">
-              🏰 #{curTerritory.id} {curTerritory.name} · Lv.{curTier} {tierCfg.name}
-            </h2>
-          </div>
-          <button id="close-village-modal-btn" onClick={onClose} className="w-7 h-7 active:scale-95 transition-transform flex items-center justify-center">
-            <img src="/assets/ui/Buttons/SmallRedRoundButton_Regular.png" alt="X" className="w-full h-full pixel-art" />
-          </button>
-        </div>
+  const shortTerritoryName = curTerritory.name.split(' (')[0];
 
-        {/* Paper Panel: Tier Tech & Core Status */}
-        <div className="bg-[#faecd1] border-2 border-[#b89568] rounded-xl p-3 shadow-inner">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2.5 tabular-nums">
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-xs text-[#52331c]">💎</span>
-                <span className="text-xs font-black text-[#1f4e1f]">{curTerritory.coreHp}/{curTerritory.coreMaxHp}</span>
-                <button onClick={() => onRepairCore(curTerritory.id)} className="px-2 py-0.5 rounded bg-[#4f803b] hover:bg-[#436e31] text-[#fbf5e6] text-[10px] font-bold flex items-center gap-1 shadow" title="코어 및 방책 수리">
-                  <Heart className="w-3 h-3" /> 🪵5 🪨5
-                </button>
-              </div>
-              <span className="text-xs font-bold text-[#714d2e]">
-                🏗️ <b className="text-[#322013]">{existingCount}</b>/{maxSlots}
+  return (
+    <WoodModalFrame
+      id="village-build-modal"
+      title={`#${curTerritory.id} ${shortTerritoryName} 건설`}
+      ribbonVariant="blue"
+      frameVariant="wood"
+      maxWidthClass="max-w-3xl"
+      onClose={onClose}
+      headerRight={
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#29150b]/85 border border-[#b89568] text-xs font-black text-[#fde68a]">
+          <img src="/assets/buildings/Castle.png" alt="" className="w-4 h-4 object-contain pixel-art" />
+          <span>
+            Lv.{curTier} {tierCfg.name} · 슬롯 {existingCount}/{maxSlots}
+          </span>
+        </div>
+      }
+    >
+      {/* Tier Tech, Core Status & Slot Grid */}
+      <div className="ts-paper-sheet p-2.5 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 tabular-nums">
+            <div className="flex items-center gap-1.5 text-xs font-black text-[#166534]">
+              <img src="/assets/ui/Icons/Icon_07.png" alt="" className="w-4 h-4 pixel-art" />
+              <span>
+                코어 {curTerritory.coreHp}/{curTerritory.coreMaxHp}
               </span>
             </div>
-
-            {/* Upgrade Button */}
-            {upgrade.nextTier ? (
-              <button id="upgrade-village-btn" onClick={() => onUpgradeVillage(curTerritory.id)} disabled={!upgrade.canUpgrade} className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 border transition tabular-nums ${
-                upgrade.canUpgrade ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white border-[#93c5fd] shadow active:scale-95' : 'bg-[#9ca3af] text-[#4b5563] border-[#6b7280] cursor-not-allowed'
-              }`}>
-                <ArrowUpCircle className="w-4 h-4" />
-                <span>Lv.{upgrade.nextTier} {VILLAGE_TIER_CONFIGS[upgrade.nextTier].name}</span>
-                <span className="text-[10px] opacity-90">🪵{upgrade.costWood} 🪨{upgrade.costStone} 🪙{upgrade.costGold}</span>
-              </button>
-            ) : (
-              <span className="px-2.5 py-1 rounded bg-[#eab308] text-[#422006] text-xs font-black">👑 MAX</span>
-            )}
+            <button
+              type="button"
+              onClick={() => onRepairCore(curTerritory.id)}
+              className="px-2 py-1 rounded-lg bg-[#4f803b] hover:bg-[#436e31] border border-[#2d4d21] text-[#fef5df] text-[10px] font-black inline-flex items-center gap-1 active:scale-95 transition"
+              title="코어 및 방책 수리"
+            >
+              <img src="/assets/ui/Icons/Icon_Heart.png" alt="" className="w-3 h-3 pixel-art" />
+              <span>수리</span>
+              <img src="/assets/ui/Icons/Icon_02.png" alt="" className="w-3 h-3 pixel-art" />
+              <span>5</span>
+              <img src="/assets/decorations/Rock2.png" alt="" className="w-3 h-3 pixel-art" />
+              <span>5</span>
+            </button>
           </div>
 
-          {/* Slot Grid Selector */}
-          <div className="mt-2 pt-2 border-t border-[#d8be9a]">
-            <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
-              {slotStates.map((slot) => {
-                const isSelected = selectedSlotIndex === slot.slotIndex;
-                const isOcc = !!slot.building;
-                const slotIcon = slot.role === 'wall' ? '🛡️' : '📍';
-                return (
-                  <button key={slot.slotIndex} disabled={!slot.isUnlocked || isOcc} onClick={() => setSelectedSlotIndex(isSelected ? null : slot.slotIndex)} className={`py-1 px-1 rounded text-[10px] font-bold border transition truncate tabular-nums ${
-                    !slot.isUnlocked ? 'bg-[#d8c5aa] text-[#9c8973] border-[#c4b094] opacity-50 cursor-not-allowed' :
-                    isOcc ? 'bg-[#c7aa83] text-[#4a3221] border-[#ad8f67] cursor-not-allowed' :
-                    isSelected ? 'bg-[#2563eb] text-white border-[#93c5fd] shadow-md ring-2 ring-blue-300' :
-                    'bg-[#fff5e2] text-[#6d4626] border-[#d8be9a] hover:bg-[#ffeac4]'
-                  }`} title={slot.building ? `${slot.building.name} (HP ${slot.building.hp})` : `슬롯 #${slot.slotIndex} (${slot.role})`}>
-                    #{slot.slotIndex} {isOcc ? '✓' : slotIcon}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {upgrade.nextTier ? (
+            <PixelGameButton
+              id="upgrade-village-btn"
+              label={`Lv.${upgrade.nextTier} ${VILLAGE_TIER_CONFIGS[upgrade.nextTier].name}`}
+              subtitle={`목재${upgrade.costWood} · 석재${upgrade.costStone} · 금화${upgrade.costGold}`}
+              iconSrc="/assets/ui/Icons/Icon_06.png"
+              variant="blue"
+              size="sm"
+              disabled={!upgrade.canUpgrade}
+              onClick={() => onUpgradeVillage(curTerritory.id)}
+            />
+          ) : (
+            <span className="px-2.5 py-1 rounded-lg bg-[#fde68a] border-2 border-[#92400e] text-[#3a200f] text-xs font-black">
+              👑 MAX 등급
+            </span>
+          )}
         </div>
 
-        {/* 4 Category Tabs */}
-        <div className="mt-2.5 flex gap-1.5 pb-1">
-          {CATEGORIES.map((cat) => (
-            <button key={cat.key} onClick={() => setActiveCategory(cat.key)} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-black border transition flex items-center justify-center gap-1 ${
-              activeCategory === cat.key ? 'bg-[#f4e2bb] text-[#3c2412] border-[#ffe8b8] shadow' : 'bg-[#432d1e] text-[#be9d7c] border-[#311f13] hover:bg-[#4f3624]'
-            }`}>
-              <span>{cat.icon}</span>
+        {/* Slot Grid Selector */}
+        <div className="pt-2 border-t border-[#c7a97e]">
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
+            {slotStates.map((slot) => {
+              const isSelected = selectedSlotIndex === slot.slotIndex;
+              const isOcc = Boolean(slot.building);
+              const slotMark = slot.role === 'wall' ? '방벽' : '터';
+              return (
+                <button
+                  key={slot.slotIndex}
+                  type="button"
+                  disabled={!slot.isUnlocked || isOcc}
+                  onClick={() => setSelectedSlotIndex(isSelected ? null : slot.slotIndex)}
+                  className={`py-1 px-1 rounded text-[10px] font-black border-2 transition truncate tabular-nums ${
+                    !slot.isUnlocked
+                      ? 'bg-[#d8c5aa] text-[#9c8973] border-[#c4b094] opacity-55 cursor-not-allowed'
+                      : isOcc
+                        ? 'bg-[#c7aa83] text-[#4a3221] border-[#ad8f67] cursor-not-allowed'
+                        : isSelected
+                          ? 'bg-[#2563eb] text-white border-[#1e40af] shadow'
+                          : 'bg-[#fff5e2] text-[#6d4626] border-[#c4a479] hover:bg-[#ffeac4]'
+                  }`}
+                  title={
+                    slot.building
+                      ? `${slot.building.name} (HP ${slot.building.hp})`
+                      : `슬롯 #${slot.slotIndex} (${slot.role})`
+                  }
+                >
+                  #{slot.slotIndex} {isOcc ? '완료' : slotMark}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Category Tabs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        {CATEGORIES.map((cat) => {
+          const active = activeCategory === cat.key;
+          return (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => setActiveCategory(cat.key)}
+              className={`py-1.5 px-2 rounded-lg text-xs font-black border-2 transition flex items-center justify-center gap-1.5 ${
+                active
+                  ? 'bg-[#fde68a] text-[#2b1810] border-[#92400e] shadow'
+                  : 'bg-[#3d2314]/85 text-[#f3e4c7] border-[#85532a] hover:brightness-110'
+              }`}
+            >
+              <img src={cat.iconSrc} alt="" className="w-4 h-4 object-contain pixel-art shrink-0" />
               <span>{cat.label}</span>
             </button>
-          ))}
-        </div>
+          );
+        })}
+      </div>
 
-        {/* Blueprints Grid (Sprite + Stat Badges + Resource Costs) */}
-        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {/* Blueprints Grid */}
+      <div className="ts-paper-sheet p-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {blueprints.map((bp) => {
             const isTower = bp.category === 'tower' && Boolean(onSelectTowerPlacement);
             const hasSlot = existingCount < maxSlots;
@@ -214,57 +246,19 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                       : '슬롯 부족';
 
             return (
-              <div key={bp.type} className="bg-[#faecd1] border-2 border-[#b89568] rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-sm" title={bp.description}>
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-11 h-11 rounded-lg bg-[#edd8b6] border border-[#c7a97e] flex items-center justify-center p-1 shrink-0 overflow-hidden">
-                    {SPRITES[bp.spriteKey] ? (
-                      <img src={SPRITES[bp.spriteKey]} alt={bp.name} className="w-full h-full object-contain pixel-art" />
-                    ) : (
-                      <span className="text-lg">{bp.icon}</span>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-black text-xs text-[#3a2211] truncate">{bp.icon} {bp.name}</span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-black shrink-0 ${
-                          isEnabled
-                            ? 'bg-emerald-700/15 text-emerald-800 border border-emerald-700/30'
-                            : 'bg-red-700/15 text-red-800 border border-red-700/30'
-                        }`}
-                      >
-                        {statusText}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-[#785333] mt-0.5 tabular-nums">
-                      <span>❤️{bp.maxHp}</span>
-                      {bp.attack ? <span>⚔️{bp.attack}</span> : null}
-                      {bp.range ? <span>🎯{bp.range}</span> : null}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[11px] font-extrabold mt-1 tabular-nums">
-                      <span className={inventory.wood >= bp.costWood ? 'text-[#386629]' : 'text-red-700'}>🪵{bp.costWood}</span>
-                      <span className={inventory.stone >= bp.costStone ? 'text-[#445b6b]' : 'text-red-700'}>🪨{bp.costStone}</span>
-                      {bp.costGold > 0 && <span className={inventory.gold >= bp.costGold ? 'text-[#b45309]' : 'text-red-700'}>🪙{bp.costGold}</span>}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  disabled={!isEnabled}
-                  onClick={() => handleBuild(bp.type)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black border transition shrink-0 ${
-                    isEnabled
-                      ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white border-[#93c5fd] shadow active:scale-95'
-                      : 'bg-[#cbb597] text-[#735e47] border-[#b09a7d] cursor-not-allowed'
-                  }`}
-                >
-                  {isTower ? '📍 선택' : '🔨'}
-                </button>
-              </div>
+              <VillageBlueprintCard
+                key={bp.type}
+                blueprint={bp}
+                inventory={inventory}
+                isTowerPlacement={isTower}
+                isEnabled={isEnabled}
+                statusText={statusText}
+                onBuild={() => handleBuild(bp.type)}
+              />
             );
           })}
         </div>
       </div>
-    </div>
+    </WoodModalFrame>
   );
 };

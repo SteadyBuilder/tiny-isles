@@ -118,20 +118,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       </div>
 
       {/* Bottom-Left: Guardian Profile Wood Plate */}
-      <div className="fixed bottom-3 left-3 sm:bottom-5 sm:left-5 z-20 flex items-center gap-2.5 ts-wood-bar pr-4 pl-2 py-1">
+      <div className="fixed bottom-3 left-3 sm:bottom-5 sm:left-5 z-20 flex items-center gap-1.5 sm:gap-2 ts-wood-bar pr-2 pl-1.5 sm:pr-3 sm:pl-2 py-0.5 sm:py-1 max-w-[calc(100vw-10.25rem)] sm:max-w-none">
         <img
           src={avatarSrc}
           alt={playerName}
-          className="w-10 h-10 sm:w-11 sm:h-11 object-contain pixel-art shrink-0 -ml-2 drop-shadow"
+          className="w-8 h-8 sm:w-11 sm:h-11 object-contain pixel-art shrink-0 -ml-1 sm:-ml-2 drop-shadow"
         />
         <div className="leading-tight min-w-0">
-          <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-[#fef5df] pixel-btn-shadow truncate">
-            <span>{playerName}</span>
-            <span className="text-[10px] sm:text-[11px] font-bold text-[#fde68a]">
+          <div className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-sm font-black text-[#fef5df] pixel-btn-shadow min-w-0">
+            <span className="truncate">{playerName}</span>
+            <span className="text-[10px] sm:text-[11px] font-bold text-[#fde68a] shrink-0 whitespace-nowrap">
               [{equippedTitle}]
             </span>
           </div>
-          <div className="flex items-center gap-2 text-[11px] font-bold text-[#d1fae5] pixel-btn-shadow mt-0.5">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-bold text-[#d1fae5] pixel-btn-shadow mt-0.5 whitespace-nowrap">
             <span>✨ {meta.points}P</span>
             <span className="opacity-70">·</span>
             <span>클리어 {meta.totalClears}회</span>
@@ -141,25 +141,28 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
       {/* Bottom-Right: Pixel Audio / Guide / Settings Controls + Version Stamp */}
       <div className="fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-20 flex flex-col items-end gap-1.5">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <PixelRoundButton
             iconSrc="/assets/ui/Icons/Icon_12.png"
             alt="사운드 음소거 전환"
             title={soundSettings.muted ? '음소거 해제' : '음소거'}
             mutedCross={soundSettings.muted}
             iconDimmed={soundSettings.muted}
+            className="!w-10 !h-10 sm:!w-11 sm:!h-11"
             onClick={() => sound.toggleMute()}
           />
           <PixelRoundButton
             iconSrc="/assets/ui/Icons/Icon_11.png"
             alt="게임 가이드"
             title="게임 가이드"
+            className="!w-10 !h-10 sm:!w-11 sm:!h-11"
             onClick={onOpenHelpModal}
           />
           <PixelRoundButton
             iconSrc="/assets/ui/Icons/Icon_10.png"
             alt="설정"
             title="프로필 및 사운드 설정"
+            className="!w-10 !h-10 sm:!w-11 sm:!h-11"
             onClick={onOpenSettingsModal}
           />
         </div>

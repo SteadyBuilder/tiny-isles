@@ -1,14 +1,9 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Island } from '../types/game';
-import { Hammer, Sparkles, Swords } from 'lucide-react';
 import { GameEvents } from '../game/events/gameEvents';
-import {
-  GESTURE_BLOCK_PROPS,
-  attachGestureBlock,
-  getPinchEligibleTouches,
-  getTouchDistance,
-  hasTouchId,
-} from '../lib/touchGestureGuard';
+import { getPinchEligibleTouches, getTouchDistance } from '../lib/touchGestureGuard';
+import { PixelVirtualJoystick } from './mobile/PixelVirtualJoystick';
+import { PixelActionButtons } from './mobile/PixelActionButtons';
 
 interface MobileControlsProps {
   onAction: () => void;
@@ -20,8 +15,6 @@ interface MobileControlsProps {
   currentZoom?: number;
 }
 
-const JOYSTICK_RADIUS = 46;
-
 export const MobileControls: React.FC<MobileControlsProps> = ({
   onAction,
   onOpenVillageModal,
@@ -31,76 +24,10 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   onZoomChange,
   currentZoom = 1.0,
 }) => {
-  const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
-  const [isActionActive, setIsActionActive] = useState(false);
-  const joystickTouchIdRef = useRef<number | null>(null);
-  const joystickCenterRef = useRef({ x: 0, y: 0 });
-  const actionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const actionPointerIdRef = useRef<number | null>(null);
-
   const zoomRef = useRef(currentZoom);
   zoomRef.current = currentZoom;
   const pinchDistRef = useRef<number | null>(null);
   const pinchStartZoomRef = useRef(1.0);
-  const joystickZoneRef = useRef<HTMLDivElement | null>(null);
-  const actionZoneRef = useRef<HTMLDivElement | null>(null);
-
-  // Control zones swallow their touches so Phaser never counts them toward a pinch gesture
-  useEffect(() => {
-    const cleanups = [joystickZoneRef.current, actionZoneRef.current]
-      .filter((el): el is HTMLDivElement => el !== null)
-      .map((el) => attachGestureBlock(el));
-    return () => cleanups.forEach((cleanup) => cleanup());
-  }, []);
-
-  const stopActionHold = useCallback(() => {
-    actionPointerIdRef.current = null;
-    setIsActionActive(false);
-    if (actionIntervalRef.current) { clearInterval(actionIntervalRef.current); actionIntervalRef.current = null; }
-    GameEvents.emit('player-action-stop');
-  }, []);
-
-  const startActionHold = useCallback((e: React.PointerEvent | React.TouchEvent) => {
-    e.preventDefault();
-    actionPointerIdRef.current = 'pointerId' in e ? e.pointerId : null;
-    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
-    setIsActionActive(true);
-    onAction();
-    GameEvents.emit('player-action-start');
-  }, [onAction]);
-
-  const resetJoystick = useCallback(() => {
-    joystickTouchIdRef.current = null;
-    setKnobPos({ x: 0, y: 0 });
-    if (joystickRef) joystickRef.current = { x: 0, y: 0 };
-  }, [joystickRef]);
-
-  // Prevent input stuck on release or blur.
-  // Each control is reset only when ITS OWN touch/pointer ends, so lifting the ACTION finger
-  // doesn't kill joystick movement (and vice versa). Window blur still resets everything.
-  useEffect(() => {
-    const handleBlur = () => { resetJoystick(); stopActionHold(); };
-    const handleTouchRelease = (e: TouchEvent) => {
-      const joystickId = joystickTouchIdRef.current;
-      if (joystickId !== null && hasTouchId(e.changedTouches, joystickId)) resetJoystick();
-    };
-    const handlePointerRelease = (e: PointerEvent) => {
-      if (actionPointerIdRef.current !== null && e.pointerId === actionPointerIdRef.current) stopActionHold();
-    };
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('pointerup', handlePointerRelease);
-    window.addEventListener('pointercancel', handlePointerRelease);
-    window.addEventListener('touchend', handleTouchRelease);
-    window.addEventListener('touchcancel', handleTouchRelease);
-    return () => {
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('pointerup', handlePointerRelease);
-      window.removeEventListener('pointercancel', handlePointerRelease);
-      window.removeEventListener('touchend', handleTouchRelease);
-      window.removeEventListener('touchcancel', handleTouchRelease);
-      stopActionHold();
-    };
-  }, [resetJoystick, stopActionHold]);
 
   // 2-Finger Pinch Zoom on Window (touches on joystick / ACTION zones are excluded)
   useEffect(() => {
@@ -118,12 +45,17 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       if (touches.length === 2 && pinchDistRef.current && pinchDistRef.current > 0) {
         e.preventDefault();
         const dist = getTouchDistance(touches[0], touches[1]);
-        const nextZoom = Math.min(2.0, Math.max(0.5, Number((pinchStartZoomRef.current * (dist / pinchDistRef.current)).toFixed(2))));
+        const nextZoom = Math.min(
+          2.0,
+          Math.max(0.5, Number((pinchStartZoomRef.current * (dist / pinchDistRef.current)).toFixed(2)))
+        );
         GameEvents.emit('set-zoom', nextZoom);
         onZoomChange?.(nextZoom);
       }
     };
-    const handleTouchEnd = (e: TouchEvent) => { if (getPinchEligibleTouches(e.touches).length < 2) pinchDistRef.current = null; };
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (getPinchEligibleTouches(e.touches).length < 2) pinchDistRef.current = null;
+    };
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -136,117 +68,48 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     };
   }, [onZoomChange]);
 
-  const handleJoystickTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    const touch = e.changedTouches[0];
-    joystickTouchIdRef.current = touch.identifier;
-    const rect = e.currentTarget.getBoundingClientRect();
-    joystickCenterRef.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    handleJoystickMove(touch.clientX, touch.clientY);
-  };
-
-  const handleJoystickTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      if (e.changedTouches[i].identifier === joystickTouchIdRef.current) {
-        handleJoystickMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
-        break;
-      }
-    }
-  };
-
-  const handleJoystickMove = (clientX: number, clientY: number) => {
-    const dx = clientX - joystickCenterRef.current.x;
-    const dy = clientY - joystickCenterRef.current.y;
-    const dist = Math.hypot(dx, dy);
-    const clampedDist = Math.min(dist, JOYSTICK_RADIUS);
-    const angle = Math.atan2(dy, dx);
-    const kx = Math.cos(angle) * clampedDist;
-    const ky = Math.sin(angle) * clampedDist;
-    setKnobPos({ x: kx, y: ky });
-    if (joystickRef) {
-      joystickRef.current = {
-        x: Number((kx / JOYSTICK_RADIUS).toFixed(3)),
-        y: Number((ky / JOYSTICK_RADIUS).toFixed(3)),
-      };
-    }
-  };
-
   return (
     <div className="md:hidden pointer-events-none select-none fixed inset-0 z-40">
-      {/* 1. Contextual Island Unlock Prompt Banner (Compact 1-row icon pill) */}
+      {/* Contextual Island Unlock Prompt Banner (Tiny Swords 9-Slice Pixel Button) */}
       {nearIsland && (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-28 pointer-events-auto animate-bounce">
+        <div
+          className="absolute left-1/2 -translate-x-1/2 pointer-events-auto animate-bounce"
+          style={{ bottom: 'max(8.5rem, calc(env(safe-area-inset-bottom, 0px) + 7.5rem))' }}
+        >
           <button
+            type="button"
             onClick={onAction}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-gradient-to-r from-amber-600 to-amber-800 border-2 border-amber-300 shadow-2xl active:scale-95 text-white text-xs font-black tabular-nums"
+            className="ts-btn-blue active:ts-btn-blue-pressed flex items-center gap-2 px-2 py-0.5 text-[#fef5df] text-xs font-black tabular-nums whitespace-nowrap hover:brightness-110"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-200 fill-amber-200" />
-            <span>🚩 #{nearIsland.id}</span>
-            <span className="text-amber-200 font-bold">
-              🪵{nearIsland.costWood} 🪨{nearIsland.costStone}
-              {nearIsland.costGold > 0 ? ` 🪙${nearIsland.costGold}` : ''}
+            <img src="/assets/ui/Icons/Icon_07.png" alt="" className="w-4 h-4 pixel-art shrink-0" />
+            <span className="pixel-btn-shadow">#{nearIsland.id} 해금</span>
+            <span className="flex items-center gap-1.5 text-[#fde68a] pixel-btn-shadow">
+              <span className="inline-flex items-center gap-0.5">
+                <img src="/assets/ui/Icons/Icon_02.png" alt="" className="w-3.5 h-3.5 pixel-art" />
+                {nearIsland.costWood}
+              </span>
+              <span className="inline-flex items-center gap-0.5">
+                <img src="/assets/decorations/Rock2.png" alt="" className="w-3.5 h-3.5 pixel-art" />
+                {nearIsland.costStone}
+              </span>
+              {nearIsland.costGold > 0 && (
+                <span className="inline-flex items-center gap-0.5">
+                  <img src="/assets/ui/Icons/Icon_03.png" alt="" className="w-3.5 h-3.5 pixel-art" />
+                  {nearIsland.costGold}
+                </span>
+              )}
             </span>
           </button>
         </div>
       )}
 
-      {/* 2. Virtual Joystick (Bottom Left) */}
-      <div
-        ref={joystickZoneRef}
-        {...GESTURE_BLOCK_PROPS}
-        className="absolute bottom-6 left-6 pointer-events-auto touch-none"
-        onTouchStart={handleJoystickTouchStart}
-        onTouchMove={handleJoystickTouchMove}
-        onTouchEnd={resetJoystick}
-        onTouchCancel={resetJoystick}
-      >
-        <div className="relative w-28 h-28 rounded-full bg-slate-950/60 backdrop-blur-sm border-2 border-amber-400/50 shadow-2xl flex items-center justify-center">
-          <div className="absolute w-12 h-12 rounded-full border border-white/20 bg-white/5 pointer-events-none" />
-          <div
-            className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-xl border-2 border-white/80 transition-transform duration-75 flex items-center justify-center text-[10px] font-black text-amber-950"
-            style={{ transform: `translate(${knobPos.x}px, ${knobPos.y}px)` }}
-          >🕹️</div>
-        </div>
-      </div>
+      <PixelVirtualJoystick joystickRef={joystickRef} />
 
-      {/* 3. Contextual Build Button (half-size) + Large Action Button with Hold Support (Bottom Right) */}
-      <div
-        ref={actionZoneRef}
-        {...GESTURE_BLOCK_PROPS}
-        className="absolute bottom-6 right-6 pointer-events-auto touch-none flex flex-col items-center gap-2.5"
-      >
-        {canBuild && onOpenVillageModal && (
-          <button
-            id="mobile-build-btn"
-            type="button"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onOpenVillageModal();
-            }}
-            className="w-10 h-10 rounded-full border-2 border-amber-300 bg-gradient-to-br from-amber-500 to-amber-700 shadow-xl flex items-center justify-center transition-transform active:scale-90"
-            aria-label="마을 건설 버튼"
-            title="마을 발전 및 건설"
-          >
-            <Hammer className="w-4 h-4 text-white drop-shadow" />
-          </button>
-        )}
-
-        <button
-          onPointerDown={startActionHold}
-          onPointerUp={stopActionHold}
-          onPointerLeave={stopActionHold}
-          onPointerCancel={stopActionHold}
-          className={`relative w-20 h-20 rounded-full border-4 shadow-2xl flex flex-col items-center justify-center transition-transform active:scale-90 ${
-            isActionActive
-              ? 'bg-gradient-to-br from-red-600 to-amber-600 border-amber-200 scale-95 shadow-amber-500/50'
-              : 'bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 border-amber-300'
-          }`}
-          aria-label="채집 및 공격 액션 버튼"
-        >
-          <Swords className={`w-8 h-8 text-white drop-shadow ${isActionActive ? 'animate-pulse' : ''}`} />
-          <span className="text-[10px] font-black text-amber-100 tracking-wider mt-0.5">ACTION</span>
-        </button>
-      </div>
+      <PixelActionButtons
+        onAction={onAction}
+        onOpenVillageModal={onOpenVillageModal}
+        canBuild={canBuild}
+      />
     </div>
   );
 };
