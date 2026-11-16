@@ -50,6 +50,7 @@ export class RemotePlayerRenderer {
       this.remotePlayers.set(data.id, visual);
     }
 
+    scene.tweens.killTweensOf(visual.container);
     if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
       visual.container.setPosition(data.x, data.y);
     } else {
@@ -76,13 +77,17 @@ export class RemotePlayerRenderer {
     serverSync.removePlayerCache(id);
     const visual = this.remotePlayers.get(id);
     if (visual) {
+      this.scene.tweens.killTweensOf(visual.container);
       visual.container.destroy();
       this.remotePlayers.delete(id);
     }
   }
 
   public clear(): void {
-    this.remotePlayers.forEach((visual) => visual.container.destroy());
+    this.remotePlayers.forEach((visual) => {
+      this.scene.tweens.killTweensOf(visual.container);
+      visual.container.destroy();
+    });
     this.remotePlayers.clear();
   }
 }
