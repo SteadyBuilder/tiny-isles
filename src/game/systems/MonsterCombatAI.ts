@@ -192,7 +192,6 @@ export class MonsterCombatAI {
 
       if (canAttackNow && time - mv.lastAttackTime >= 1100) {
         mv.lastAttackTime = time;
-        this.ctx.shakeObject(mv.container);
 
         if (blockingBuilding) {
           blockingBuilding.hp = Math.max(0, blockingBuilding.hp - m.attack);
@@ -351,7 +350,6 @@ export class MonsterCombatAI {
 
     if (time - mv.lastAttackTime >= PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs) {
       mv.lastAttackTime = time;
-      this.ctx.shakeObject(mv.container);
       this.ctx.damageLocalPlayer(m.attack, m.name);
     }
     return true;
