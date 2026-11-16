@@ -4,7 +4,8 @@ import { INITIAL_ISLANDS } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
 import { serverSync } from '../lib/serverSync';
 import { storage } from '../lib/storage';
-import { isPlayDataResetting } from '../lib/adminResetService';
+import { isPlayDataResetting, markPlayDataResetting } from '../lib/adminResetService';
+import { worldStateSync } from '../lib/worldStateSync';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
 import {
   ConstructedBuilding,
@@ -66,15 +67,50 @@ export function useGameShellState() {
     maxHp: 100,
     isFainted: false,
   });
+  const [defenseFailedResetAt, setDefenseFailedResetAt] = useState<string | null>(null);
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
     const handleHpUpdated = (next: PlayerHpState) => {
       setPlayerHp(next);
     };
+    const handleDefenseFailed = (payload?: { resetAt?: string }) => {
+      const resetAt = payload?.resetAt || new Date().toISOString();
+      setDefenseFailedResetAt(resetAt);
+    };
     GameEvents.on('player-hp-updated', handleHpUpdated);
+    GameEvents.on('world-defense-failed', handleDefenseFailed);
     return () => {
       GameEvents.off('player-hp-updated', handleHpUpdated);
+      GameEvents.off('world-defense-failed', handleDefenseFailed);
+    };
+  }, []);
+
+  // 미접속 플레이어가 재접속했을 때 본진 파괴로 인한 세계 초기화 공지 확인
+  useEffect(() => {
+    let isMounted = true;
+    const prevLastActiveAt = localStorage.getItem('tiny_isles_last_active_at');
+    const lastSeenResetAt = localStorage.getItem('tiny_isles_last_seen_reset_at');
+    localStorage.setItem('tiny_isles_last_active_at', new Date().toISOString());
+
+    worldStateSync.fetchLatestDefenseResetAt().then((resetAt) => {
+      if (!isMounted || !resetAt) return;
+      const resetMs = Date.parse(resetAt);
+      const prevActiveMs = prevLastActiveAt ? Date.parse(prevLastActiveAt) : NaN;
+      const lastSeenMs = lastSeenResetAt ? Date.parse(lastSeenResetAt) : NaN;
+
+      const playedBeforeReset = !Number.isNaN(prevActiveMs) && prevActiveMs < resetMs;
+      const notYetAcknowledged = Number.isNaN(lastSeenMs) || lastSeenMs < resetMs;
+
+      if (playedBeforeReset && notYetAcknowledged) {
+        markPlayDataResetting(true);
+        storage.resetAll();
+        setDefenseFailedResetAt(resetAt);
+      }
+    });
+
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -228,6 +264,19 @@ export function useGameShellState() {
     [territories, playerStandingTerritory?.id, handleShowAlert]
   );
 
+  const handleConfirmDefenseFailed = useCallback(() => {
+    if (defenseFailedResetAt) {
+      try {
+        localStorage.setItem('tiny_isles_last_seen_reset_at', defenseFailedResetAt);
+        localStorage.setItem('tiny_isles_last_active_at', new Date().toISOString());
+      } catch {
+        // ignore storage error
+      }
+    }
+    setDefenseFailedResetAt(null);
+    window.location.reload();
+  }, [defenseFailedResetAt]);
+
   return {
     playerId: playerIdRef.current,
     profile,
@@ -257,6 +306,7 @@ export function useGameShellState() {
     setPlayerGridPos,
     playerStandingTerritoryId: playerStandingTerritory?.id ?? null,
     playerHp,
+    defenseFailedResetAt,
     joystickRef,
     currentTerritory,
     handleShowAlert,
@@ -268,5 +318,6 @@ export function useGameShellState() {
     handleZoomChange,
     handleOpenVillageModalForCurrent,
     handleOpenVillageModalById,
+    handleConfirmDefenseFailed,
   };
 }

@@ -4,6 +4,7 @@ import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
 import { VillageBuildModal } from './components/VillageBuildModal';
 import { TowerPlacementBanner } from './components/TowerPlacementBanner';
+import { DefenseFailedModal } from './components/DefenseFailedModal';
 import { ConstructableType } from './types/game';
 import { GameEvents } from './game/events/gameEvents';
 import { useGameShellState } from './hooks/useGameShellState';
@@ -36,6 +37,7 @@ export function App() {
     setPlayerGridPos,
     playerStandingTerritoryId,
     playerHp,
+    defenseFailedResetAt,
     joystickRef,
     currentTerritory,
     handleShowAlert,
@@ -47,6 +49,7 @@ export function App() {
     handleZoomChange,
     handleOpenVillageModalForCurrent,
     handleOpenVillageModalById,
+    handleConfirmDefenseFailed,
   } = useGameShellState();
 
   return (
@@ -137,6 +140,11 @@ export function App() {
       />
 
       <TowerPlacementBanner />
+
+      <DefenseFailedModal
+        isOpen={Boolean(defenseFailedResetAt)}
+        onConfirm={handleConfirmDefenseFailed}
+      />
     </div>
   );
 }

@@ -1,13 +1,15 @@
 import { ConstructedBuilding, Island } from '../../types/game';
-import { getTerritoryCorePos, VILLAGE_TIER_CONFIGS } from '../constants';
+import {
+  getTerritoryMainBuilding,
+  VILLAGE_TIER_CONFIGS,
+} from '../constants';
 import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
 
 export interface CoreGemVisualRef {
   territoryId: number;
   container: Phaser.GameObjects.Container;
-  crystal: Phaser.GameObjects.Polygon;
-  aura: Phaser.GameObjects.Graphics;
+  buildingContainer?: Phaser.GameObjects.Container;
   hpBar: Phaser.GameObjects.Graphics;
   tierText: Phaser.GameObjects.Text;
 }
@@ -30,14 +32,17 @@ export interface ICoreGemSystemContext {
     coreMaxHp: number,
     damageDelta?: number
   ) => void;
+  broadcastWorldDefenseFailed?: (resetAt: string, attackerName: string) => void;
+  onDefenseFailedReset?: (resetAt: string, attackerName: string) => void;
 }
 
 /**
- * 점령지 코어 보석(Core Gem) 체력 관리, 피격 연산, 수리 및 영지 상실(Territory Lost) 전담 시스템
+ * 점령지 본진 건물 체력 관리, 피격 연산, 수리, 영지 상실(Territory Lost) 및 본진 파괴 시 세계 초기화 전담 시스템
  */
 export class CoreGemSystem {
   private ctx: ICoreGemSystemContext;
   private coreVisuals = new Map<number, CoreGemVisualRef>();
+  private defenseResetTriggered = false;
 
   constructor(ctx: ICoreGemSystemContext) {
     this.ctx = ctx;
@@ -45,6 +50,18 @@ export class CoreGemSystem {
 
   public registerVisual(territoryId: number, visual: CoreGemVisualRef) {
     this.coreVisuals.set(territoryId, visual);
+  }
+
+  public setBuildingVisual(
+    territoryId: number,
+    buildingContainer: Phaser.GameObjects.Container | undefined,
+    badgeX: number,
+    badgeY: number
+  ): void {
+    const cv = this.coreVisuals.get(territoryId);
+    if (!cv) return;
+    cv.buildingContainer = buildingContainer;
+    cv.container.setPosition(badgeX, badgeY);
   }
 
   public unregisterVisual(territoryId: number) {
@@ -66,9 +83,17 @@ export class CoreGemSystem {
     this.coreVisuals.clear();
   }
 
+  private getMainBuildingCenter(isl: Island): { x: number; y: number } {
+    const bld = getTerritoryMainBuilding(isl.id, isl.gridX, isl.gridY, isl.villageTier);
+    return {
+      x: bld.x + bld.width / 2,
+      y: bld.y + bld.height * 0.45,
+    };
+  }
+
   /**
-   * 점령지 코어 보석 피격 처리
-   * 체력이 0이 되면 영지 상실(loseTerritory) 발생!
+   * 점령지 본진 건물 피격 처리
+   * 체력이 0이 되면 영지 상실(loseTerritory) 또는 본진(#0) 파괴 시 세계 초기화 발생!
    */
   public damageTerritoryCore(
     territoryId: number,
@@ -76,6 +101,7 @@ export class CoreGemSystem {
     attackerName = '마물',
     isLocalTrigger = false
   ): boolean {
+    if (this.defenseResetTriggered) return false;
     const islands = this.ctx.getIslands();
     const isl = islands.find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return false;
@@ -85,11 +111,11 @@ export class CoreGemSystem {
 
     const cv = this.coreVisuals.get(territoryId);
     if (cv) {
-      this.ctx.shakeObject(cv.container);
+      this.ctx.shakeObject(cv.buildingContainer ?? cv.container);
     }
 
-    const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-    this.ctx.showFloatingText(cPos.x, cPos.y - 40, `💥 코어 피격 -${damage}`, '#ef4444');
+    const hitPos = this.getMainBuildingCenter(isl);
+    this.ctx.showFloatingText(hitPos.x, hitPos.y - 30, `💥 본진 피격 -${damage}`, '#ef4444');
 
     if (isl.coreHp <= 0) {
       this.loseTerritory(territoryId, attackerName, isLocalTrigger);
@@ -120,10 +146,10 @@ export class CoreGemSystem {
     if (damageDelta && damageDelta > 0) {
       const cv = this.coreVisuals.get(territoryId);
       if (cv) {
-        this.ctx.shakeObject(cv.container);
+        this.ctx.shakeObject(cv.buildingContainer ?? cv.container);
       }
-      const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-      this.ctx.showFloatingText(cPos.x, cPos.y - 40, `💥 코어 피격 -${damageDelta}`, '#ef4444');
+      const hitPos = this.getMainBuildingCenter(isl);
+      this.ctx.showFloatingText(hitPos.x, hitPos.y - 30, `💥 본진 피격 -${damageDelta}`, '#ef4444');
     }
 
     this.ctx.saveWorldState(false);
@@ -131,19 +157,19 @@ export class CoreGemSystem {
   }
 
   /**
-   * 코어 보석 파괴에 따른 영지 상실(Territory Lost) 처리
+   * 본진 건물 파괴에 따른 영지 상실(Territory Lost) 및 #0 본진 파괴 시 세계 초기화 처리
    */
   public loseTerritory(territoryId: number, attackerName: string, isLocalTrigger: boolean) {
     const islands = this.ctx.getIslands();
     const isl = islands.find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return;
 
-    const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-    this.ctx.playExplosionAt(cPos.x, cPos.y);
+    const hitPos = this.getMainBuildingCenter(isl);
+    this.ctx.playExplosionAt(hitPos.x, hitPos.y);
     sound.playBreak();
 
     if (territoryId !== 0) {
-      // 외곽/확장 점령지의 코어 보석이 부숴진 경우: 해당 땅 상실
+      // 외곽/확장 점령지의 본진 건물이 파괴된 경우: 해당 땅 상실
       isl.unlocked = false;
       isl.villageTier = 0;
       isl.coreMaxHp = VILLAGE_TIER_CONFIGS[0].coreMaxHp;
@@ -163,8 +189,8 @@ export class CoreGemSystem {
       this.ctx.refreshTerritoryDecorations();
       this.ctx.emitWorldState(true);
 
-      const lostMsg = `💔 [땅 상실!] ${attackerName}의 공격으로 '${isl.name}'의 코어 보석이 부숴져 땅을 잃었습니다! 마물들이 중심부를 향해 진격합니다!`;
-      this.ctx.showFloatingText(cPos.x, cPos.y - 70, `💔 코어 보석 파괴! [${isl.name} 상실]`, '#ef4444');
+      const lostMsg = `💔 [땅 상실!] ${attackerName}의 공격으로 '${isl.name}'의 본진 건물이 파괴되어 땅을 잃었습니다! 마물들이 중심부를 향해 진격합니다!`;
+      this.ctx.showFloatingText(hitPos.x, hitPos.y - 50, `💔 본진 파괴! [${isl.name} 상실]`, '#ef4444');
       GameEvents.emit('game-alert', lostMsg);
       GameEvents.emit('territory-lost', { territoryId, name: isl.name });
 
@@ -172,26 +198,25 @@ export class CoreGemSystem {
         this.ctx.broadcastTerritoryLost(territoryId);
       }
     } else {
-      // #0 중심 마을 코어 보석이 파괴된 경우:
-      // 다른 확장 영지가 남아있다면 최외곽 영지를 대신 잃고, 중심 마을은 수호 결계로 50% 복구
-      const otherUnlocked = islands.filter((i) => i.unlocked && i.id !== 0);
-      if (otherUnlocked.length > 0) {
-        const outermost = otherUnlocked[otherUnlocked.length - 1];
-        this.loseTerritory(outermost.id, attackerName, isLocalTrigger);
-      }
-      isl.coreHp = Math.round(isl.coreMaxHp * 0.5);
-      this.updateCoreGemVisual(0);
-      this.ctx.saveWorldState(true);
-      this.ctx.emitWorldState(true);
+      // #0 중심 마을 본진이 파괴된 경우: 방어 실패 -> 전 플레이어 공지 및 세계/데이터 초기화
+      if (this.defenseResetTriggered) return;
+      this.defenseResetTriggered = true;
 
-      const msg = `⚠️ 중심 마을 코어 보석이 파괴 위기에 처해 긴급 결계가 발동했습니다! (코어 체력 50% 복구)`;
-      this.ctx.showFloatingText(cPos.x, cPos.y - 70, msg, '#f59e0b');
-      GameEvents.emit('game-alert', msg);
+      const resetAt = new Date().toISOString();
+      const failMsg = '방어에 실패하였습니다. 세계가 초기화 됩니다.';
+      this.ctx.showFloatingText(hitPos.x, hitPos.y - 50, `💥 ${failMsg}`, '#ef4444');
+      GameEvents.emit('game-alert', failMsg);
+
+      if (isLocalTrigger) {
+        this.ctx.broadcastWorldDefenseFailed?.(resetAt, attackerName);
+        this.ctx.onDefenseFailedReset?.(resetAt, attackerName);
+      }
+      GameEvents.emit('world-defense-failed', { resetAt, attackerName });
     }
   }
 
   /**
-   * 코어 보석 수리 (수리 자재 소모 후 HP 회복)
+   * 본진 건물 수리 (수리 자재 소모 후 HP 회복)
    */
   public repairCore(territoryId: number, healAmount = 100): boolean {
     const islands = this.ctx.getIslands();
@@ -205,13 +230,13 @@ export class CoreGemSystem {
     this.ctx.emitWorldState(true);
 
     sound.playUnlock();
-    const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-    this.ctx.showFloatingText(cPos.x, cPos.y - 60, `✨ 코어 보석 수리 완료! (+${healAmount} HP)`, '#4ade80');
+    const hitPos = this.getMainBuildingCenter(isl);
+    this.ctx.showFloatingText(hitPos.x, hitPos.y - 45, `✨ 본진 수리 완료! (+${healAmount} HP)`, '#4ade80');
     return true;
   }
 
   /**
-   * 코어 보석 HP 바 및 텍스트 갱신
+   * 본진 건물 HP 바 및 텍스트 갱신
    */
   public updateCoreGemVisual(territoryId: number) {
     const cv = this.coreVisuals.get(territoryId);
@@ -223,7 +248,7 @@ export class CoreGemSystem {
     const ratio = Math.max(0, Math.min(1, isl.coreHp / Math.max(1, isl.coreMaxHp)));
     const isCentral = isl.id === 0;
 
-    cv.tierText.setText(`${isCentral ? '🏰' : '💎'} Lv.${isl.villageTier}`);
+    cv.tierText.setText(`${isCentral ? '🏰' : '🏠'} Lv.${isl.villageTier}`);
 
     cv.hpBar.clear();
     cv.hpBar.fillStyle(0x0f172a, 0.9);

@@ -50,6 +50,7 @@ export interface IMultiplayerSyncContext {
     damageDelta?: number
   ) => void;
   onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
+  onRemoteWorldDefenseFailed?: (resetAt: string, attackerName: string) => void;
 }
 
 /**
@@ -102,6 +103,8 @@ export class MultiplayerSyncController {
         this.ctx.onRemoteCoreHpSync?.(territoryId, coreHp, coreMaxHp, damageDelta),
       onRemoteRepairTerritoryRequest: (territoryId) =>
         this.ctx.onRemoteRepairTerritoryRequest?.(territoryId),
+      onRemoteWorldDefenseFailed: (resetAt, attackerName) =>
+        this.ctx.onRemoteWorldDefenseFailed?.(resetAt, attackerName),
     });
   }
 
@@ -230,5 +233,12 @@ export class MultiplayerSyncController {
 
   public broadcastEntityRespawned(entity: Entity): void {
     this.router.emit('entity_respawned', 'entity_respawned', { entity });
+  }
+
+  public broadcastWorldDefenseFailed(resetAt: string, attackerName: string): void {
+    this.router.emit('world_defense_failed', 'world_defense_failed', {
+      resetAt,
+      attackerName,
+    });
   }
 }

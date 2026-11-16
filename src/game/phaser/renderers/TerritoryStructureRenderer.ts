@@ -3,18 +3,19 @@ import { Building, Island } from '../../../types/game';
 import {
   generateTerritoryBuildings,
   getBuildingCollisionBox,
-  getTerritoryCorePos,
+  getTerritoryMainBuilding,
 } from '../../constants';
 import { ySortDepth } from '../../depthLayers';
 import { CoreGemSystem, CoreGemVisualRef } from '../../systems/CoreGemSystem';
 
 /**
- * 영지 기본 건물(성, 집, 수도원 등) 및 코어 보석 비주얼 생성 전담 렌더러
+ * 영지 기본 건물(성, 집, 수도원 등) 및 본진 건물 상태 배지 비주얼 전담 렌더러
  */
 export class TerritoryStructureRenderer {
   private scene: Phaser.Scene;
   private buildings: Building[] = [];
   private buildingVisuals: Phaser.GameObjects.Container[] = [];
+  private mainBuildingContainers = new Map<number, Phaser.GameObjects.Container>();
   private buildingColliders: Phaser.Physics.Arcade.StaticGroup;
 
   constructor(scene: Phaser.Scene, buildingColliders: Phaser.Physics.Arcade.StaticGroup) {
@@ -30,15 +31,25 @@ export class TerritoryStructureRenderer {
     return this.buildingVisuals;
   }
 
-  public spawnAllBuildings(islands: Island[]): void {
+  public getMainBuildingContainer(islandId: number): Phaser.GameObjects.Container | undefined {
+    return this.mainBuildingContainers.get(islandId);
+  }
+
+  public spawnAllBuildings(islands: Island[], coreGemSystem?: CoreGemSystem): void {
     this.buildings = [];
     this.buildingVisuals.forEach((c) => c.destroy());
     this.buildingVisuals = [];
+    this.mainBuildingContainers.clear();
     this.buildingColliders.clear(true, true);
+
+    const mainBuildingIds = new Map<string, number>();
 
     for (const isl of islands) {
       if (isl.unlocked) {
         const blds = generateTerritoryBuildings(isl.id, isl.gridX, isl.gridY, isl.villageTier);
+        if (blds.length > 0) {
+          mainBuildingIds.set(blds[0].id, isl.id);
+        }
         this.buildings.push(...blds);
       }
     }
@@ -58,6 +69,17 @@ export class TerritoryStructureRenderer {
 
       this.buildingVisuals.push(container);
 
+      const mainIslandId = mainBuildingIds.get(b.id);
+      if (mainIslandId !== undefined) {
+        this.mainBuildingContainers.set(mainIslandId, container);
+        coreGemSystem?.setBuildingVisual(
+          mainIslandId,
+          container,
+          b.x + b.width / 2,
+          b.y + 42
+        );
+      }
+
       const box = getBuildingCollisionBox(b);
       const colliderSprite = this.scene.physics.add.staticSprite(
         box.x + box.w / 2,
@@ -73,7 +95,7 @@ export class TerritoryStructureRenderer {
   }
 
   /**
-   * 모든 점령한 땅에 코어 보석(Core Gem) 생성
+   * 모든 점령한 땅의 본진 건물 상태 배지 생성
    */
   public spawnAllTerritoryCores(islands: Island[], coreGemSystem: CoreGemSystem): void {
     coreGemSystem.clearAllVisuals();
@@ -86,51 +108,17 @@ export class TerritoryStructureRenderer {
   }
 
   public createTerritoryCoreForIsland(isl: Island, coreGemSystem: CoreGemSystem): void {
-    const corePos = getTerritoryCorePos(isl.gridX, isl.gridY);
-    const container = this.scene.add.container(corePos.x, corePos.y);
-    container.setDepth(ySortDepth(corePos.y, 24));
+    const mainBld = getTerritoryMainBuilding(isl.id, isl.gridX, isl.gridY, isl.villageTier);
+    const badgeX = mainBld.x + mainBld.width / 2;
+    const badgeY = mainBld.y + 42;
+
+    const container = this.scene.add.container(badgeX, badgeY);
+    container.setDepth(ySortDepth(mainBld.y + mainBld.height, 300));
 
     const isCentral = isl.id === 0;
     const gemColor = isCentral ? 0x38bdf8 : 0x34d399;
 
-    // Glowing Aura
-    const aura = this.scene.add.graphics();
-    aura.fillStyle(gemColor, 0.24);
-    aura.fillCircle(0, 0, 50);
-    container.add(aura);
-
-    this.scene.tweens.add({
-      targets: aura,
-      scaleX: 1.22,
-      scaleY: 1.22,
-      alpha: 0.1,
-      duration: 1200,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-
-    // Floating Magical Core Gem Crystal
-    const points = [
-      { x: 0, y: -22 },
-      { x: 15, y: 0 },
-      { x: 0, y: 22 },
-      { x: -15, y: 0 },
-    ];
-    const crystal = this.scene.add.polygon(0, -24, points, gemColor);
-    crystal.setStrokeStyle(2.5, 0xe0f2fe);
-    container.add(crystal);
-
-    this.scene.tweens.add({
-      targets: crystal,
-      y: -34,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-
-    // Compact Core Badge (Icon + Lv + HP Gauge)
+    // Compact Main Building Badge (Icon + Lv + HP Gauge)
     const badge = this.scene.add.graphics();
     badge.fillStyle(0x0f172a, 0.88);
     badge.fillRoundedRect(-44, -76, 88, 36, 8);
@@ -139,7 +127,7 @@ export class TerritoryStructureRenderer {
     container.add(badge);
 
     const tierText = this.scene.add
-      .text(0, -63, `${isCentral ? '🏰' : '💎'} Lv.${isl.villageTier}`, {
+      .text(0, -63, `${isCentral ? '🏰' : '🏠'} Lv.${isl.villageTier}`, {
         fontFamily: 'Pretendard, sans-serif',
         fontSize: '11px',
         fontStyle: 'bold',
@@ -154,8 +142,7 @@ export class TerritoryStructureRenderer {
     const coreRef: CoreGemVisualRef = {
       territoryId: isl.id,
       container,
-      crystal,
-      aura,
+      buildingContainer: this.mainBuildingContainers.get(isl.id),
       hpBar,
       tierText,
     };
@@ -169,6 +156,7 @@ export class TerritoryStructureRenderer {
       if (c.scene) c.destroy();
     });
     this.buildingVisuals = [];
+    this.mainBuildingContainers.clear();
     this.buildingColliders.clear(true, true);
   }
 }

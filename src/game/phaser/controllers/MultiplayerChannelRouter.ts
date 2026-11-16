@@ -49,6 +49,7 @@ export interface IMultiplayerChannelCallbacks {
     damageDelta?: number
   ) => void;
   onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
+  onRemoteWorldDefenseFailed?: (resetAt: string, attackerName: string) => void;
 }
 
 interface BroadcastMeta {
@@ -468,6 +469,22 @@ export class MultiplayerChannelRouter {
         ({ payload }: { payload: { entity: Entity } & BroadcastMeta }) => {
           if (isValid(payload) && payload.entity) {
             this.callbacks.onRemoteEntityRespawned?.(payload.entity);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'world_defense_failed' },
+        ({
+          payload,
+        }: {
+          payload: { resetAt: string; attackerName: string } & BroadcastMeta;
+        }) => {
+          if (isValid(payload) && payload.resetAt) {
+            this.callbacks.onRemoteWorldDefenseFailed?.(
+              payload.resetAt,
+              payload.attackerName || '마물 군단'
+            );
           }
         }
       )

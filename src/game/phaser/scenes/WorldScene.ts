@@ -163,7 +163,10 @@ export class WorldScene extends Phaser.Scene {
         );
         this.constructedBuildingRenderer.spawnAll(this.constructedBuildings, this.islands);
         this.refreshTerritoryDecorations();
-        this.territoryStructureRenderer.spawnAllBuildings(this.islands);
+        this.territoryStructureRenderer.spawnAllBuildings(
+          this.islands,
+          this.systems?.coreGemSystem
+        );
         this.persistence.saveWorldState(true);
         this.persistence.emitWorldStateToReact(true);
       },
@@ -172,7 +175,10 @@ export class WorldScene extends Phaser.Scene {
         this.controllers.territoryAction.destroyConstructedBuilding(id),
       refreshTerritoryDecorations: () => {
         this.refreshTerritoryDecorations();
-        this.territoryStructureRenderer.spawnAllBuildings(this.islands);
+        this.territoryStructureRenderer.spawnAllBuildings(
+          this.islands,
+          this.systems?.coreGemSystem
+        );
       },
       saveWorldState: (immediate = false) => this.persistence.saveWorldState(immediate),
       emitWorldStateToReact: (immediate = false) =>

@@ -71,6 +71,7 @@ export interface GameEventPayloads {
   // 리빙 아일즈: 글로벌 동기화, 수비대
   'garrisons-updated': GarrisonUnit[];
   'world-state-synced': WorldSyncState;
+  'world-defense-failed': { resetAt: string; attackerName: string };
 
   // 자원 및 인벤토리
   'add-test-resources': void;

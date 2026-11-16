@@ -4,7 +4,10 @@ import { MONSTER_KILL_REWARDS } from '../../data/waves';
 import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { ConstructedBuilding, Island } from '../../types/game';
 import { sound } from '../../lib/sound';
-import { getTerritoryCorePos } from '../constants';
+import {
+  getBuildingCollisionBox,
+  getTerritoryMainBuilding,
+} from '../constants';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { findNextInwardTargetTerritory } from '../utils/waveUtils';
 import {
@@ -50,7 +53,7 @@ interface MonsterAggroTarget {
 }
 
 /**
- * 마물 웨이브 유닛의 목표 영지 추적, 플레이어 반격 어그로, 성벽 충돌 클램핑, 방책/건물/코어 공격 AI 전담 모듈
+ * 마물 웨이브 유닛의 목표 영지 추적, 플레이어 반격 어그로, 성벽 충돌 클램핑, 방책/건물/본진 공격 AI 전담 모듈
  */
 export class MonsterCombatAI {
   private ctx: IMonsterCombatContext;
@@ -84,12 +87,20 @@ export class MonsterCombatAI {
         targetIsl = islands.find((i) => i.id === m.targetTerritoryId) || islands[0];
       }
 
-      const corePos = getTerritoryCorePos(targetIsl.gridX, targetIsl.gridY);
+      // 2순위 목표: 영지 본진 건물 피격 범위 콜라이더(스프라이트 크기별)의 가장 가까운 외곽점
+      const mainBld = getTerritoryMainBuilding(
+        targetIsl.id,
+        targetIsl.gridX,
+        targetIsl.gridY,
+        targetIsl.villageTier
+      );
+      const mainHitBox = getBuildingCollisionBox(mainBld);
+      const mainHit = nearestPointOnCollisionBox(m.x, m.y, mainHitBox);
 
       // 1순위: 전 영지 성벽 및 목표 영지 내 방해 건물 탐색 (150ms 주기 캐싱으로 O(M*B) 프레임 부하 절감)
       let blockingBuilding: ConstructedBuilding | null = null;
-      let blockingTargetX = corePos.x;
-      let blockingTargetY = corePos.y;
+      let blockingTargetX = mainHit.x;
+      let blockingTargetY = mainHit.y;
 
       const cached = this.blockerCache.get(m.id);
       const canUseCache =
@@ -144,14 +155,14 @@ export class MonsterCombatAI {
         });
       }
 
-      let targetX = blockingBuilding ? blockingTargetX : corePos.x;
-      let targetY = blockingBuilding ? blockingTargetY : corePos.y;
+      let targetX = blockingBuilding ? blockingTargetX : mainHit.x;
+      let targetY = blockingBuilding ? blockingTargetY : mainHit.y;
       const distToTarget = Math.hypot(targetX - m.x, targetY - m.y);
       const attackRange = blockingBuilding
         ? blockingBuilding.category === 'wall'
           ? 36
           : 52
-        : 56;
+        : 36;
 
       let canAttackNow = distToTarget <= attackRange;
 

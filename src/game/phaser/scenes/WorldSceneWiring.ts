@@ -100,7 +100,11 @@ export function createWorldControllersBundle(
     emitWorldStateToReact: (immediate = true) => host.persistence.emitWorldStateToReact(immediate),
     drawTerrainDecorations: host.drawTerrainDecorations,
     drawExpansionAltars: host.drawExpansionAltars,
-    spawnAllBuildings: () => host.territoryStructureRenderer.spawnAllBuildings(host.getIslands()),
+    spawnAllBuildings: () =>
+      host.territoryStructureRenderer.spawnAllBuildings(
+        host.getIslands(),
+        host.systems.coreGemSystem
+      ),
     createTerritoryCoreForIsland: (isl) =>
       host.territoryStructureRenderer.createTerritoryCoreForIsland(
         isl,

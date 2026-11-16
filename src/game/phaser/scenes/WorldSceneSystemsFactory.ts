@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
+import { markPlayDataResetting, resetAllPlayData } from '../../../lib/adminResetService';
 import { sound } from '../../../lib/sound';
+import { storage } from '../../../lib/storage';
 import {
   ConstructedBuilding,
   Island,
@@ -240,6 +242,16 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       coreGemSystem.applyRemoteCoreHpSync(territoryId, coreHp, coreMaxHp, damageDelta),
     onRemoteRepairTerritoryRequest: (territoryId) =>
       host.onRemoteRepairTerritoryRequest?.(territoryId),
+    onRemoteWorldDefenseFailed: (resetAt, attackerName) => {
+      markPlayDataResetting(true);
+      storage.resetAll();
+      try {
+        localStorage.setItem('tiny_isles_last_defense_reset_at', resetAt);
+      } catch {
+        // ignore storage error
+      }
+      GameEvents.emit('world-defense-failed', { resetAt, attackerName });
+    },
   });
   multiplayerSync.setup();
 

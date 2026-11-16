@@ -175,3 +175,33 @@ export function getBuildingCollisionBox(b: Building): CollisionBox {
       return { x: b.x + 16, y: b.y + 80, w: b.width - 32, h: 75 };
   }
 }
+
+/**
+ * 영지 발전 단계(VillageTier)에 따른 본진(메인) 건물 반환
+ */
+export function getTerritoryMainBuilding(
+  islandId: number,
+  gridX: number,
+  gridY: number,
+  villageTier: VillageTier = islandId === 0 ? 2 : 0
+): Building {
+  const buildings = generateTerritoryBuildings(islandId, gridX, gridY, villageTier);
+  return buildings[0];
+}
+
+/**
+ * 좌표가 충돌/피격 박스 내부(패딩 포함)에 있는지 판별
+ */
+export function isPointInCollisionBox(
+  px: number,
+  py: number,
+  box: CollisionBox,
+  padding = 0
+): boolean {
+  return (
+    px >= box.x - padding &&
+    px <= box.x + box.w + padding &&
+    py >= box.y - padding &&
+    py <= box.y + box.h + padding
+  );
+}

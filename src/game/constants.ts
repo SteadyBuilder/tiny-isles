@@ -30,6 +30,8 @@ import {
   CollisionBox,
   generateTerritoryBuildings,
   getBuildingCollisionBox,
+  getTerritoryMainBuilding,
+  isPointInCollisionBox,
 } from './world/TerritoryContentGenerator';
 import { generateIslandEntities } from './world/TerritoryEntitySpawner';
 
@@ -59,6 +61,8 @@ export {
   getTerritoryCorePos,
   generateTerritoryBuildings,
   getBuildingCollisionBox,
+  getTerritoryMainBuilding,
+  isPointInCollisionBox,
   generateIslandEntities,
 };
 

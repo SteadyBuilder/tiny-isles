@@ -224,4 +224,29 @@ export const worldStateSync = {
       return false;
     }
   },
+
+  fetchLatestDefenseResetAt: async (): Promise<string | null> => {
+    let localResetAt: string | null = null;
+    try {
+      localResetAt = localStorage.getItem('tiny_isles_last_defense_reset_at');
+    } catch {
+      // ignore storage read error
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('unlocked_islands')
+        .select('unlocked_by, unlocked_at')
+        .eq('island_id', 0)
+        .maybeSingle();
+
+      if (!error && data?.unlocked_by === 'DEFENSE_FAILED_RESET' && typeof data.unlocked_at === 'string') {
+        return data.unlocked_at;
+      }
+    } catch {
+      // fallback to localResetAt
+    }
+
+    return localResetAt;
+  },
 };

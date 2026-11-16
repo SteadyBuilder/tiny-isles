@@ -5,11 +5,14 @@ import { Entity, Inventory, Island, PlayerAction } from '../../../types/game';
 import {
   TERRITORY_CENTER_X,
   TERRITORY_CENTER_Y,
+  getBuildingCollisionBox,
   getIslandOrigin,
   getTerritoryCorePos,
+  getTerritoryMainBuilding,
 } from '../../constants';
 import { GameEvents } from '../../events/gameEvents';
 import { canClaimTerritory } from '../../territoryAccessRules';
+import { nearestPointOnCollisionBox } from '../../wallCollisionGeometry';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
 
@@ -188,11 +191,14 @@ export class PlayerInteractionController {
       return;
     }
 
-    // 4. 점령한 땅의 코어 보석 근처에서 상호작용 시 코어 회복 및 마을/건설 창 열기
+    // 4. 점령한 땅의 본진 건물 근처에서 상호작용 시 내구도 회복 및 마을/건설 창 열기
     for (const isl of islands) {
       if (!isl.unlocked) continue;
       const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-      if (Math.hypot(px - cPos.x, py - cPos.y) < 95) {
+      const mainBld = getTerritoryMainBuilding(isl.id, isl.gridX, isl.gridY, isl.villageTier);
+      const mainBox = getBuildingCollisionBox(mainBld);
+      const hit = nearestPointOnCollisionBox(px, py, mainBox);
+      if (hit.dist < 80 || Math.hypot(px - cPos.x, py - cPos.y) < 95) {
         sound.playUnlock();
         if (isl.coreHp < isl.coreMaxHp) {
           isl.coreHp = Math.min(isl.coreMaxHp, isl.coreHp + 15);
@@ -200,7 +206,12 @@ export class PlayerInteractionController {
           this.ctx.saveWorldState(false);
           this.ctx.emitWorldStateToReact(false);
         }
-        this.ctx.showFloatingText(cPos.x, cPos.y - 60, `💎 [${isl.name}] 마을/건설 관리`, '#38bdf8');
+        this.ctx.showFloatingText(
+          mainBld.x + mainBld.width / 2,
+          mainBld.y + mainBld.height * 0.35,
+          `🏰 [${isl.name}] 마을/건설 관리`,
+          '#38bdf8'
+        );
         GameEvents.emit('open-village-modal', isl.id);
         return;
       }

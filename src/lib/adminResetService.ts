@@ -54,14 +54,28 @@ function isTableMissingError(error: { code?: string; message?: string } | null):
   );
 }
 
-export async function resetAllPlayData(): Promise<AdminResetResult> {
+export interface ResetPlayDataOptions {
+  reason?: 'ADMIN_RESET' | 'DEFENSE_FAILED_RESET';
+  resetAt?: string;
+}
+
+export async function resetAllPlayData(options?: ResetPlayDataOptions): Promise<AdminResetResult> {
   const errors: string[] = [];
   markPlayDataResetting(true);
   serverSync.cancelPendingSync();
 
-  const nowIso = new Date().toISOString();
+  const nowIso = options?.resetAt ?? new Date().toISOString();
+  const reason = options?.reason ?? 'ADMIN_RESET';
   const initialCoreHp = VILLAGE_TIER_CONFIGS[2].coreMaxHp;
   const initialBuildings = getInitialConstructedBuildings();
+
+  if (reason === 'DEFENSE_FAILED_RESET') {
+    try {
+      localStorage.setItem('tiny_isles_last_defense_reset_at', nowIso);
+    } catch {
+      // ignore storage error
+    }
+  }
 
   try {
     const { error: worldError } = await supabase.from('world_state').upsert(
@@ -100,7 +114,7 @@ export async function resetAllPlayData(): Promise<AdminResetResult> {
       {
         island_id: 0,
         island_name: '시작의 섬 (Home Isle)',
-        unlocked_by: '시스템',
+        unlocked_by: reason === 'DEFENSE_FAILED_RESET' ? 'DEFENSE_FAILED_RESET' : '시스템',
         unlocked_at: nowIso,
       },
       { onConflict: 'island_id' }
