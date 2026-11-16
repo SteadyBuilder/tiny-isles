@@ -39,7 +39,7 @@ export function App() {
     playerHp,
     defenseFailedResetAt,
     joystickRef,
-    currentTerritory,
+    canBuildInCurrentTerritory,
     handleShowAlert,
     handleUpdateName,
     handleUpdateColor,
@@ -64,11 +64,9 @@ export function App() {
         playerHp={playerHp}
         unlockedCount={islandStats.unlocked}
         totalIslands={islandStats.total}
-        currentTerritory={currentTerritory}
         waveState={waveState}
         alertMessage={alertMessage}
         onOpenMinimap={() => setShowMinimapModal(true)}
-        onOpenVillageModal={handleOpenVillageModalForCurrent}
         onTriggerRegularWave={() => GameEvents.emit('trigger-regular-wave')}
         onTriggerBossWave={() => GameEvents.emit('trigger-boss-wave')}
         onSummonEarlyWave={() => GameEvents.emit('summon-early-wave', { isBossWave: false })}
@@ -101,6 +99,8 @@ export function App() {
 
       <MobileControls
         onAction={handleMobileAction}
+        onOpenVillageModal={handleOpenVillageModalForCurrent}
+        canBuild={canBuildInCurrentTerritory}
         joystickRef={joystickRef}
         nearIsland={nearIsland}
         onZoomChange={handleZoomChange}

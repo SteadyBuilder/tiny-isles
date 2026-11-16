@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Inventory, Island, PlayerColor, PlayerHpState, WaveState } from '../types/game';
+import { Inventory, PlayerColor, PlayerHpState, WaveState } from '../types/game';
 import { sound, SoundSettings } from '../lib/sound';
 import { SoundModal } from './SoundModal';
 import { HudSettingsModal } from './HudSettingsModal';
@@ -8,7 +8,6 @@ import { HudDesktopBar } from './hud/HudDesktopBar';
 import { HudWaveSection } from './hud/HudWaveSection';
 import { HudMobileBar } from './hud/HudMobileBar';
 import { ThreatOrbOverlay } from './hud/ThreatOrbOverlay';
-import { VILLAGE_TIER_CONFIGS } from '../game/constants';
 
 interface HUDProps {
   inventory: Inventory;
@@ -20,11 +19,9 @@ interface HUDProps {
   playerHp?: PlayerHpState;
   unlockedCount?: number;
   totalIslands?: number;
-  currentTerritory?: Island;
   waveState?: WaveState;
   alertMessage?: string | null;
   onOpenMinimap?: () => void;
-  onOpenVillageModal?: () => void;
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
   onSummonEarlyWave?: () => void;
@@ -42,11 +39,9 @@ export const HUD: React.FC<HUDProps> = ({
   playerHp,
   unlockedCount = 1,
   totalIslands = 21,
-  currentTerritory,
   waveState,
   alertMessage,
   onOpenMinimap,
-  onOpenVillageModal,
   onTriggerRegularWave,
   onTriggerBossWave,
   onSummonEarlyWave,
@@ -85,10 +80,6 @@ export const HUD: React.FC<HUDProps> = ({
     setShowSettingsModal(true);
   };
 
-  const curTierCfg = currentTerritory
-    ? VILLAGE_TIER_CONFIGS[currentTerritory.villageTier]
-    : VILLAGE_TIER_CONFIGS[2];
-
   return (
     <>
       <ThreatOrbOverlay />
@@ -100,14 +91,11 @@ export const HUD: React.FC<HUDProps> = ({
           playerHp={playerHp}
           unlockedCount={unlockedCount}
           totalIslands={totalIslands}
-          currentTerritory={currentTerritory}
-          tierName={curTierCfg.name}
           isMuted={isMuted}
           copied={copied}
           onCopyLink={handleCopyLink}
           onToggleSound={toggleSound}
           onOpenMinimap={onOpenMinimap}
-          onOpenVillageModal={onOpenVillageModal}
           onOpenSettings={openSettings}
         />
 
@@ -129,11 +117,9 @@ export const HUD: React.FC<HUDProps> = ({
         playerHp={playerHp}
         unlockedCount={unlockedCount}
         totalIslands={totalIslands}
-        currentTerritory={currentTerritory}
         waveState={waveState}
         alertMessage={alertMessage}
         onOpenMinimap={onOpenMinimap}
-        onOpenVillageModal={onOpenVillageModal}
         onOpenSettings={openSettings}
         onTriggerRegularWave={onTriggerRegularWave}
         onTriggerBossWave={onTriggerBossWave}

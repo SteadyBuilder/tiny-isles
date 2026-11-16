@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Island } from '../types/game';
-import { Sparkles, Swords } from 'lucide-react';
+import { Hammer, Sparkles, Swords } from 'lucide-react';
 import { GameEvents } from '../game/events/gameEvents';
 import {
   GESTURE_BLOCK_PROPS,
@@ -12,6 +12,8 @@ import {
 
 interface MobileControlsProps {
   onAction: () => void;
+  onOpenVillageModal?: () => void;
+  canBuild?: boolean;
   joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
   nearIsland?: Island | null;
   onZoomChange?: (zoom: number) => void;
@@ -21,7 +23,13 @@ interface MobileControlsProps {
 const JOYSTICK_RADIUS = 46;
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
-  onAction, joystickRef, nearIsland, onZoomChange, currentZoom = 1.0,
+  onAction,
+  onOpenVillageModal,
+  canBuild = false,
+  joystickRef,
+  nearIsland,
+  onZoomChange,
+  currentZoom = 1.0,
 }) => {
   const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
   const [isActionActive, setIsActionActive] = useState(false);
@@ -200,8 +208,29 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       </div>
 
-      {/* 3. Large Action Button with Hold Support (Bottom Right) */}
-      <div ref={actionZoneRef} {...GESTURE_BLOCK_PROPS} className="absolute bottom-6 right-6 pointer-events-auto touch-none">
+      {/* 3. Contextual Build Button (half-size) + Large Action Button with Hold Support (Bottom Right) */}
+      <div
+        ref={actionZoneRef}
+        {...GESTURE_BLOCK_PROPS}
+        className="absolute bottom-6 right-6 pointer-events-auto touch-none flex flex-col items-center gap-2.5"
+      >
+        {canBuild && onOpenVillageModal && (
+          <button
+            id="mobile-build-btn"
+            type="button"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenVillageModal();
+            }}
+            className="w-10 h-10 rounded-full border-2 border-amber-300 bg-gradient-to-br from-amber-500 to-amber-700 shadow-xl flex items-center justify-center transition-transform active:scale-90"
+            aria-label="마을 건설 버튼"
+            title="마을 발전 및 건설"
+          >
+            <Hammer className="w-4 h-4 text-white drop-shadow" />
+          </button>
+        )}
+
         <button
           onPointerDown={startActionHold}
           onPointerUp={stopActionHold}

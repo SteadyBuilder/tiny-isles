@@ -218,6 +218,12 @@ export function useGameShellState() {
   const currentTerritory =
     (playerStandingTerritory?.unlocked ? playerStandingTerritory : undefined) || territories[0];
 
+  const canBuildInCurrentTerritory = canBuildInTerritory(
+    playerStandingTerritory,
+    playerIdRef.current,
+    playerStandingTerritory?.id ?? null
+  ).allowed;
+
   const handleOpenVillageModalForCurrent = useCallback(() => {
     const access = canBuildInTerritory(
       playerStandingTerritory,
@@ -309,6 +315,7 @@ export function useGameShellState() {
     defenseFailedResetAt,
     joystickRef,
     currentTerritory,
+    canBuildInCurrentTerritory,
     handleShowAlert,
     handleUpdateName,
     handleUpdateColor,

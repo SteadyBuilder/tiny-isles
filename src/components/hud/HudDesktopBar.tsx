@@ -1,6 +1,6 @@
 import React from 'react';
-import { Check, Compass, Hammer, Heart, Share2, Users } from 'lucide-react';
-import { Inventory, Island, PlayerHpState } from '../../types/game';
+import { Check, Compass, Heart, Share2, Users } from 'lucide-react';
+import { Inventory, PlayerHpState } from '../../types/game';
 import { HUD_RESOURCE_SLOTS } from './hudUtils';
 
 export interface HudDesktopBarProps {
@@ -9,14 +9,11 @@ export interface HudDesktopBarProps {
   playerHp?: PlayerHpState;
   unlockedCount: number;
   totalIslands: number;
-  currentTerritory?: Island;
-  tierName: string;
   isMuted: boolean;
   copied: boolean;
   onCopyLink: () => void;
   onToggleSound: () => void;
   onOpenMinimap?: () => void;
-  onOpenVillageModal?: () => void;
   onOpenSettings: () => void;
 }
 
@@ -26,14 +23,11 @@ export const HudDesktopBar: React.FC<HudDesktopBarProps> = ({
   playerHp,
   unlockedCount,
   totalIslands,
-  currentTerritory,
-  tierName,
   isMuted,
   copied,
   onCopyLink,
   onToggleSound,
   onOpenMinimap,
-  onOpenVillageModal,
   onOpenSettings,
 }) => {
   const hpValue = playerHp?.hp ?? 100;
@@ -42,7 +36,7 @@ export const HudDesktopBar: React.FC<HudDesktopBarProps> = ({
 
   return (
     <div className="flex items-center justify-between w-full">
-      {/* Left: Wood Resource Bar + Player HP + Village Territory Map + Village Build Button */}
+      {/* Left: Wood Resource Bar + Player HP + Village Territory Map */}
       <div className="flex items-center gap-2.5 pointer-events-auto">
         <div className="wood-hud-panel px-3.5 py-2 rounded-2xl flex items-center gap-2.5">
           {HUD_RESOURCE_SLOTS.map((slot) => (
@@ -91,23 +85,6 @@ export const HudDesktopBar: React.FC<HudDesktopBarProps> = ({
             <span className="text-white/40 mx-0.5">/</span>
             <span>{totalIslands}</span>
           </span>
-        </button>
-
-        {/* Village Development & Construction Button (Compact Icon + Lv + Core HP Badge) */}
-        <button
-          id="open-village-modal-btn"
-          onClick={onOpenVillageModal}
-          className="flex items-center gap-2 px-3 py-2 bg-amber-600/90 hover:bg-amber-500 border-2 border-amber-300 rounded-2xl shadow-xl active:scale-95 transition text-black"
-          title={`마을 발전 및 건설 (${tierName} · 단축키 B)`}
-        >
-          <Hammer className="w-4 h-4 text-black shrink-0" />
-          <div className="flex items-center gap-1.5 text-xs font-black text-black leading-none tabular-nums">
-            <span>🏰 Lv.{currentTerritory?.villageTier ?? 2}</span>
-            <span className="px-1.5 py-0.5 rounded-md bg-black/15 text-[11px] text-amber-950">
-              💎{currentTerritory?.coreHp ?? 350}
-            </span>
-            <span className="text-[10px] px-1 py-0.5 rounded bg-amber-950/20 text-amber-950">[B]</span>
-          </div>
         </button>
       </div>
 

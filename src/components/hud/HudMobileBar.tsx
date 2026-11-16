@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Compass, Flame, Hammer, Heart } from 'lucide-react';
-import { Inventory, Island, PlayerHpState, WaveState } from '../../types/game';
+import { Compass, Flame, Heart } from 'lucide-react';
+import { Inventory, PlayerHpState, WaveState } from '../../types/game';
 import { HUD_RESOURCE_SLOTS } from './hudUtils';
 
 export interface HudMobileBarProps {
@@ -8,11 +8,9 @@ export interface HudMobileBarProps {
   playerHp?: PlayerHpState;
   unlockedCount: number;
   totalIslands: number;
-  currentTerritory?: Island;
   waveState?: WaveState;
   alertMessage?: string | null;
   onOpenMinimap?: () => void;
-  onOpenVillageModal?: () => void;
   onOpenSettings: () => void;
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
@@ -24,11 +22,9 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
   playerHp,
   unlockedCount,
   totalIslands,
-  currentTerritory,
   waveState,
   alertMessage,
   onOpenMinimap,
-  onOpenVillageModal,
   onOpenSettings,
   onTriggerRegularWave,
   onTriggerBossWave,
@@ -75,15 +71,6 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
               </div>
             ))}
           </div>
-
-          <button
-            onClick={onOpenVillageModal}
-            className="flex items-center gap-1 px-2 py-1 bg-amber-500 text-black rounded-xl text-[11px] font-black shadow border border-amber-200 tabular-nums"
-            title="마을 발전 & 건설"
-          >
-            <Hammer className="w-3 h-3" />
-            <span>Lv.{currentTerritory?.villageTier ?? 2}</span>
-          </button>
         </div>
 
         <div className="flex items-center gap-1.5 pointer-events-auto">
