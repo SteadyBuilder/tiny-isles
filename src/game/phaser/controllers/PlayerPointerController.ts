@@ -129,10 +129,14 @@ export class PlayerPointerController {
     };
   }
 
-  public updateZoom(): void {
+  public updateZoom(delta: number = 16.6667): void {
     const cam = this.ctx.scene.cameras.main;
+    const dt = Math.min(0.1, Math.max(0.001, delta / 1000));
+    const lerp = 1 - Math.exp(-8 * dt);
+    cam.setLerp(lerp, lerp);
+
     if (Math.abs(cam.zoom - this.targetZoom) > 0.005) {
-      cam.setZoom(Phaser.Math.Linear(cam.zoom, this.targetZoom, 0.1));
+      cam.setZoom(Phaser.Math.Linear(cam.zoom, this.targetZoom, lerp));
     }
   }
 

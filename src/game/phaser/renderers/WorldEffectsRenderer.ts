@@ -48,9 +48,10 @@ export class WorldEffectsRenderer {
     }
   }
 
-  public updateClouds(): void {
+  public updateClouds(delta: number = 16.6667): void {
+    const dtScale = Math.min(4, Math.max(0.1, delta / 16.6667));
     for (const c of this.clouds) {
-      c.sprite.x += c.speed;
+      c.sprite.x += c.speed * dtScale;
       if (c.sprite.x > 3800) {
         c.sprite.x = -3800;
         c.sprite.y = -1500 + Math.random() * 4500;

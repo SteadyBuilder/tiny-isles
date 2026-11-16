@@ -12,11 +12,17 @@ export interface PixelVirtualJoystickProps {
 const JOYSTICK_RADIUS = 46;
 
 export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joystickRef }) => {
-  const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const joystickTouchIdRef = useRef<number | null>(null);
   const joystickCenterRef = useRef({ x: 0, y: 0 });
   const joystickZoneRef = useRef<HTMLDivElement | null>(null);
+  const knobElRef = useRef<HTMLDivElement | null>(null);
+
+  const setKnobTransform = useCallback((x: number, y: number) => {
+    if (knobElRef.current) {
+      knobElRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    }
+  }, []);
 
   useEffect(() => {
     const el = joystickZoneRef.current;
@@ -27,9 +33,9 @@ export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joys
   const resetJoystick = useCallback(() => {
     joystickTouchIdRef.current = null;
     setIsDragging(false);
-    setKnobPos({ x: 0, y: 0 });
+    setKnobTransform(0, 0);
     if (joystickRef) joystickRef.current = { x: 0, y: 0 };
-  }, [joystickRef]);
+  }, [joystickRef, setKnobTransform]);
 
   useEffect(() => {
     const handleBlur = () => resetJoystick();
@@ -57,7 +63,7 @@ export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joys
     const angle = Math.atan2(dy, dx);
     const kx = Math.cos(angle) * clampedDist;
     const ky = Math.sin(angle) * clampedDist;
-    setKnobPos({ x: kx, y: ky });
+    setKnobTransform(kx, ky);
     if (joystickRef) {
       joystickRef.current = {
         x: Number((kx / JOYSTICK_RADIUS).toFixed(3)),
@@ -112,8 +118,8 @@ export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joys
           }`}
         />
         <div
-          className="absolute w-14 h-14 flex items-center justify-center pointer-events-none transition-transform duration-75"
-          style={{ transform: `translate(${knobPos.x}px, ${knobPos.y}px)` }}
+          ref={knobElRef}
+          className="absolute w-14 h-14 flex items-center justify-center pointer-events-none will-change-transform"
         >
           <img
             src={isDragging ? '/assets/ui/round_red.png' : '/assets/ui/round_blue.png'}

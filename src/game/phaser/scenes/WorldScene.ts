@@ -339,9 +339,9 @@ export class WorldScene extends Phaser.Scene {
     this.systems.garrisonSystem.update(time, delta);
     this.missionSystem.update(delta, this.systems.waveSystem.getWaveState(), this.islands);
     this.controllers.territoryPassive.update(delta);
-    this.controllers.playerMovement.update(time);
+    this.controllers.playerMovement.update(time, delta);
     this.controllers.viewportCulling.update(time);
-    this.effectsRenderer.updateClouds();
+    this.effectsRenderer.updateClouds(delta);
     this.monsterIndicatorRenderer.update(time, this.systems.waveSystem.getMonsterVisuals());
     this.systems.multiplayerSync?.maybeBroadcastPlayerMove(time);
   }

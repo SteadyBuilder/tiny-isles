@@ -207,9 +207,16 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
   useEffect(() => {
     let animId: number;
+    let lastX = 0;
+    let lastY = 0;
     const pollJoystick = () => {
       if (joystickRef?.current) {
-        GameEvents.emit('joystick-move', joystickRef.current);
+        const { x, y } = joystickRef.current;
+        if (x !== lastX || y !== lastY) {
+          lastX = x;
+          lastY = y;
+          GameEvents.emit('joystick-move', joystickRef.current);
+        }
       }
       animId = requestAnimationFrame(pollJoystick);
     };

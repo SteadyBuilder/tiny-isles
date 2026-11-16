@@ -353,10 +353,10 @@ export class PlayerMovementController {
     });
   }
 
-  public update(time: number): void {
+  public update(time: number, delta: number = 16.6667): void {
     if (this.isFainted) {
       this.playerSprite.setVelocity(0, 0);
-      this.pointerController.updateZoom();
+      this.pointerController.updateZoom(delta);
       return;
     }
 
@@ -369,7 +369,9 @@ export class PlayerMovementController {
     if (this.cursors.up.isDown || this.wasdKeys.W?.isDown) vy -= 1;
     if (this.cursors.down.isDown || this.wasdKeys.S?.isDown) vy += 1;
 
-    if (Math.abs(this.joystickVector.x) > 0.05 || Math.abs(this.joystickVector.y) > 0.05) {
+    const joyMag = Math.hypot(this.joystickVector.x, this.joystickVector.y);
+    const usingJoystick = joyMag > 0.12;
+    if (usingJoystick) {
       vx += this.joystickVector.x;
       vy += this.joystickVector.y;
       this.pointerController.clearTarget();
@@ -391,7 +393,7 @@ export class PlayerMovementController {
     if (vx !== 0 || vy !== 0) {
       this.hasMovedSinceSpawn = true;
       const len = Math.hypot(vx, vy);
-      const factor = Math.min(1, len);
+      const factor = usingJoystick ? (len >= 0.45 ? 1 : len / 0.45) : Math.min(1, len);
       this.playerSprite.setVelocity((vx / len) * speed * factor, (vy / len) * speed * factor);
 
       if (vx < 0) this.currentDirection = 'left';
@@ -430,7 +432,7 @@ export class PlayerMovementController {
       this.persistPositionNow(time);
     }
 
-    this.pointerController.updateZoom();
+    this.pointerController.updateZoom(delta);
     this.checkTerritoryAndGridUpdates();
   }
 
