@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
 import { Island } from '../../../types/game';
 import {
   TERRITORY_CENTER_X,
@@ -156,14 +157,17 @@ export class PlayerPointerController {
     const { x: px, y: py } = this.ctx.getPlayerPosition();
 
     // 1. Check if user touched an active Monster
-    const touchedMonster = this.findNearestMonster(worldPoint.x, worldPoint.y, 65);
+    const touchedMonster = this.findNearestMonster(worldPoint.x, worldPoint.y, 80);
     if (touchedMonster) {
       const distFromPlayer = Math.hypot(
         px - touchedMonster.monster.x,
         py - touchedMonster.monster.y
       );
+      const meleeRange = touchedMonster.monster.isBoss
+        ? PLAYER_COMBAT_CONFIG.meleeRangeBoss
+        : PLAYER_COMBAT_CONFIG.meleeRangeRegular;
       this.touchTargetObj = { x: touchedMonster.monster.x, y: touchedMonster.monster.y };
-      if (distFromPlayer < 115) {
+      if (distFromPlayer < meleeRange) {
         this.mouseTarget.active = false;
         this.ctx.onInteract();
       } else {

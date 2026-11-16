@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
 import { Island, PlayerAction, PlayerColor } from '../../../types/game';
 import {
   TERRITORY_CENTER_X,
@@ -39,8 +40,12 @@ export class PlayerMovementController {
   private playerSprite!: Phaser.Physics.Arcade.Sprite;
   private playerNameTag!: Phaser.GameObjects.Text;
   private playerIndicator!: Phaser.GameObjects.Text;
+  private playerHpBar!: Phaser.GameObjects.Graphics;
   private currentAction: PlayerAction = 'idle';
   private currentDirection: 'left' | 'right' = 'right';
+  private isFainted = false;
+  private currentHp: number = PLAYER_COMBAT_CONFIG.maxHp;
+  private currentMaxHp: number = PLAYER_COMBAT_CONFIG.maxHp;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasdKeys!: { [key: string]: Phaser.Input.Keyboard.Key };
@@ -177,7 +182,83 @@ export class PlayerMovementController {
       })
       .setOrigin(0.5);
 
+    this.playerHpBar = scene.add.graphics();
+    this.updateHpBar(this.currentHp, this.currentMaxHp);
+
     this.playAnimation('idle');
+  }
+
+  public updateHpBar(hp: number, maxHp: number): void {
+    this.currentHp = hp;
+    this.currentMaxHp = Math.max(1, maxHp);
+    if (!this.playerHpBar || !this.playerSprite) return;
+
+    const px = this.playerSprite.x;
+    const py = this.playerSprite.y;
+    const barW = 48;
+    const barH = 5;
+    const ratio = Math.max(0, Math.min(1, this.currentHp / this.currentMaxHp));
+
+    this.playerHpBar.clear();
+    this.playerHpBar.setPosition(px, py - 31);
+    setDepthIfChanged(this.playerHpBar, ySortDepth(py, 30));
+
+    this.playerHpBar.fillStyle(0x0f172a, 0.85);
+    this.playerHpBar.fillRect(-barW / 2 - 1, -1, barW + 2, barH + 2);
+    const fillColor = ratio > 0.5 ? 0x22c55e : ratio > 0.25 ? 0xf59e0b : 0xef4444;
+    this.playerHpBar.fillStyle(fillColor, 1);
+    if (ratio > 0) {
+      this.playerHpBar.fillRect(-barW / 2, 0, Math.max(2, barW * ratio), barH);
+    }
+  }
+
+  public setFaintedVisual(fainted: boolean): void {
+    this.isFainted = fainted;
+    if (!this.playerSprite) return;
+    if (fainted) {
+      this.pointerController.clearTarget();
+      this.playerSprite.setVelocity(0, 0);
+      this.playerSprite.setAlpha(0.45);
+      this.playerSprite.setTint(0x94a3b8);
+      this.playAnimation('idle');
+    } else {
+      this.playerSprite.setAlpha(1);
+      this.playerSprite.clearTint();
+    }
+  }
+
+  public playHitVisual(): void {
+    if (!this.playerSprite || this.isFainted) return;
+    this.playerSprite.setTint(0xf87171);
+    this.ctx.scene.time.delayedCall(140, () => {
+      if (!this.isFainted && this.playerSprite?.active) {
+        this.playerSprite.clearTint();
+      }
+    });
+  }
+
+  public respawnAt(x: number, y: number): void {
+    if (!this.playerSprite) return;
+    this.pointerController.clearTarget();
+    this.playerSprite.setPosition(x, y);
+    this.playerSprite.setVelocity(0, 0);
+    this.playerNameTag.setPosition(x, y - 42);
+    this.playerIndicator.setPosition(x, y - 54);
+    this.updateHpBar(PLAYER_COMBAT_CONFIG.maxHp, PLAYER_COMBAT_CONFIG.maxHp);
+    this.checkTerritoryAndGridUpdates();
+
+    this.ctx.scene.tweens.add({
+      targets: this.playerSprite,
+      alpha: 0.45,
+      duration: 140,
+      yoyo: true,
+      repeat: 5,
+      onComplete: () => {
+        if (this.playerSprite?.active && !this.isFainted) {
+          this.playerSprite.setAlpha(1);
+        }
+      },
+    });
   }
 
   public setupCamera(): void {
@@ -218,6 +299,12 @@ export class PlayerMovementController {
   }
 
   public update(time: number): void {
+    if (this.isFainted) {
+      this.playerSprite.setVelocity(0, 0);
+      this.pointerController.updateZoom();
+      return;
+    }
+
     const speed = 250;
     let vx = 0;
     let vy = 0;
@@ -272,6 +359,8 @@ export class PlayerMovementController {
     setDepthIfChanged(this.playerNameTag, ySortDepth(py, 30));
     this.playerIndicator.setPosition(px, py - 54);
     setDepthIfChanged(this.playerIndicator, ySortDepth(py, 30));
+    this.playerHpBar.setPosition(px, py - 31);
+    setDepthIfChanged(this.playerHpBar, ySortDepth(py, 30));
 
     const isHoldInput = this.spaceKey?.isDown || this.eKey?.isDown || this.isActionHolding;
     if (isHoldInput && time - this.lastInteractTime >= 240) {

@@ -25,6 +25,7 @@ import { isPlayDataResetting } from '../../../lib/adminResetService';
 export interface IWorldControllersHost {
   scene: Phaser.Scene;
   isSceneAlive: () => boolean;
+  getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
   setPlayerProfile: (name: string, color: PlayerColor) => void;
@@ -116,8 +117,10 @@ export function createWorldControllersBundle(
 
   playerInteraction = new PlayerInteractionController({
     scene: host.scene,
+    getPlayerId: host.getPlayerId,
     getPlayerPosition: () => playerMovement.getPosition(),
     getPlayerName: host.getPlayerName,
+    isPlayerFainted: () => host.systems.playerHealthSystem.isFainted(),
     getCurrentAction: () => playerMovement.getCurrentAction(),
     playPlayerAnimation: (action) => playerMovement.playAnimation(action),
     markInteractTime: (now) => playerMovement.markInteractTime(now),
@@ -126,7 +129,8 @@ export function createWorldControllersBundle(
     spendInventory: host.spendResources,
     addHarvestedResource: host.addHarvestedResource,
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
-    damageMonster: (id, dmg, attacker) => host.systems.waveSystem.damageMonster(id, dmg, attacker),
+    damageMonster: (id, dmg, attacker, attackerId) =>
+      host.systems.waveSystem.damageMonster(id, dmg, attacker, false, attackerId),
     findGatherableEntityVisual: (x, y) =>
       host.resourceEntityRenderer.findGatherableVisual(x, y),
     updateEntityHpBar: (id) => host.resourceEntityRenderer.updateHpBar(id),

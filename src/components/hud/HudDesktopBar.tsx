@@ -1,11 +1,12 @@
 import React from 'react';
-import { Check, Compass, Hammer, Share2, Users } from 'lucide-react';
-import { Inventory, Island } from '../../types/game';
+import { Check, Compass, Hammer, Heart, Share2, Users } from 'lucide-react';
+import { Inventory, Island, PlayerHpState } from '../../types/game';
 import { HUD_RESOURCE_SLOTS } from './hudUtils';
 
 export interface HudDesktopBarProps {
   inventory: Inventory;
   onlineCount: number;
+  playerHp?: PlayerHpState;
   unlockedCount: number;
   totalIslands: number;
   currentTerritory?: Island;
@@ -22,6 +23,7 @@ export interface HudDesktopBarProps {
 export const HudDesktopBar: React.FC<HudDesktopBarProps> = ({
   inventory,
   onlineCount,
+  playerHp,
   unlockedCount,
   totalIslands,
   currentTerritory,
@@ -34,9 +36,13 @@ export const HudDesktopBar: React.FC<HudDesktopBarProps> = ({
   onOpenVillageModal,
   onOpenSettings,
 }) => {
+  const hpValue = playerHp?.hp ?? 100;
+  const hpMax = playerHp?.maxHp ?? 100;
+  const isFainted = playerHp?.isFainted ?? false;
+
   return (
     <div className="flex items-center justify-between w-full">
-      {/* Left: Wood Resource Bar + Village Territory Map + Village Build Button */}
+      {/* Left: Wood Resource Bar + Player HP + Village Territory Map + Village Build Button */}
       <div className="flex items-center gap-2.5 pointer-events-auto">
         <div className="wood-hud-panel px-3.5 py-2 rounded-2xl flex items-center gap-2.5">
           {HUD_RESOURCE_SLOTS.map((slot) => (
@@ -54,6 +60,22 @@ export const HudDesktopBar: React.FC<HudDesktopBarProps> = ({
               </span>
             </div>
           ))}
+        </div>
+
+        {/* Player HP Badge */}
+        <div
+          id="hud-player-hp"
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border shadow-xl text-sm font-black tabular-nums ${
+            isFainted
+              ? 'bg-red-950/95 border-red-400 text-red-200 animate-pulse'
+              : hpValue <= 30
+              ? 'bg-slate-900/95 border-red-500/70 text-red-300'
+              : 'bg-slate-900/90 border-rose-400/50 text-rose-200'
+          }`}
+          title="내 체력 (HP 0이 되면 기절 후 중심 마을에서 부활)"
+        >
+          <Heart className="w-4 h-4 text-rose-400 fill-rose-500 shrink-0" />
+          <span>{isFainted ? '기절!' : `${hpValue}/${hpMax}`}</span>
         </div>
 
         {/* Occupied Village Territory Count & Map Button (Single unified icon badge) */}

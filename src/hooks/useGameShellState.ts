@@ -10,6 +10,7 @@ import {
   Inventory,
   Island,
   PlayerColor,
+  PlayerHpState,
   WaveState,
 } from '../types/game';
 
@@ -57,7 +58,22 @@ export function useGameShellState() {
     gridX: 0,
     gridY: 0,
   });
+  const [playerHp, setPlayerHp] = useState<PlayerHpState>({
+    hp: 100,
+    maxHp: 100,
+    isFainted: false,
+  });
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleHpUpdated = (next: PlayerHpState) => {
+      setPlayerHp(next);
+    };
+    GameEvents.on('player-hp-updated', handleHpUpdated);
+    return () => {
+      GameEvents.off('player-hp-updated', handleHpUpdated);
+    };
+  }, []);
 
   const handleShowAlert = useCallback((msg: string) => {
     setAlertMessage(msg);
@@ -212,6 +228,7 @@ export function useGameShellState() {
     setShowMinimapModal,
     playerGridPos,
     setPlayerGridPos,
+    playerHp,
     joystickRef,
     currentTerritory,
     handleShowAlert,

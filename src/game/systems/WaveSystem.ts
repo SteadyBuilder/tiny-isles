@@ -4,7 +4,7 @@ import {
   Monster,
   WaveState,
 } from '../../types/game';
-import { THREAT_WAVE_CONFIG } from '../../data/worldRules';
+import { THREAT_WAVE_CONFIG, WORLD_CLOCK_CONFIG } from '../../data/worldRules';
 import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
@@ -23,6 +23,10 @@ export interface IWaveSystemContext {
   updateConstructedBuildingHpBar: (buildingId: string) => void;
   onBuildingDamaged?: () => void;
   getConstructedVisualContainer: (buildingId: string) => Phaser.GameObjects.Container | undefined;
+  getLocalPlayerId: () => string;
+  getLocalPlayerPosition: () => { x: number; y: number };
+  isLocalPlayerFainted: () => boolean;
+  damageLocalPlayer: (damage: number, attackerName: string) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   playExplosionAt: (x: number, y: number) => void;
@@ -54,6 +58,8 @@ export class WaveSystem {
   private onlineCount = 1;
   private activeBonusMultiplier = 1.0;
   private warningIssuedForCurrentCycle = false;
+  private monsterSyncAccumMs = 0;
+  private hadMonstersLastTick = false;
 
   private waveState: WaveState = {
     threatPercent: 0,
@@ -86,6 +92,19 @@ export class WaveSystem {
       onBuildingDamaged: () => this.ctx.onBuildingDamaged?.(),
       damageTerritoryCore: (territoryId, dmg, attacker) =>
         this.coreGemSystem.damageTerritoryCore(territoryId, dmg, attacker, false),
+      getLocalPlayerId: () => this.ctx.getLocalPlayerId(),
+      getLocalPlayerPosition: () => this.ctx.getLocalPlayerPosition(),
+      isLocalPlayerFainted: () => this.ctx.isLocalPlayerFainted(),
+      damageLocalPlayer: (dmg, attacker) => this.ctx.damageLocalPlayer(dmg, attacker),
+      onMonsterDamaged: () => {
+        if (this.isHost) {
+          this.ctx.broadcastMonstersSync?.(
+            this.getMonsters(),
+            this.waveState.waveCount,
+            this.waveState.bossWaveCount
+          );
+        }
+      },
       showFloatingText: (x, y, text, color) => this.ctx.showFloatingText(x, y, text, color),
       shakeObject: (target) => this.ctx.shakeObject(target),
       playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
@@ -341,12 +360,14 @@ export class WaveSystem {
     monsterId: string,
     damage: number,
     sourceName = '타워',
-    fromRemote = false
+    fromRemote = false,
+    attackerId?: string
   ): void {
     const killed = this.combatAI.damageMonster({
       monsterId,
       damage,
       sourceName,
+      attackerId,
       fromRemote,
       isHost: this.isHost,
       bonusMultiplier: this.activeBonusMultiplier,
@@ -354,6 +375,11 @@ export class WaveSystem {
     if (killed) {
       this.emitWaveState();
       if (this.isHost) {
+        this.ctx.broadcastMonstersSync?.(
+          this.getMonsters(),
+          this.waveState.waveCount,
+          this.waveState.bossWaveCount
+        );
         this.ctx.onMonstersChanged?.();
       }
     }

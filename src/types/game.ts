@@ -20,6 +20,12 @@ export interface Player {
   lastUpdated: number;
 }
 
+export interface PlayerHpState {
+  hp: number;
+  maxHp: number;
+  isFainted: boolean;
+}
+
 export type EntityType = 'tree' | 'rock' | 'gold_rock' | 'sheep';
 
 export interface Entity {

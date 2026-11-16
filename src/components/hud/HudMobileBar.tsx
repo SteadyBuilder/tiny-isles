@@ -1,10 +1,11 @@
 import React from 'react';
-import { Compass, Hammer } from 'lucide-react';
-import { Inventory, Island, WaveState } from '../../types/game';
+import { Compass, Hammer, Heart } from 'lucide-react';
+import { Inventory, Island, PlayerHpState, WaveState } from '../../types/game';
 import { HUD_RESOURCE_SLOTS } from './hudUtils';
 
 export interface HudMobileBarProps {
   inventory: Inventory;
+  playerHp?: PlayerHpState;
   unlockedCount: number;
   totalIslands: number;
   currentTerritory?: Island;
@@ -20,6 +21,7 @@ export interface HudMobileBarProps {
 
 export const HudMobileBar: React.FC<HudMobileBarProps> = ({
   inventory,
+  playerHp,
   unlockedCount,
   totalIslands,
   currentTerritory,
@@ -32,6 +34,10 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
   onTriggerBossWave,
   showTestMenu = false,
 }) => {
+  const hpValue = playerHp?.hp ?? 100;
+  const hpMax = playerHp?.maxHp ?? 100;
+  const isFainted = playerHp?.isFainted ?? false;
+
   return (
     <div
       className="sm:hidden absolute top-2 left-2 right-2 z-30 flex flex-col gap-1.5 pointer-events-none"
@@ -89,9 +95,13 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
       {/* Mobile Compact Icon Wave Bar */}
       {waveState && (
         <div className="flex items-center justify-between bg-slate-950/90 border border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-white pointer-events-auto tabular-nums">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <span className={`flex items-center gap-0.5 font-black ${isFainted ? 'text-red-300 animate-pulse' : 'text-rose-200'}`}>
+              <Heart className="w-3 h-3 text-rose-400 fill-rose-500" />
+              {isFainted ? '기절' : `${hpValue}/${hpMax}`}
+            </span>
             <span className={waveState.threatPercent >= waveState.warningThreshold ? 'text-red-300 animate-pulse' : 'text-amber-200'}>
-              🔥 위협도 <b>{waveState.threatPercent}%</b>
+              🔥 <b>{waveState.threatPercent}%</b>
             </span>
             <span className="text-red-300">
               👹 <b>{waveState.wavesUntilBoss <= 1 ? '보스!' : `${waveState.wavesUntilBoss}W`}</b>

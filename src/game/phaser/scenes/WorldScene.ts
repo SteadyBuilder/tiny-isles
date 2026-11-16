@@ -141,6 +141,9 @@ export class WorldScene extends Phaser.Scene {
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
       getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
+      respawnPlayerAt: (x, y) => this.controllers?.playerMovement.respawnAt(x, y),
+      onPlayerFaintedVisual: (fainted) => this.controllers?.playerMovement.setFaintedVisual(fainted),
+      onPlayerHitVisual: () => this.controllers?.playerMovement.playHitVisual(),
       getLocalPlayerState: () => this.controllers.playerMovement.getState(),
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,
@@ -198,6 +201,7 @@ export class WorldScene extends Phaser.Scene {
     this.controllers = createWorldControllersBundle({
       scene: this,
       isSceneAlive: () => this.isSceneAlive(),
+      getPlayerId: () => this.playerId,
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
       setPlayerProfile: (name, color) => {
@@ -316,6 +320,7 @@ export class WorldScene extends Phaser.Scene {
     this.controllers?.playerMovement?.destroy();
     this.controllers?.towerPlacement?.destroy();
     this.systems?.livingWorldCoordinator?.destroy();
+    this.systems?.playerHealthSystem?.destroy();
     this.systems?.waveSystem?.destroy();
     this.systems?.coreGemSystem?.clearAllVisuals();
     this.territoryStructureRenderer?.destroy();

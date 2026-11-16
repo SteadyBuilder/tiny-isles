@@ -5,6 +5,7 @@ import {
   Inventory,
   Island,
   PlayerColor,
+  PlayerHpState,
   VillageTier,
   WaveState,
   WorldSyncState,
@@ -84,6 +85,9 @@ export interface GameEventPayloads {
   'trigger-interact': void;
   'player-grid-pos-changed': { gridX: number; gridY: number };
   'player-moved': { x: number; y: number; direction: string; action: string };
+  'player-hp-updated': PlayerHpState;
+  'player-fainted': void;
+  'player-respawned': void;
   'online-count-changed': number;
   'game-alert': string;
 }

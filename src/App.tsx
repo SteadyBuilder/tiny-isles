@@ -35,6 +35,7 @@ export function App() {
     setShowMinimapModal,
     playerGridPos,
     setPlayerGridPos,
+    playerHp,
     joystickRef,
     currentTerritory,
     handleShowAlert,
@@ -57,6 +58,7 @@ export function App() {
         setPlayerName={handleUpdateName}
         playerColor={profile.color}
         setPlayerColor={handleUpdateColor}
+        playerHp={playerHp}
         unlockedCount={islandStats.unlocked}
         totalIslands={islandStats.total}
         currentTerritory={currentTerritory}

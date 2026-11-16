@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Inventory, Island, PlayerColor, WaveState } from '../types/game';
+import { Inventory, Island, PlayerColor, PlayerHpState, WaveState } from '../types/game';
 import { sound, SoundSettings } from '../lib/sound';
 import { SoundModal } from './SoundModal';
 import { HudSettingsModal } from './HudSettingsModal';
@@ -16,6 +16,7 @@ interface HUDProps {
   setPlayerName: (name: string) => void;
   playerColor: PlayerColor;
   setPlayerColor: (color: PlayerColor) => void;
+  playerHp?: PlayerHpState;
   unlockedCount?: number;
   totalIslands?: number;
   currentTerritory?: Island;
@@ -37,6 +38,7 @@ export const HUD: React.FC<HUDProps> = ({
   setPlayerName,
   playerColor,
   setPlayerColor,
+  playerHp,
   unlockedCount = 1,
   totalIslands = 21,
   currentTerritory,
@@ -93,6 +95,7 @@ export const HUD: React.FC<HUDProps> = ({
         <HudDesktopBar
           inventory={inventory}
           onlineCount={onlineCount}
+          playerHp={playerHp}
           unlockedCount={unlockedCount}
           totalIslands={totalIslands}
           currentTerritory={currentTerritory}
@@ -121,6 +124,7 @@ export const HUD: React.FC<HUDProps> = ({
       {/* 2. MOBILE HUD (sm:hidden) */}
       <HudMobileBar
         inventory={inventory}
+        playerHp={playerHp}
         unlockedCount={unlockedCount}
         totalIslands={totalIslands}
         currentTerritory={currentTerritory}

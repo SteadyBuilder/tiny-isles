@@ -64,3 +64,34 @@ export const THREAT_WAVE_CONFIG = {
   /** 조기 소환(즉시 침공 맞이하기) 시 처치 보상 보너스 배율 */
   earlySummonRewardMultiplier: 1.35,
 } as const;
+
+/**
+ * 플레이어 전투, 체력(HP), 기절·리스폰 및 마물 반격 어그로 설정
+ */
+export const PLAYER_COMBAT_CONFIG = {
+  /** 플레이어 최대 체력 */
+  maxHp: 100,
+  /** 플레이어 근접 공격 기본 데미지 */
+  meleeDamage: 35,
+  /** 일반 몬스터 근접 공격 사거리 (px) */
+  meleeRangeRegular: 130,
+  /** 보스 몬스터 근접 공격 사거리 (px) */
+  meleeRangeBoss: 165,
+  /** 기절 후 메인 마을 리스폰 대기 시간 (ms) */
+  faintRespawnDelayMs: 1500,
+  /** 리스폰 직후 무적 유지 시간 (ms) */
+  respawnInvincibleMs: 2000,
+  /** 공격받은 몬스터가 플레이어를 추격하는 최대 거리 (px) */
+  monsterAggroMaxDistance: 350,
+  /** 어그로 최대 유지 시간 (ms) */
+  monsterAggroDurationMs: 10_000,
+  /** 일반 몬스터의 플레이어 공격 사거리 (px) */
+  monsterPlayerAttackRange: 58,
+  /** 보스 몬스터의 플레이어 공격 사거리 (px) */
+  monsterBossPlayerAttackRange: 75,
+  /** 몬스터의 플레이어/건물 공격 쿨다운 (ms) */
+  monsterAttackCooldownMs: 1100,
+  /** 메인 마을 리스폰 좌표 */
+  mainVillageSpawn: { x: 320, y: 430 },
+} as const;
+

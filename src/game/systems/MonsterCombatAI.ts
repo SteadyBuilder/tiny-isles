@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PERFORMANCE_CONFIG } from '../../data/performanceConfig';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
+import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { ConstructedBuilding, Island } from '../../types/game';
 import { sound } from '../../lib/sound';
 import { getTerritoryCorePos } from '../constants';
@@ -22,6 +23,11 @@ export interface IMonsterCombatContext {
   destroyConstructedBuilding: (buildingId: string) => void;
   onBuildingDamaged?: () => void;
   damageTerritoryCore: (territoryId: number, damage: number, attackerName: string) => void;
+  getLocalPlayerId: () => string;
+  getLocalPlayerPosition: () => { x: number; y: number };
+  isLocalPlayerFainted: () => boolean;
+  damageLocalPlayer: (damage: number, attackerName: string) => void;
+  onMonsterDamaged?: () => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   playExplosionAt: (x: number, y: number) => void;
@@ -36,12 +42,18 @@ interface CachedBlockerTarget {
   targetY: number;
 }
 
+interface MonsterAggroTarget {
+  playerId: string;
+  expiresAt: number;
+}
+
 /**
- * 마물 웨이브 유닛의 목표 영지 추적, 성벽 충돌 클램핑, 방책/건물/코어 공격 AI 전담 모듈
+ * 마물 웨이브 유닛의 목표 영지 추적, 플레이어 반격 어그로, 성벽 충돌 클램핑, 방책/건물/코어 공격 AI 전담 모듈
  */
 export class MonsterCombatAI {
   private ctx: IMonsterCombatContext;
   private blockerCache = new Map<string, CachedBlockerTarget>();
+  private aggroTargets = new Map<string, MonsterAggroTarget>();
 
   constructor(ctx: IMonsterCombatContext) {
     this.ctx = ctx;
@@ -57,6 +69,11 @@ export class MonsterCombatAI {
 
     for (const mv of this.ctx.getMonsters().values()) {
       const m = mv.monster;
+
+      // 0순위: 플레이어에게 피격당한 몬스터의 반격 어그로 처리
+      if (this.tryUpdatePlayerAggro(mv, time, dt, aliveWalls)) {
+        continue;
+      }
 
       // 타겟 영지가 이미 상실된 경우 다음 안쪽 영지(중심 마을 방향)로 재설정
       let targetIsl = islands.find((i) => i.id === m.targetTerritoryId && i.unlocked);
@@ -202,6 +219,7 @@ export class MonsterCombatAI {
     monsterId: string;
     damage: number;
     sourceName: string;
+    attackerId?: string;
     fromRemote: boolean;
     isHost: boolean;
     bonusMultiplier: number;
@@ -210,8 +228,17 @@ export class MonsterCombatAI {
     const mv = monsters.get(params.monsterId);
     if (!mv) return false;
 
-    // 게스트는 몬스터 HP를 직접 깎지 않고 호스트에게 피격 이벤트만 전송
+    if (params.attackerId) {
+      this.aggroTargets.set(params.monsterId, {
+        playerId: params.attackerId,
+        expiresAt: performance.now() + PLAYER_COMBAT_CONFIG.monsterAggroDurationMs,
+      });
+    }
+
+    // 게스트는 호스트에게 피격 이벤트를 전송하되, 즉각적인 타격감을 위해 로컬 HP 바를 낙관적으로 반영
     if (!params.isHost && !params.fromRemote) {
+      mv.monster.hp = Math.max(1, mv.monster.hp - params.damage);
+      MonsterVisualManager.updateHpBar(mv);
       this.ctx.showFloatingText(
         mv.monster.x,
         mv.monster.y - 25,
@@ -234,6 +261,7 @@ export class MonsterCombatAI {
     if (mv.monster.hp > 0) {
       this.ctx.shakeObject(mv.container);
       MonsterVisualManager.updateHpBar(mv);
+      this.ctx.onMonsterDamaged?.();
       return false;
     }
 
@@ -242,6 +270,7 @@ export class MonsterCombatAI {
     mv.container.destroy();
     monsters.delete(params.monsterId);
     this.blockerCache.delete(params.monsterId);
+    this.aggroTargets.delete(params.monsterId);
 
     const rewardTier = deadM.isBoss ? MONSTER_KILL_REWARDS.boss : MONSTER_KILL_REWARDS.regular;
     const rewardWood = Math.round(rewardTier.wood * params.bonusMultiplier);
@@ -268,5 +297,63 @@ export class MonsterCombatAI {
         );
       }
     }
+  }
+
+  private tryUpdatePlayerAggro(
+    mv: MonsterVisual,
+    time: number,
+    dt: number,
+    aliveWalls: ConstructedBuilding[]
+  ): boolean {
+    const m = mv.monster;
+    const aggro = this.aggroTargets.get(m.id);
+    if (!aggro) return false;
+
+    if (aggro.playerId !== this.ctx.getLocalPlayerId()) {
+      return false;
+    }
+
+    if (this.ctx.isLocalPlayerFainted() || performance.now() > aggro.expiresAt) {
+      this.aggroTargets.delete(m.id);
+      return false;
+    }
+
+    const playerPos = this.ctx.getLocalPlayerPosition();
+    const dist = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
+    if (dist > PLAYER_COMBAT_CONFIG.monsterAggroMaxDistance) {
+      this.aggroTargets.delete(m.id);
+      return false;
+    }
+
+    const attackRange = m.isBoss
+      ? PLAYER_COMBAT_CONFIG.monsterBossPlayerAttackRange
+      : PLAYER_COMBAT_CONFIG.monsterPlayerAttackRange;
+
+    if (dist > attackRange) {
+      const vx = ((playerPos.x - m.x) / dist) * m.speed;
+      const vy = ((playerPos.y - m.y) / dist) * m.speed;
+      const clamp = resolveMonsterWallClamping(
+        m.x,
+        m.y,
+        m.x + vx * dt,
+        m.y + vy * dt,
+        16,
+        aliveWalls
+      );
+      m.x = clamp.x;
+      m.y = clamp.y;
+      m.direction = vx < 0 ? 'left' : 'right';
+      mv.container.setPosition(m.x, m.y);
+      setDepthIfChanged(mv.container, ySortDepth(m.y, 28));
+      mv.sprite.setFlipX(m.direction === 'left');
+      return true;
+    }
+
+    if (time - mv.lastAttackTime >= PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs) {
+      mv.lastAttackTime = time;
+      this.ctx.shakeObject(mv.container);
+      this.ctx.damageLocalPlayer(m.attack, m.name);
+    }
+    return true;
   }
 }

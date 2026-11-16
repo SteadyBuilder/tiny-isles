@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
+import { PLAYER_COMBAT_CONFIG, THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import { Entity, Inventory, Island, PlayerAction } from '../../../types/game';
 import {
@@ -14,8 +14,10 @@ import { EntityVisual } from '../renderers/ResourceEntityRenderer';
 
 export interface IPlayerInteractionContext {
   scene: Phaser.Scene;
+  getPlayerId: () => string;
   getPlayerPosition: () => { x: number; y: number };
   getPlayerName: () => string;
+  isPlayerFainted: () => boolean;
   getCurrentAction: () => PlayerAction;
   playPlayerAnimation: (action: PlayerAction) => void;
   markInteractTime: (now: number) => void;
@@ -24,7 +26,12 @@ export interface IPlayerInteractionContext {
   spendInventory: (wood: number, stone: number, gold: number) => void;
   addHarvestedResource: (resKey: keyof Inventory, amount: number) => void;
   getMonsterVisuals: () => Map<string, MonsterVisual>;
-  damageMonster: (monsterId: string, damage: number, attackerName: string) => void;
+  damageMonster: (
+    monsterId: string,
+    damage: number,
+    attackerName: string,
+    attackerId: string
+  ) => void;
   findGatherableEntityVisual: (x: number, y: number) => EntityVisual | null;
   updateEntityHpBar: (entityId: string) => void;
   removeAndRespawnEntity: (ent: Entity) => void;
@@ -49,16 +56,21 @@ export class PlayerInteractionController {
   }
 
   public tryInteract(): void {
+    if (this.ctx.isPlayerFainted()) return;
+
     const { scene } = this.ctx;
     this.ctx.markInteractTime(scene.time.now);
     const { x: px, y: py } = this.ctx.getPlayerPosition();
 
     // 1. 마물 직접 타격 (전투 최우선!)
     let nearestMonster: MonsterVisual | null = null;
-    let minMonDist = 115;
+    let minMonDist = Number.POSITIVE_INFINITY;
     for (const mv of this.ctx.getMonsterVisuals().values()) {
+      const range = mv.monster.isBoss
+        ? PLAYER_COMBAT_CONFIG.meleeRangeBoss
+        : PLAYER_COMBAT_CONFIG.meleeRangeRegular;
       const d = Math.hypot(px - mv.monster.x, py - mv.monster.y);
-      if (d < minMonDist) {
+      if (d < range && d < minMonDist) {
         minMonDist = d;
         nearestMonster = mv;
       }
@@ -72,7 +84,12 @@ export class PlayerInteractionController {
         }
       });
       sound.playChop();
-      this.ctx.damageMonster(nearestMonster.monster.id, 35, this.ctx.getPlayerName());
+      this.ctx.damageMonster(
+        nearestMonster.monster.id,
+        PLAYER_COMBAT_CONFIG.meleeDamage,
+        this.ctx.getPlayerName(),
+        this.ctx.getPlayerId()
+      );
       return;
     }
 

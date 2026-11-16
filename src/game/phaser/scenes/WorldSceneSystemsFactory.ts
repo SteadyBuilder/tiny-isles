@@ -10,6 +10,7 @@ import { GameEvents } from '../../events/gameEvents';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
 import { LivingWorldCoordinator } from '../../systems/LivingWorldCoordinator';
+import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
@@ -25,6 +26,9 @@ export interface IWorldSystemsHost {
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
   getPlayerPosition: () => { x: number; y: number };
+  respawnPlayerAt: (x: number, y: number) => void;
+  onPlayerFaintedVisual: (fainted: boolean) => void;
+  onPlayerHitVisual: () => void;
   getLocalPlayerState: () => {
     x: number;
     y: number;
@@ -54,6 +58,7 @@ export interface IWorldSystemsHost {
 
 export interface WorldSystemsBundle {
   coreGemSystem: CoreGemSystem;
+  playerHealthSystem: PlayerHealthSystem;
   waveSystem: WaveSystem;
   towerDefenseSystem: TowerDefenseSystem;
   garrisonSystem: GarrisonSystem;
@@ -62,11 +67,21 @@ export interface WorldSystemsBundle {
 }
 
 /**
- * CoreGem, Wave, TowerDefense, Garrison, LivingWorld, MultiplayerSync 인스턴스를 생성/배선하는 팩토리
+ * CoreGem, PlayerHealth, Wave, TowerDefense, Garrison, LivingWorld, MultiplayerSync 인스턴스를 생성/배선하는 팩토리
  */
 export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsBundle {
   let multiplayerSync!: MultiplayerSyncController;
   let livingWorldCoordinator!: LivingWorldCoordinator;
+
+  const playerHealthSystem = new PlayerHealthSystem({
+    scene: host.scene,
+    isSceneAlive: host.isSceneAlive,
+    getPlayerPosition: host.getPlayerPosition,
+    respawnPlayerAt: host.respawnPlayerAt,
+    onPlayerFaintedVisual: host.onPlayerFaintedVisual,
+    onPlayerHitVisual: host.onPlayerHitVisual,
+    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+  });
 
   const coreGemSystem = new CoreGemSystem({
     getIslands: host.getIslands,
@@ -98,6 +113,10 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       },
       getConstructedVisualContainer: (buildingId: string) =>
         host.constructedBuildingRenderer.getContainer(buildingId),
+      getLocalPlayerId: host.getPlayerId,
+      getLocalPlayerPosition: host.getPlayerPosition,
+      isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
+      damageLocalPlayer: (dmg, attacker) => playerHealthSystem.damagePlayer(dmg, attacker),
       showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
       shakeObject: (target) => host.effectsRenderer.shakeObject(target),
       playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
@@ -198,6 +217,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
 
   return {
     coreGemSystem,
+    playerHealthSystem,
     waveSystem,
     towerDefenseSystem,
     garrisonSystem,
