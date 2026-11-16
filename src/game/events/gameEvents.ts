@@ -6,6 +6,7 @@ import {
   Island,
   PlayerColor,
   PlayerHpState,
+  ThreatOrbFxPayload,
   VillageTier,
   WaveState,
   WorldSyncState,
@@ -62,6 +63,7 @@ export interface GameEventPayloads {
   'trigger-boss-wave': void;
   'summon-early-wave': { isBossWave: boolean };
   'add-threat': number; // percent
+  'threat-orb-fx': ThreatOrbFxPayload;
   'wave-state-updated': WaveState;
   'wave-spawned': { isBossWave: boolean; waveNumber: number };
   'monster-killed': { monsterId: string; monsterType: string; killer: string };

@@ -37,6 +37,7 @@ export interface IWaveSystemContext {
   broadcastMonsterHit?: (monsterId: string, damage: number, attackerName: string) => void;
   broadcastThreatAdded?: (amount: number) => void;
   broadcastThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
+  emitThreatOrb?: (worldX: number, worldY: number, amount: number) => void;
   onMonstersChanged?: () => void;
 }
 
@@ -59,6 +60,7 @@ export class WaveSystem {
   private onlineCount = 1;
   private activeBonusMultiplier = 1.0;
   private warningIssuedForCurrentCycle = false;
+  private countdownRemainingMs: number | null = null;
   private monsterSyncAccumMs = 0;
   private hadMonstersLastTick = false;
 
@@ -69,6 +71,8 @@ export class WaveSystem {
     waveCount: 0,
     bossWaveCount: 0,
     activeMonstersCount: 0,
+    countdownSecondsRemaining: null,
+    nextWaveIsBoss: false,
     activeBoss: null,
     lastWaveMessage: null,
     onlineScaleLabel: getDynamicScalingProfile(1).label,
@@ -193,6 +197,10 @@ export class WaveSystem {
       return;
     }
 
+    if (this.countdownRemainingMs !== null) {
+      return;
+    }
+
     const prevThreat = this.waveState.threatPercent;
     const nextThreat = Math.min(THREAT_WAVE_CONFIG.maxThreat, prevThreat + amount);
     this.waveState.threatPercent = nextThreat;
@@ -211,12 +219,19 @@ export class WaveSystem {
     }
 
     if (nextThreat >= THREAT_WAVE_CONFIG.maxThreat) {
-      this.waveState.threatPercent = 0;
-      this.warningIssuedForCurrentCycle = false;
       const isBossWave =
         (this.waveState.waveCount + 1) % THREAT_WAVE_CONFIG.bossEveryNWaves === 0;
-      this.activeBonusMultiplier = 1.0;
-      this.spawnMonsterWave(isBossWave, true, false);
+      const countdownSec = THREAT_WAVE_CONFIG.imminentCountdownSec;
+      this.countdownRemainingMs = countdownSec * 1000;
+      this.waveState.countdownSecondsRemaining = countdownSec;
+      this.waveState.nextWaveIsBoss = isBossWave;
+      const warnMsg = `⏳ 마물 위협도 100%! ${countdownSec}초 후 ${
+        isBossWave ? '보스 군단' : '마물 웨이브'
+      }이 침공합니다!`;
+      this.waveState.lastWaveMessage = warnMsg;
+      sound.playBreak();
+      GameEvents.emit('game-alert', warnMsg);
+      this.emitWaveState();
       this.ctx.broadcastThreatSync?.(
         this.waveState.threatPercent,
         this.waveState.waveCount,
@@ -246,6 +261,8 @@ export class WaveSystem {
     this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
     this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
+    this.waveState.nextWaveIsBoss =
+      (this.waveState.waveCount + 1) % THREAT_WAVE_CONFIG.bossEveryNWaves === 0;
 
     if (
       prevThreat < THREAT_WAVE_CONFIG.warningThreshold &&
@@ -265,6 +282,8 @@ export class WaveSystem {
       return;
     }
 
+    this.countdownRemainingMs = null;
+    this.waveState.countdownSecondsRemaining = null;
     this.waveState.threatPercent = 0;
     this.warningIssuedForCurrentCycle = false;
     this.activeBonusMultiplier = THREAT_WAVE_CONFIG.earlySummonRewardMultiplier;
@@ -333,6 +352,30 @@ export class WaveSystem {
       this.monsterSyncAccumMs = 0;
       this.hadMonstersLastTick = this.monsters.size > 0;
       return;
+    }
+
+    if (this.countdownRemainingMs !== null) {
+      this.countdownRemainingMs -= delta;
+      if (this.countdownRemainingMs <= 0) {
+        const spawnBoss = this.waveState.nextWaveIsBoss;
+        this.countdownRemainingMs = null;
+        this.waveState.countdownSecondsRemaining = null;
+        this.waveState.threatPercent = 0;
+        this.warningIssuedForCurrentCycle = false;
+        this.activeBonusMultiplier = 1.0;
+        this.spawnMonsterWave(spawnBoss, true, false);
+        this.ctx.broadcastThreatSync?.(
+          this.waveState.threatPercent,
+          this.waveState.waveCount,
+          this.waveState.bossWaveCount
+        );
+      } else {
+        const nextSec = Math.max(1, Math.ceil(this.countdownRemainingMs / 1000));
+        if (nextSec !== this.waveState.countdownSecondsRemaining) {
+          this.waveState.countdownSecondsRemaining = nextSec;
+          this.emitWaveState();
+        }
+      }
     }
 
     const hasMonsters = this.monsters.size > 0;

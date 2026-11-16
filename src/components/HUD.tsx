@@ -7,6 +7,7 @@ import { HudHelpModal } from './HudHelpModal';
 import { HudDesktopBar } from './hud/HudDesktopBar';
 import { HudWaveSection } from './hud/HudWaveSection';
 import { HudMobileBar } from './hud/HudMobileBar';
+import { ThreatOrbOverlay } from './hud/ThreatOrbOverlay';
 import { VILLAGE_TIER_CONFIGS } from '../game/constants';
 
 interface HUDProps {
@@ -90,6 +91,7 @@ export const HUD: React.FC<HUDProps> = ({
 
   return (
     <>
+      <ThreatOrbOverlay />
       {/* 1. DESKTOP HUD (sm: and above) */}
       <div className="hidden sm:flex absolute top-3 left-4 right-4 z-30 flex-col gap-2 pointer-events-none">
         <HudDesktopBar

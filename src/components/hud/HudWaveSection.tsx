@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Flame, ShieldAlert, Skull } from 'lucide-react';
 import { WaveState } from '../../types/game';
 
@@ -23,8 +23,26 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
   onAddTestResources,
   showTestMenu = false,
 }) => {
+  const [isSurging, setIsSurging] = useState(false);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const handleArrived = () => {
+      setIsSurging(true);
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => setIsSurging(false), 320);
+    };
+    window.addEventListener('threat-orb-arrived', handleArrived);
+    return () => {
+      window.removeEventListener('threat-orb-arrived', handleArrived);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
   const threat = waveState?.threatPercent ?? 0;
-  const isWarning = threat >= (waveState?.warningThreshold ?? 80);
+  const countdown = waveState?.countdownSecondsRemaining ?? null;
+  const isCountingDown = countdown !== null;
+  const isWarning = isCountingDown || threat >= (waveState?.warningThreshold ?? 80);
 
   return (
     <>
@@ -35,27 +53,43 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
           }`}
         >
           <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
-            {/* 활동 기반 마물 위협도 게이지 */}
+            {/* 활동 기반 마물 위협도 액체 게이지 */}
             <div
               className="flex items-center gap-2 font-bold"
-              title="자원 채집, 건물 건설, 새 마을 해금 시 마물 위협도가 상승하며 100% 도달 시 웨이브가 침공합니다."
+              title="자원 채집, 마물 사냥, 건물 건설, 새 마을 해금 시 노란 구슬이 모여 위협도가 차오르며 100% 도달 시 웨이브 카운트다운이 시작됩니다."
             >
-              <Flame className={`w-3.5 h-3.5 ${isWarning ? 'text-red-400 animate-pulse' : 'text-amber-400'}`} />
+              <Flame
+                className={`w-3.5 h-3.5 transition-transform ${
+                  isSurging ? 'scale-125 text-yellow-300' : isWarning ? 'text-red-400 animate-pulse' : 'text-amber-400'
+                }`}
+              />
               <span className={isWarning ? 'text-red-300' : 'text-amber-200'}>위협도</span>
-              <div className="w-24 h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+              <div
+                id="threat-gauge-container"
+                className={`w-28 h-3 bg-slate-800/95 rounded-full overflow-hidden border transition-all duration-300 ${
+                  isSurging
+                    ? 'border-yellow-300 threat-liquid-surge scale-y-110'
+                    : isWarning
+                    ? 'border-red-400/70'
+                    : 'border-slate-700'
+                }`}
+              >
                 <div
                   id="threat-gauge-bar"
-                  className={`h-full transition-all duration-300 ${
-                    isWarning
-                      ? 'bg-gradient-to-r from-orange-500 to-red-500'
-                      : 'bg-gradient-to-r from-emerald-500 via-amber-400 to-orange-500'
-                  }`}
-                  style={{ width: `${Math.min(100, Math.max(0, threat))}%` }}
+                  className="h-full threat-liquid-fill transition-all duration-700 ease-out rounded-full"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, threat))}%`,
+                    backgroundImage: isWarning
+                      ? 'linear-gradient(90deg, #ea580c 0%, #ef4444 35%, #facc15 50%, #ef4444 65%, #ea580c 100%)'
+                      : 'linear-gradient(90deg, #ca8a04 0%, #facc15 35%, #fef08a 50%, #f59e0b 65%, #ca8a04 100%)',
+                  }}
                 />
               </div>
               <span
                 id="threat-percent-text"
-                className={`font-mono font-black px-1.5 py-0.5 rounded ${
+                className={`font-mono font-black px-1.5 py-0.5 rounded transition-transform ${
+                  isSurging ? 'scale-110 text-yellow-200 bg-amber-900/80' : ''
+                } ${
                   isWarning
                     ? 'text-red-200 bg-red-950/80 border border-red-500/40 animate-pulse'
                     : 'text-white bg-slate-800'
@@ -63,10 +97,19 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
               >
                 {threat}%
               </span>
-              {isWarning && (
-                <span className="text-[11px] font-black text-red-300 animate-pulse">
-                  곧 침공!
+              {isCountingDown ? (
+                <span
+                  id="threat-countdown-badge"
+                  className="text-[11px] font-black px-2 py-0.5 rounded-md bg-red-600/90 text-white border border-red-300/70 animate-pulse shadow"
+                >
+                  ⏳ {countdown}초 후 {waveState.nextWaveIsBoss ? '보스 침공!' : '침공!'}
                 </span>
+              ) : (
+                isWarning && (
+                  <span className="text-[11px] font-black text-red-300 animate-pulse">
+                    곧 침공!
+                  </span>
+                )
               )}
             </div>
 

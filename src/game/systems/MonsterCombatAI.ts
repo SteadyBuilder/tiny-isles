@@ -29,6 +29,7 @@ export interface IMonsterCombatContext {
   isLocalPlayerFainted: () => boolean;
   damageLocalPlayer: (damage: number, attackerName: string) => void;
   onMonsterDamaged?: () => void;
+  onMonsterKilled?: (x: number, y: number, isBoss: boolean) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   playExplosionAt: (x: number, y: number) => void;
@@ -289,6 +290,7 @@ export class MonsterCombatAI {
       ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold})`
       : `⚔️ 마물 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold})`;
     this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
+    this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss);
     return true;
   }
 

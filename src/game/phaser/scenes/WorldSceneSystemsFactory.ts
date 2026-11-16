@@ -143,6 +143,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       broadcastThreatAdded: (amount) => multiplayerSync?.broadcastThreatAdded(amount),
       broadcastThreatSync: (threatPercent, waveCount, bossWaveCount) =>
         multiplayerSync?.broadcastThreatSync(threatPercent, waveCount, bossWaveCount),
+      emitThreatOrb: (worldX, worldY, amount) =>
+        host.effectsRenderer.emitThreatOrbFromWorld(worldX, worldY, amount),
       onMonstersChanged: () => livingWorldCoordinator?.requestImmediateSnapshot(),
     },
     coreGemSystem

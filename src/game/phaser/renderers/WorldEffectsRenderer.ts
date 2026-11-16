@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Island } from '../../../types/game';
 import { DEPTH } from '../../depthLayers';
+import { GameEvents } from '../../events/gameEvents';
 import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
 
 const MAX_ACTIVE_FLOATING_TEXTS = 24;
@@ -155,6 +156,25 @@ export class WorldEffectsRenderer {
         }
       },
     });
+  }
+
+  public emitThreatOrbFromWorld(worldX: number, worldY: number, amount: number): void {
+    if (!this.isSceneAlive() || amount <= 0) return;
+    const cam = this.scene.cameras?.main;
+    const canvas = this.scene.game?.canvas;
+    if (!cam || !canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / Math.max(1, cam.width);
+    const scaleY = rect.height / Math.max(1, cam.height);
+
+    const camX = (worldX - cam.worldView.x) * cam.zoom;
+    const camY = (worldY - cam.worldView.y) * cam.zoom;
+
+    const startX = rect.left + camX * scaleX;
+    const startY = rect.top + camY * scaleY;
+
+    GameEvents.emit('threat-orb-fx', { startX, startY, amount });
   }
 
   public destroy(): void {

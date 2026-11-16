@@ -43,6 +43,8 @@ export function useGameShellState() {
     waveCount: 0,
     bossWaveCount: 0,
     activeMonstersCount: 0,
+    countdownSecondsRemaining: null,
+    nextWaveIsBoss: false,
     activeBoss: null,
     lastWaveMessage: null,
   });

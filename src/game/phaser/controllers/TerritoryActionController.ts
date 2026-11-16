@@ -42,6 +42,7 @@ export interface ITerritoryActionContext {
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   playExplosionAt: (x: number, y: number) => void;
   addThreat: (amount: number) => void;
+  emitThreatOrb?: (worldX: number, worldY: number, amount: number) => void;
   broadcastUnlock: (islandId: number, unlockedBy: string, ownerId?: string) => void;
   broadcastVillageUpgrade: (territoryId: number, nextTier: VillageTier) => void;
   broadcastBuildingConstructed: (cb: ConstructedBuilding) => void;
@@ -142,6 +143,7 @@ export class TerritoryActionController {
 
     if (isLocalTrigger) {
       this.ctx.broadcastVillageUpgrade(territoryId, nextTier);
+      this.ctx.emitThreatOrb?.(cPos.x, cPos.y, THREAT_WAVE_CONFIG.upgradeThreatGain);
       this.ctx.addThreat(THREAT_WAVE_CONFIG.upgradeThreatGain);
     }
     return true;
@@ -224,6 +226,7 @@ export class TerritoryActionController {
 
     if (isLocal) {
       this.ctx.broadcastBuildingConstructed(newBuilding);
+      this.ctx.emitThreatOrb?.(newBuilding.x, newBuilding.y, THREAT_WAVE_CONFIG.buildThreatGain);
       this.ctx.addThreat(THREAT_WAVE_CONFIG.buildThreatGain);
     }
     return true;
@@ -390,6 +393,7 @@ export class TerritoryActionController {
     if (isLocalTrigger) {
       serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);
       this.ctx.broadcastUnlock(islandId, unlockedBy, resolvedOwnerId);
+      this.ctx.emitThreatOrb?.(corePos.x, corePos.y, THREAT_WAVE_CONFIG.unlockThreatGain);
       this.ctx.addThreat(THREAT_WAVE_CONFIG.unlockThreatGain);
     }
   }

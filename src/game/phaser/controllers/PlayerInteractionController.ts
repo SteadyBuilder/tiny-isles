@@ -37,6 +37,7 @@ export interface IPlayerInteractionContext {
   updateEntityHpBar: (entityId: string) => void;
   removeAndRespawnEntity: (ent: Entity) => void;
   addThreat: (amount: number) => void;
+  emitThreatOrb?: (worldX: number, worldY: number, amount: number) => void;
   broadcastEntityHit: (entityId: string, damage: number) => void;
   unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean) => void;
   updateCoreGemVisual: (territoryId: number) => void;
@@ -181,6 +182,7 @@ export class PlayerInteractionController {
       if (ent.hp <= 0) {
         sound.playBreak();
         this.ctx.removeAndRespawnEntity(ent);
+        this.ctx.emitThreatOrb?.(ent.x, ent.y, THREAT_WAVE_CONFIG.gatherThreatGain);
         this.ctx.addThreat(THREAT_WAVE_CONFIG.gatherThreatGain);
       }
       return;

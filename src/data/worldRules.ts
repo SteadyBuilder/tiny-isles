@@ -53,12 +53,16 @@ export const THREAT_WAVE_CONFIG = {
   warningThreshold: 80,
   /** 자원 채집(나무/바위/금광 파괴) 1회당 위협도 증가량 (%) */
   gatherThreatGain: 4,
+  /** 마물 사냥(처치) 1회당 위협도 증가량 (%) */
+  huntThreatGain: 2,
   /** 건물 건설 1회당 위협도 증가량 (%) */
   buildThreatGain: 12,
   /** 새 마을(영지) 해금 1회당 위협도 증가량 (%) */
   unlockThreatGain: 25,
   /** 마을 승급 1회당 위협도 증가량 (%) */
   upgradeThreatGain: 15,
+  /** 위협도 100% 도달 후 실제 침공까지 카운트다운 유예 시간 (초) */
+  imminentCountdownSec: 15,
   /** 정규 웨이브 N회마다 보스 웨이브 출현 (예: 3 -> 3번째마다 보스 침공) */
   bossEveryNWaves: 3,
   /** 조기 소환(즉시 침공 맞이하기) 시 처치 보상 보너스 배율 */

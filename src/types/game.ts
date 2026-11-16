@@ -189,6 +189,8 @@ export interface WaveState {
   waveCount: number;
   bossWaveCount: number;
   activeMonstersCount: number;
+  countdownSecondsRemaining: number | null;
+  nextWaveIsBoss: boolean;
   activeBoss: {
     id: string;
     name: string;
@@ -199,6 +201,12 @@ export interface WaveState {
   lastWaveMessage: string | null;
   onlineScaleLabel?: string;
   activeGarrisonCount?: number;
+}
+
+export interface ThreatOrbFxPayload {
+  startX: number;
+  startY: number;
+  amount: number;
 }
 
 export interface DynamicScalingProfile {

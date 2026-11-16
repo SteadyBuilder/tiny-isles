@@ -100,8 +100,20 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
               <Heart className="w-3 h-3 text-rose-400 fill-rose-500" />
               {isFainted ? '기절' : `${hpValue}/${hpMax}`}
             </span>
-            <span className={waveState.threatPercent >= waveState.warningThreshold ? 'text-red-300 animate-pulse' : 'text-amber-200'}>
-              🔥 <b>{waveState.threatPercent}%</b>
+            <span
+              id="threat-mobile-badge"
+              className={
+                waveState.countdownSecondsRemaining !== null ||
+                waveState.threatPercent >= waveState.warningThreshold
+                  ? 'text-red-300 animate-pulse'
+                  : 'text-amber-200'
+              }
+            >
+              {waveState.countdownSecondsRemaining !== null ? (
+                <>⏳ <b>{waveState.countdownSecondsRemaining}s</b></>
+              ) : (
+                <>🔥 <b>{waveState.threatPercent}%</b></>
+              )}
             </span>
             <span className="text-red-300">
               👹 <b>{waveState.wavesUntilBoss <= 1 ? '보스!' : `${waveState.wavesUntilBoss}W`}</b>

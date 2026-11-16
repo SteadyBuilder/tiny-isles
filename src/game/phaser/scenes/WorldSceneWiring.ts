@@ -117,6 +117,7 @@ export function createWorldControllersBundle(
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
+    emitThreatOrb: (wx, wy, amt) => host.effectsRenderer.emitThreatOrbFromWorld(wx, wy, amt),
     broadcastUnlock: (id, by, ownerId) =>
       host.systems.multiplayerSync?.broadcastUnlock(id, by, ownerId),
     broadcastVillageUpgrade: (id, tier) =>
@@ -157,6 +158,7 @@ export function createWorldControllersBundle(
     updateEntityHpBar: (id) => host.resourceEntityRenderer.updateHpBar(id),
     removeAndRespawnEntity: (ent) => host.resourceEntityRenderer.removeAndRespawn(ent),
     addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
+    emitThreatOrb: (wx, wy, amt) => host.effectsRenderer.emitThreatOrbFromWorld(wx, wy, amt),
     broadcastEntityHit: (id, dmg) => host.systems.multiplayerSync?.broadcastHit(id, dmg),
     unlockIslandLocally: (id, by, local) => territoryAction.unlockIslandLocally(id, by, local),
     updateCoreGemVisual: (id) => host.systems.coreGemSystem.updateCoreGemVisual(id),
