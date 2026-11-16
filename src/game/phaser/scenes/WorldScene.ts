@@ -145,6 +145,8 @@ export class WorldScene extends Phaser.Scene {
       getPlayerColor: () => this.playerColor,
       getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
       respawnPlayerAt: (x, y) => this.controllers?.playerMovement.respawnAt(x, y),
+      applyRestoredPlayerPosition: (x, y) =>
+        this.controllers?.playerMovement.applyRemoteRestoredPosition(x, y),
       onPlayerFaintedVisual: (fainted) => this.controllers?.playerMovement.setFaintedVisual(fainted),
       onPlayerHitVisual: () => this.controllers?.playerMovement.playHitVisual(),
       getLocalPlayerState: () => this.controllers.playerMovement.getState(),
@@ -233,6 +235,7 @@ export class WorldScene extends Phaser.Scene {
       drawTerrainDecorations: () => this.drawTerrainDecorations(),
       drawExpansionAltars: () => this.drawExpansionAltars(),
       getWallColliders: () => this.wallColliders,
+      getWaterBodies: () => this.terrainMap.waterBodies,
       terrainRenderer: this.terrainRenderer,
       altarRenderer: this.altarRenderer,
       effectsRenderer: this.effectsRenderer,

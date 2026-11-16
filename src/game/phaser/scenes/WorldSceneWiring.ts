@@ -19,6 +19,7 @@ import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
+import { WaterRect } from '../../world/MapTerrainGenerator';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
 import { isPlayDataResetting } from '../../../lib/adminResetService';
 
@@ -41,6 +42,7 @@ export interface IWorldControllersHost {
   drawTerrainDecorations: () => void;
   drawExpansionAltars: () => void;
   getWallColliders: () => Phaser.Physics.Arcade.StaticGroup | null;
+  getWaterBodies: () => ReadonlyArray<WaterRect>;
   terrainRenderer: TerrainRenderer;
   altarRenderer: ExpansionAltarRenderer;
   effectsRenderer: WorldEffectsRenderer;
@@ -184,6 +186,7 @@ export function createWorldControllersBundle(
     getBuildingColliders: () => host.territoryStructureRenderer.getBuildingColliders(),
     getWallColliders: host.getWallColliders,
     getWaterColliders: () => host.terrainRenderer.getWaterColliders(),
+    getWaterBodies: host.getWaterBodies,
     getIslands: host.getIslands,
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
     findTappedEntityVisual: (wx, wy) => host.resourceEntityRenderer.findTappedVisual(wx, wy),
@@ -236,9 +239,8 @@ export function createWorldControllersBundle(
       host.systems.coreGemSystem.damageTerritoryCore(id, dmg, '마물 침공 테스트', true),
     onWindowUnload: () => {
       if (isPlayDataResetting()) return;
-      if (host.systems.waveSystem?.getIsHost()) {
-        void host.systems.livingWorldCoordinator?.persistAllSnapshots();
-      }
+      playerMovement.persistPositionNow();
+      void host.systems.livingWorldCoordinator?.persistAllSnapshots();
     },
   });
 

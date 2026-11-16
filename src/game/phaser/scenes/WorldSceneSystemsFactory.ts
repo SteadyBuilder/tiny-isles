@@ -27,6 +27,7 @@ export interface IWorldSystemsHost {
   getPlayerColor: () => PlayerColor;
   getPlayerPosition: () => { x: number; y: number };
   respawnPlayerAt: (x: number, y: number) => void;
+  applyRestoredPlayerPosition?: (x: number, y: number) => void;
   onPlayerFaintedVisual: (fainted: boolean) => void;
   onPlayerHitVisual: () => void;
   getLocalPlayerState: () => {
@@ -170,6 +171,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       getIslands: host.getIslands,
       getConstructedBuildings: host.getConstructedBuildings,
       applySyncedWorldState: host.applySyncedWorldState,
+      applyRestoredPlayerPosition: host.applyRestoredPlayerPosition,
     },
     waveSystem,
     garrisonSystem

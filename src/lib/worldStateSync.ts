@@ -171,6 +171,36 @@ export const worldStateSync = {
     }
   },
 
+  fetchPlayerGarrison: async (playerId: string): Promise<GarrisonUnit | null> => {
+    if (!playerId) return null;
+    const localMatch = readLocalGarrisons().find((g) => g.playerId === playerId) ?? null;
+    try {
+      const { data, error } = await supabase
+        .from('player_garrisons')
+        .select('*')
+        .eq('player_id', playerId)
+        .maybeSingle();
+
+      if (error || !data) {
+        return localMatch;
+      }
+
+      const row = data as Record<string, unknown>;
+      return {
+        playerId: String(row.player_id ?? playerId),
+        name: String(row.name ?? '수비대'),
+        color: row.color === 'red' ? 'red' : 'blue',
+        territoryId: Number(row.territory_id ?? 0),
+        x: Number(row.x ?? TERRITORY_CORE_REL_X),
+        y: Number(row.y ?? TERRITORY_CORE_REL_Y),
+        power: Number(row.power ?? GARRISON_CONFIG.offlineDefensePowerPerGarrison),
+        updatedAt: String(row.updated_at ?? new Date().toISOString()),
+      };
+    } catch {
+      return localMatch;
+    }
+  },
+
   saveGarrison: async (unit: GarrisonUnit): Promise<boolean> => {
     const existing = readLocalGarrisons().filter((g) => g.playerId !== unit.playerId);
     writeLocalGarrisons([unit, ...existing].slice(0, 12));
