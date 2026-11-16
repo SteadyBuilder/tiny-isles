@@ -1,6 +1,6 @@
 import React from 'react';
-import { Target, Clock, Pause } from 'lucide-react';
 import { MissionProgressState, RoomMode } from '../types/room';
+import { PixelRoundButton } from './ui/PixelRoundButton';
 
 interface MissionHudBannerProps {
   progress: MissionProgressState | null;
@@ -32,33 +32,30 @@ export const MissionHudBanner: React.FC<MissionHudBannerProps> = ({
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 sm:bottom-auto sm:top-16 sm:left-4 sm:translate-x-0 z-30 pointer-events-auto">
-      <div className="flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-slate-950/85 border border-emerald-500/40 shadow-xl backdrop-blur-sm text-white">
-        <div className="flex items-center gap-1.5 text-emerald-300">
-          <Target className="w-4 h-4 shrink-0" />
-          <div className="text-xs font-bold leading-tight">
-            <div className="text-amber-300">{progress.title}</div>
-            <div className="text-[11px] text-slate-200">
-              {progress.goalLabel}: {progress.currentCount}/{progress.targetCount} ({pct}%)
-            </div>
+      <div className="wood-hud-panel flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#fef5df]">
+        <img src="/assets/ui/Icons/Icon_05.png" alt="" className="w-5 h-5 pixel-art shrink-0" />
+        <div className="text-xs font-bold leading-tight">
+          <div className="text-[#fde68a] font-black">{progress.title}</div>
+          <div className="text-[11px] text-[#f3e4c7]">
+            {progress.goalLabel}: {progress.currentCount}/{progress.targetCount} ({pct}%)
           </div>
         </div>
 
-        <div className="h-6 w-px bg-white/15" />
+        <div className="h-6 w-px bg-[#85532a]" />
 
-        <div className="flex items-center gap-1 text-xs font-mono font-bold text-slate-200">
-          <Clock className="w-3.5 h-3.5 text-slate-400" />
-          <span>{formatClock(remainingSec)}</span>
+        <div className="wood-hud-slot px-2 py-1 rounded-lg text-xs font-mono font-black text-[#fef3c7] tabular-nums">
+          {formatClock(remainingSec)}
         </div>
 
         {roomMode === 'solo' && onTogglePause && (
-          <button
-            type="button"
-            onClick={onTogglePause}
+          <PixelRoundButton
+            size="sm"
+            variant="blue"
+            label="II"
+            alt="일시정지"
             title="일시정지 (ESC)"
-            className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition"
-          >
-            <Pause className="w-3.5 h-3.5" />
-          </button>
+            onClick={onTogglePause}
+          />
         )}
       </div>
     </div>

@@ -98,4 +98,119 @@ html, body {
   box-shadow: 0 0 12px rgba(250, 204, 21, 0.75);
 }
 
+/* Tiny Swords 9-Slice Pixel Sprite UI System */
+.font-pixel-display {
+  font-family: 'Silkscreen', 'Pretendard', system-ui, sans-serif;
+}
 
+.pixel-title-outline {
+  text-shadow:
+    -3px -3px 0 #1b1008,
+     3px -3px 0 #1b1008,
+    -3px  3px 0 #1b1008,
+     3px  3px 0 #1b1008,
+     0px -3px 0 #1b1008,
+     0px  3px 0 #1b1008,
+    -3px  0px 0 #1b1008,
+     3px  0px 0 #1b1008,
+     0px  6px 0 #100904,
+     0px  8px 14px rgba(0, 0, 0, 0.75);
+}
+
+.pixel-btn-shadow {
+  text-shadow:
+    -1px -1px 0 rgba(16, 10, 6, 0.9),
+     1px -1px 0 rgba(16, 10, 6, 0.9),
+    -1px  1px 0 rgba(16, 10, 6, 0.9),
+     1px  1px 0 rgba(16, 10, 6, 0.9),
+     0px  2px 0 rgba(10, 6, 4, 0.95);
+}
+
+.ts-wood-frame {
+  border-style: solid;
+  border-width: 22px 20px 26px 20px;
+  border-image-source: url('/assets/ui/panel_wood_table.png');
+  border-image-slice: 44 38 50 38 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.75));
+}
+
+.ts-special-frame {
+  border-style: solid;
+  border-width: 24px;
+  border-image-source: url('/assets/ui/special_modal_384.png');
+  border-image-slice: 46 46 46 46 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.8));
+}
+
+.ts-paper-sheet {
+  border-style: solid;
+  border-width: 18px;
+  border-image-source: url('/assets/ui/paper_modal_384.png');
+  border-image-slice: 44 44 44 44 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  color: #2b1810;
+}
+
+.ts-wood-bar {
+  border-style: solid;
+  border-width: 12px 26px 12px 26px;
+  border-image-source: url('/assets/ui/bar_wood_384.png');
+  border-image-slice: 18 52 18 52 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.65));
+}
+
+.ts-btn-blue {
+  border-style: solid;
+  border-width: 16px 20px 18px 20px;
+  border-image-source: url('/assets/ui/btn_blue_rect.png');
+  border-image-slice: 34 40 38 40 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
+}
+
+.ts-btn-blue-pressed {
+  border-style: solid;
+  border-width: 18px 20px 16px 20px;
+  border-image-source: url('/assets/ui/btn_blue_rect_pressed.png');
+  border-image-slice: 36 40 36 40 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.ts-btn-red {
+  border-style: solid;
+  border-width: 16px 20px 18px 20px;
+  border-image-source: url('/assets/ui/btn_red_rect.png');
+  border-image-slice: 34 40 38 40 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
+}
+
+.ts-btn-red-pressed {
+  border-style: solid;
+  border-width: 18px 20px 16px 20px;
+  border-image-source: url('/assets/ui/btn_red_rect_pressed.png');
+  border-image-slice: 36 40 36 40 fill;
+  border-image-repeat: stretch;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-float-slow {
+  animation: floatSlow 3.4s ease-in-out infinite;
+}

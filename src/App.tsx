@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { PhaserGame } from './game/PhaserGame';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
@@ -6,11 +7,17 @@ import { VillageBuildModal } from './components/VillageBuildModal';
 import { TowerPlacementBanner } from './components/TowerPlacementBanner';
 import { MissionHudBanner } from './components/MissionHudBanner';
 import { MissionResultModal } from './components/MissionResultModal';
+import { HudSettingsModal } from './components/HudSettingsModal';
+import { HudHelpModal } from './components/HudHelpModal';
+import { SoundModal } from './components/SoundModal';
 import { LobbyScreen } from './components/lobby/LobbyScreen';
 import { RoomWaitingModal } from './components/lobby/RoomWaitingModal';
 import { MetaProgressionModal } from './components/lobby/MetaProgressionModal';
+import { PixelGameButton } from './components/ui/PixelGameButton';
+import { WoodModalFrame } from './components/ui/WoodModalFrame';
 import { ConstructableType } from './types/game';
 import { GameEvents } from './game/events/gameEvents';
+import { sound, SoundSettings } from './lib/sound';
 import { useGameShellState } from './hooks/useGameShellState';
 import { useRoomLobbyState } from './hooks/useRoomLobbyState';
 
@@ -76,6 +83,16 @@ export function App() {
     handleSelectOrUnlockTitle,
   } = useRoomLobbyState(playerId, profile.name, profile.color);
 
+  const [showLobbySettings, setShowLobbySettings] = useState(false);
+  const [showLobbySound, setShowLobbySound] = useState(false);
+  const [showLobbyHelp, setShowLobbyHelp] = useState(false);
+  const [soundSettings, setSoundSettings] = useState<SoundSettings>(() => sound.getSettings());
+
+  useEffect(() => {
+    const unsub = sound.subscribe((updated) => setSoundSettings(updated));
+    return () => unsub();
+  }, []);
+
   if (sessionStatus === 'lobby' || sessionStatus === 'waiting') {
     return (
       <>
@@ -87,6 +104,8 @@ export function App() {
           onCreateCoopRoom={handleCreateCoopRoom}
           onJoinCoopRoom={handleJoinCoopRoom}
           onOpenMetaModal={() => setShowMetaModal(true)}
+          onOpenSettingsModal={() => setShowLobbySettings(true)}
+          onOpenHelpModal={() => setShowLobbyHelp(true)}
         />
 
         {sessionStatus === 'waiting' && (
@@ -106,6 +125,23 @@ export function App() {
           onUpgradeTrait={handleUpgradeTrait}
           onSelectOrUnlockTitle={handleSelectOrUnlockTitle}
         />
+
+        <HudSettingsModal
+          isOpen={showLobbySettings}
+          onClose={() => setShowLobbySettings(false)}
+          playerName={profile.name}
+          setPlayerName={handleUpdateName}
+          playerColor={profile.color}
+          setPlayerColor={handleUpdateColor}
+          soundSettings={soundSettings}
+          isMuted={soundSettings.muted}
+          onToggleSound={() => sound.toggleMute()}
+          onOpenSoundModal={() => setShowLobbySound(true)}
+          onOpenHelp={() => setShowLobbyHelp(true)}
+        />
+
+        <SoundModal isOpen={showLobbySound} onClose={() => setShowLobbySound(false)} />
+        <HudHelpModal isOpen={showLobbyHelp} onClose={() => setShowLobbyHelp(false)} />
       </>
     );
   }
@@ -208,28 +244,35 @@ export function App() {
       <TowerPlacementBanner />
 
       {sessionStatus === 'paused' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="w-full max-w-xs rounded-3xl border border-amber-400/50 bg-slate-900 p-6 text-center text-white space-y-4 shadow-2xl">
-            <h2 className="text-xl font-black text-amber-300">일시정지</h2>
-            <p className="text-xs text-slate-300">솔로 원정 진행이 일시정지되었습니다.</p>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={toggleSoloPause}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm font-bold transition"
-              >
-                계속하기 (ESC)
-              </button>
-              <button
-                type="button"
-                onClick={handleLeaveToLobby}
-                className="w-full py-2.5 rounded-xl bg-red-600/80 hover:bg-red-500 text-sm font-bold transition"
-              >
-                원정 포기 및 로비로
-              </button>
-            </div>
+        <WoodModalFrame
+          title="일시정지"
+          ribbonVariant="blue"
+          maxWidthClass="max-w-xs"
+          onClose={toggleSoloPause}
+        >
+          <div className="ts-paper-sheet p-3 text-center">
+            <p className="text-xs font-bold text-[#4a301e]">
+              솔로 원정 진행이 일시정지되었습니다.
+            </p>
           </div>
-        </div>
+          <div className="flex flex-col gap-2">
+            <PixelGameButton
+              label="계속하기 (ESC)"
+              iconSrc="/assets/ui/Icons/Icon_05.png"
+              variant="blue"
+              size="md"
+              fullWidth
+              onClick={toggleSoloPause}
+            />
+            <PixelGameButton
+              label="원정 포기 및 로비로"
+              variant="red"
+              size="sm"
+              fullWidth
+              onClick={handleLeaveToLobby}
+            />
+          </div>
+        </WoodModalFrame>
       )}
 
       <MissionResultModal result={missionResult} onReturnToLobby={handleLeaveToLobby} />
