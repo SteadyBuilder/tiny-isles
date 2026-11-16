@@ -333,7 +333,29 @@ export class TerritoryActionController {
     ownerId?: string
   ): void {
     const target = this.ctx.getIslands().find((i) => i.id === islandId);
-    if (!target || target.unlocked) return;
+    if (!target) return;
+
+    if (target.unlocked) {
+      // 동시 점령 경합 시 결정론적 소유권 통일 (사전순으로 앞선 ownerId 우선)
+      if (
+        !isLocalTrigger &&
+        islandId !== 0 &&
+        ownerId &&
+        target.ownerId &&
+        ownerId !== target.ownerId &&
+        ownerId.localeCompare(target.ownerId) < 0
+      ) {
+        target.ownerId = ownerId;
+        target.ownerName = unlockedBy;
+        this.ctx.saveWorldState();
+        this.ctx.emitWorldStateToReact();
+        GameEvents.emit(
+          'game-alert',
+          `🚩 '${target.name}' 영지 소유권이 ${unlockedBy}님으로 확정되었습니다.`
+        );
+      }
+      return;
+    }
 
     const resolvedOwnerId = isLocalTrigger ? ownerId ?? this.ctx.getPlayerId() : ownerId;
     target.unlocked = true;
@@ -370,6 +392,35 @@ export class TerritoryActionController {
       this.ctx.broadcastUnlock(islandId, unlockedBy, resolvedOwnerId);
       this.ctx.addThreat(THREAT_WAVE_CONFIG.unlockThreatGain);
     }
+  }
+
+  public handleRemoteBuildingConstructed(cb: ConstructedBuilding): void {
+    if (!cb) return;
+    const constructedBuildings = this.ctx.getConstructedBuildings();
+    if (constructedBuildings.some((b) => b.id === cb.id)) return;
+
+    // 동시 건설 경합 체크: 동일 영지의 동일 슬롯(>=0) 또는 근접 자유 배치(-1)
+    const conflict = constructedBuildings.find((b) => {
+      if (b.territoryId !== cb.territoryId) return false;
+      if (cb.slotIndex >= 0 && b.slotIndex === cb.slotIndex) return true;
+      if (cb.slotIndex < 0 && b.slotIndex < 0) {
+        return Math.hypot(b.x - cb.x, b.y - cb.y) < 40;
+      }
+      return false;
+    });
+
+    if (conflict) {
+      // 결정론적 타이브레이크: id가 사전순으로 앞선 건물만 유지
+      if (conflict.id.localeCompare(cb.id) <= 0) {
+        return;
+      }
+      this.destroyConstructedBuilding(conflict.id, false);
+    }
+
+    constructedBuildings.push(cb);
+    this.ctx.spawnConstructedBuildingVisual(cb);
+    this.ctx.saveWorldState();
+    this.ctx.emitWorldStateToReact();
   }
 
   public applyRemoteBuildingHpSync(

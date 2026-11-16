@@ -179,14 +179,8 @@ export class WorldScene extends Phaser.Scene {
         this.controllers.territoryAction.unlockIslandLocally(id, by, local, ownerId),
       upgradeVillageRemotely: (id) =>
         this.controllers.territoryAction.handleUpgradeVillage(id, false),
-      onRemoteBuildingConstructed: (cb) => {
-        if (cb && !this.constructedBuildings.some((b) => b.id === cb.id)) {
-          this.constructedBuildings.push(cb);
-          this.constructedBuildingRenderer.spawnOne(cb);
-          this.persistence.saveWorldState();
-          this.persistence.emitWorldStateToReact();
-        }
-      },
+      onRemoteBuildingConstructed: (cb) =>
+        this.controllers?.territoryAction.handleRemoteBuildingConstructed(cb),
       onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
         this.controllers?.territoryAction.applyRemoteBuildingHpSync(
           buildingId,
