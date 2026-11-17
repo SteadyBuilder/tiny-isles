@@ -106,3 +106,32 @@ export interface DungeonPortalState {
   remainingSpawns: number;
   totalSpawns: number;
 }
+
+export interface FieldMonsterUnitSpec {
+  type: import('./game').MonsterType;
+  role: MonsterCombatRole;
+  name: string;
+  count: number;
+  hp: number;
+  attack: number;
+  speed: number;
+  expReward: number;
+  eliteChance?: number;
+}
+
+export interface FieldMonsterPackTemplate {
+  id: string;
+  ring: 1 | 2 | 3 | 4;
+  label: string;
+  guaranteedElite: boolean;
+  units: FieldMonsterUnitSpec[];
+}
+
+export interface HuntingScalingFactors {
+  hpMult: number;
+  atkMult: number;
+  countMult: number;
+  eliteChance: number;
+  scalingLabel: string;
+}
+

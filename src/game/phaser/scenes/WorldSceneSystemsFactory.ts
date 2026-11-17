@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { FIELD_MONSTER_CONFIG } from '../../../data/fieldMonsters';
 import { rollMonsterDropItem } from '../../../data/items';
 import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
@@ -13,6 +14,7 @@ import {
 import { MissionDifficultyConfig, RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
+import { FieldMonsterSystem } from '../../systems/FieldMonsterSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
 import { MonsterCampSystem } from '../../systems/MonsterCampSystem';
 import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
@@ -21,6 +23,7 @@ import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
+import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 import { CombatFeedbackRenderer } from '../renderers/CombatFeedbackRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
@@ -57,6 +60,7 @@ export interface IWorldSystemsHost {
   };
   getCurrentTerritoryId: () => number;
   getIslands: () => Island[];
+  getTerrainMap: () => WorldTerrainMap;
   getConstructedBuildings: () => ConstructedBuilding[];
   getInventory: () => Inventory;
   spendResources: (wood: number, stone: number, gold: number) => void;
@@ -96,6 +100,7 @@ export interface WorldSystemsBundle {
   projectileSystem: ProjectileSystem;
   playerProgressionSystem: PlayerProgressionSystem;
   monsterCampSystem: MonsterCampSystem;
+  fieldMonsterSystem: FieldMonsterSystem;
   waveSystem: WaveSystem;
   towerDefenseSystem: TowerDefenseSystem;
   garrisonSystem: GarrisonSystem;
@@ -103,11 +108,12 @@ export interface WorldSystemsBundle {
 }
 
 /**
- * CoreGem, PlayerHealth, Projectile, PlayerProgression, MonsterCamp, Wave, TowerDefense, Garrison, MultiplayerSync 팩토리
+ * CoreGem, PlayerHealth, Projectile, PlayerProgression, MonsterCamp, FieldMonster, Wave, TowerDefense, Garrison, MultiplayerSync 팩토리
  */
 export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsBundle {
   let multiplayerSync!: MultiplayerSyncController;
   let monsterCampSystem!: MonsterCampSystem;
+  let fieldMonsterSystem!: FieldMonsterSystem;
   let playerProgressionSystem!: PlayerProgressionSystem;
 
   const projectileSystem = new ProjectileSystem(host.scene);
@@ -155,10 +161,14 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
         host.combatFeedbackRenderer.playHitImpact(opts, restoreTint),
       onMonsterKilledReward: (x, y, isBoss, expReward, isCampMonster, meta) => {
         playerProgressionSystem?.gainExp(expReward);
-        // 사냥 특화 모드에서는 몬스터 웨이브(던전 침공) 처치 시 위협도 미증가, 부락 주둔 마물만 증가
+        // 사냥 특화 모드에서는 던전 침공 마물 처치 시 위협도 미증가, 부락 마물(+5%) 및 야생 필드 마물(+1%) 처치 시 상승
         if (isCampMonster || !host.isHuntingMode()) {
           waveSystem.addThreat(THREAT_WAVE_CONFIG.huntThreatGain, true);
           host.effectsRenderer.emitThreatOrbFromWorld(x, y, THREAT_WAVE_CONFIG.huntThreatGain);
+        } else if (meta?.isFieldMonster) {
+          const fieldGain = FIELD_MONSTER_CONFIG.threatGainOnKill;
+          waveSystem.addThreat(fieldGain, true);
+          host.effectsRenderer.emitThreatOrbFromWorld(x, y, fieldGain);
         }
         // 사냥 특화 모드: 일반·정예·보스 처치 시 디아블로식 필드 장비 드랍
         if (host.isHuntingMode()) {
@@ -286,6 +296,16 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     },
   });
 
+  fieldMonsterSystem = new FieldMonsterSystem({
+    scene: host.scene,
+    isHuntingMode: host.isHuntingMode,
+    isHost: () => waveSystem.getIsHost(),
+    getDifficultyConfig: host.getDifficultyConfig,
+    getIslands: host.getIslands,
+    getTerrainMap: host.getTerrainMap,
+    getMonsters: () => waveSystem.getMonsterVisuals(),
+  });
+
   const towerDefenseSystem = new TowerDefenseSystem(
     {
       scene: host.scene,
@@ -310,6 +330,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getLocalPlayerState: host.getLocalPlayerState,
     onOnlineCountChanged: (count) => {
       waveSystem.setOnlineCount(count);
+      monsterCampSystem.setOnlineCount(count);
+      fieldMonsterSystem.setOnlineCount(count);
       if (waveSystem.getIsHost()) {
         const ws = waveSystem.getWaveState();
         multiplayerSync?.broadcastThreatSync(ws.threatPercent, ws.waveCount, ws.bossWaveCount);
@@ -372,6 +394,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     projectileSystem,
     playerProgressionSystem,
     monsterCampSystem,
+    fieldMonsterSystem,
     waveSystem,
     towerDefenseSystem,
     garrisonSystem,

@@ -18,6 +18,7 @@ import {
   nearestPointOnCollisionBox,
   resolveMonsterWallClamping,
 } from '../wallCollisionGeometry';
+import { FieldMonsterAI } from './FieldMonsterAI';
 import { MonsterRangedMageAI } from './MonsterRangedMageAI';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
@@ -46,7 +47,7 @@ export interface IMonsterCombatContext {
     isBoss: boolean,
     expReward: number,
     isCampMonster: boolean,
-    meta?: { isElite: boolean; campRing?: 1 | 2 | 3 | 4 }
+    meta?: { isElite: boolean; isFieldMonster?: boolean; campRing?: 1 | 2 | 3 | 4 }
   ) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
@@ -68,7 +69,7 @@ interface MonsterAggroTarget {
 }
 
 /**
- * 마물 웨이브 유닛의 목표 영지 추적, 플레이어 반격 어그로, 부락 수비병 AI,
+ * 마물 웨이브 유닛의 목표 영지 추적, 플레이어 반격 어그로, 부락 수비병·야생 필드 몬스터 AI,
  * 100마리 군집 분리(SpatialGrid Separation) 및 성벽/건물/본진 공격 AI 전담 모듈
  */
 export class MonsterCombatAI {
@@ -77,6 +78,7 @@ export class MonsterCombatAI {
   private aggroTargets = new Map<string, MonsterAggroTarget>();
   private spatialGrid = new MonsterSpatialGrid();
   private rangedMageAI: MonsterRangedMageAI;
+  private fieldMonsterAI: FieldMonsterAI;
 
   constructor(ctx: IMonsterCombatContext) {
     this.ctx = ctx;
@@ -89,6 +91,12 @@ export class MonsterCombatAI {
       projectileSystem: ctx.projectileSystem,
       playExplosionAt: ctx.playExplosionAt,
       showFloatingText: ctx.showFloatingText,
+    });
+    this.fieldMonsterAI = new FieldMonsterAI({
+      getLocalPlayerPosition: ctx.getLocalPlayerPosition,
+      isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      executeRoleAttackOnPlayer: (mv, tx, ty) =>
+        this.rangedMageAI.executeRoleAttackOnPlayer(mv, tx, ty),
     });
   }
 
@@ -122,6 +130,21 @@ export class MonsterCombatAI {
       // 0-A순위: 몬스터 부락 주둔 수비병(근거리/창병/원거리/마법사) AI
       if (
         this.rangedMageAI.tryUpdateCampMonster(
+          mv,
+          time,
+          dt,
+          aliveWalls,
+          sep.pushX,
+          sep.pushY,
+          hasActiveAggro
+        )
+      ) {
+        continue;
+      }
+
+      // 0-A2순위: 야생 필드 몬스터(영역 순찰 + 근접 선공) AI
+      if (
+        this.fieldMonsterAI.tryUpdateFieldMonster(
           mv,
           time,
           dt,
@@ -424,6 +447,7 @@ export class MonsterCombatAI {
     this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
     this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss, expReward, Boolean(deadM.isCampMonster), {
       isElite: Boolean(deadM.isElite),
+      isFieldMonster: Boolean(deadM.isFieldMonster),
       campRing: deadM.campRing,
     });
     return true;
@@ -453,6 +477,7 @@ export class MonsterCombatAI {
         this.aggroTargets.delete(id);
       }
     }
+    this.fieldMonsterAI.pruneStaleState(validIds);
   }
 
   public aggroCampMonsters(campTerritoryId: number, playerId: string): void {

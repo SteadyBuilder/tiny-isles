@@ -33,7 +33,7 @@ export interface IWaveSystemContext {
     isBoss: boolean,
     expReward: number,
     isCampMonster: boolean,
-    meta?: { isElite: boolean; campRing?: 1 | 2 | 3 | 4 }
+    meta?: { isElite: boolean; isFieldMonster?: boolean; campRing?: 1 | 2 | 3 | 4 }
   ) => void;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
@@ -376,7 +376,7 @@ export class WaveSystem {
   public emitWaveState(): void {
     let activeInvaders = 0;
     for (const mv of this.monsters.values()) {
-      if (!mv.monster.isCampMonster) activeInvaders++;
+      if (!mv.monster.isCampMonster && !mv.monster.isFieldMonster) activeInvaders++;
     }
     this.waveState.activeMonstersCount = activeInvaders;
     let bossInfo = null;
@@ -432,10 +432,16 @@ export class WaveSystem {
       }
     }
 
-    const hasMonsters = this.waveState.activeMonstersCount > 0;
-    if (hasMonsters) {
+    const hasInvaders = this.waveState.activeMonstersCount > 0;
+    const hasCoOpMonsters = this.onlineCount > 1 && this.monsters.size > 0;
+    const shouldSync = hasInvaders || hasCoOpMonsters;
+    const syncInterval = hasInvaders
+      ? WORLD_CLOCK_CONFIG.monsterSyncIntervalMs
+      : WORLD_CLOCK_CONFIG.monsterSyncIntervalMs * 2;
+
+    if (shouldSync) {
       this.monsterSyncAccumMs += delta;
-      if (this.monsterSyncAccumMs >= WORLD_CLOCK_CONFIG.monsterSyncIntervalMs) {
+      if (this.monsterSyncAccumMs >= syncInterval) {
         this.monsterSyncAccumMs = 0;
         this.ctx.broadcastMonstersSync?.(
           this.getMonsters(),
@@ -453,7 +459,7 @@ export class WaveSystem {
     } else {
       this.monsterSyncAccumMs = 0;
     }
-    this.hadMonstersLastTick = hasMonsters;
+    this.hadMonstersLastTick = shouldSync;
   }
 
   public spawnMonsterWave(
@@ -475,7 +481,7 @@ export class WaveSystem {
     const diffHpMult = diff?.monsterHpMultiplier ?? 1;
     const diffAtkMult = diff?.monsterAttackMultiplier ?? 1;
 
-    // 사냥 특화 모드: 위협도 100% 도달 시 심연의 던전 게이트 출현 -> 마물 100마리 중앙 마을 진격!
+    // 사냥 특화 모드: 위협도 100% 도달 시 심연의 던전 게이트 출현 -> 마물 대군 중앙 마을 진격!
     if (this.ctx.isHuntingMode?.()) {
       const dng = this.dungeonSpawner.startDungeonInvasion({
         onlineCount: this.onlineCount,
@@ -487,7 +493,7 @@ export class WaveSystem {
       });
       if (!dng) return;
 
-      const dngMsg = `🌀 [${dng.scalingLabel}] ${dng.directionLabel}에 심연의 던전 게이트가 열렸습니다! 마물 100마리와 수문장이 중앙 마을로 총진격합니다!${bonusSuffix}`;
+      const dngMsg = `🌀 [${dng.scalingLabel}] ${dng.directionLabel}에 심연의 던전 게이트가 열렸습니다! 마물 ${dng.totalSpawns}마리와 수문장이 중앙 마을로 총진격합니다!${bonusSuffix}`;
       this.waveState.lastWaveMessage = dngMsg;
       sound.playBreak();
       GameEvents.emit('game-alert', dngMsg);

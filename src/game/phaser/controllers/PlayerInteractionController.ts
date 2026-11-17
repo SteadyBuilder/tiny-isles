@@ -69,6 +69,7 @@ export interface IPlayerInteractionContext {
  */
 export class PlayerInteractionController {
   private ctx: IPlayerInteractionContext;
+  private lastCombatAttackTime = 0;
 
   constructor(ctx: IPlayerInteractionContext) {
     this.ctx = ctx;
@@ -78,14 +79,16 @@ export class PlayerInteractionController {
     if (this.ctx.isPlayerFainted()) return;
 
     const { scene } = this.ctx;
-    this.ctx.markInteractTime(scene.time.now);
+    const now = scene.time.now;
+    this.ctx.markInteractTime(now);
     const { x: px, y: py } = this.ctx.getPlayerPosition();
 
     const classDef = this.ctx.getPlayerClassDef?.();
     const baseRange = classDef?.attackRange ?? PLAYER_COMBAT_CONFIG.meleeRangeRegular;
     const attackDamage = this.ctx.getPlayerAttackDamage?.() ?? PLAYER_COMBAT_CONFIG.meleeDamage;
+    const attackCooldownMs = classDef?.attackCooldownMs ?? 320;
 
-    // 1. 마물 타격 (전직 클래스별 사거리·원거리·광역·관통 특성 반영)
+    // 1. 마물 타격 (전직 클래스별 사거리·원거리·광역·관통·공격 쿨타임 반영)
     const targetsInRange: Array<{ mv: MonsterVisual; dist: number }> = [];
     for (const mv of this.ctx.getMonsterVisuals().values()) {
       const range = mv.monster.isBoss
@@ -99,6 +102,9 @@ export class PlayerInteractionController {
     targetsInRange.sort((a, b) => a.dist - b.dist);
 
     if (targetsInRange.length > 0) {
+      if (now - this.lastCombatAttackTime < attackCooldownMs) return;
+      this.lastCombatAttackTime = now;
+
       this.ctx.playPlayerAnimation('axe');
       scene.time.delayedCall(250, () => {
         if (this.ctx.getCurrentAction() === 'axe') {
@@ -161,15 +167,18 @@ export class PlayerInteractionController {
     }
 
     // 1-B. 사냥 특화 모드: 몬스터 부락 본진 건물 직접 타격
-    if (this.ctx.tryAttackCampCore?.(px, py, baseRange, attackDamage)) {
-      this.ctx.playPlayerAnimation('axe');
-      scene.time.delayedCall(250, () => {
-        if (this.ctx.getCurrentAction() === 'axe') {
-          this.ctx.playPlayerAnimation('idle');
-        }
-      });
-      sound.playChop();
-      return;
+    if (now - this.lastCombatAttackTime >= attackCooldownMs) {
+      if (this.ctx.tryAttackCampCore?.(px, py, baseRange, attackDamage)) {
+        this.lastCombatAttackTime = now;
+        this.ctx.playPlayerAnimation('axe');
+        scene.time.delayedCall(250, () => {
+          if (this.ctx.getCurrentAction() === 'axe') {
+            this.ctx.playPlayerAnimation('idle');
+          }
+        });
+        sound.playChop();
+        return;
+      }
     }
 
     // 2. 건설된 '왕국 전직소(job_hall)' 앞에서 상호작용 시 전직 창 열기

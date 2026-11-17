@@ -146,8 +146,8 @@ export class MonsterVisualManager {
     const isFlashing = now < mv.hpFlashUntil;
     const hasTrail = mv.hpTrailRatio > ratio + 0.002;
 
-    // 100마리 대군/부락 환경에서 아직 피격되지 않은 일반 몬스터는 HP바 드로우콜 생략
-    if (!m.isBoss && ratio >= 0.999 && !hasTrail && !isFlashing) {
+    // 100마리 대군/부락 환경에서 아직 피격되지 않은 일반 몬스터는 HP바 드로우콜 생략 (보스/엘리트는 항상 표시)
+    if (!m.isBoss && !m.isElite && ratio >= 0.999 && !hasTrail && !isFlashing) {
       mv.hpBar.clear();
       mv.hpBar.setVisible(false);
       return;

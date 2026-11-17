@@ -1,12 +1,8 @@
 import Phaser from 'phaser';
-import {
-  ELITE_SPAWN_CHANCE_BY_DIFFICULTY,
-  pickRandomEliteAffix,
-} from '../../data/elites';
+import { pickRandomEliteAffix } from '../../data/elites';
 import { rollCampRewardItem } from '../../data/items';
 import {
   CAMP_RING_TEMPLATES,
-  HUNTING_AI_CONFIG,
   computeCampRing,
 } from '../../data/monsterCamps';
 import { sound } from '../../lib/sound';
@@ -24,6 +20,8 @@ import {
 } from '../constants';
 import { ySortDepth } from '../depthLayers';
 import { GameEvents } from '../events/gameEvents';
+import { HuntingScalingFactors } from '../../types/hunting';
+import { computeHuntingScaling } from '../utils/huntingScalingUtils';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 
 interface CampVisualNode {
@@ -69,27 +67,69 @@ export class MonsterCampSystem {
   private ctx: IMonsterCampContext;
   private campNodes = new Map<number, CampVisualNode>();
   private respawnAccumMs = 0;
+  private onlineCount = 1;
+  private appliedHpMult = 1;
+  private appliedAtkMult = 1;
 
   constructor(ctx: IMonsterCampContext) {
     this.ctx = ctx;
   }
 
-  private getDifficultyMultipliers(): { hpMult: number; atkMult: number; countMult: number } {
-    const diff = this.ctx.getDifficultyConfig?.();
-    if (!diff) {
-      return { hpMult: 1, atkMult: 1, countMult: 1 };
+  private getDifficultyMultipliers(): HuntingScalingFactors {
+    return computeHuntingScaling(this.ctx.getDifficultyConfig?.(), this.onlineCount);
+  }
+
+  public setOnlineCount(count: number): void {
+    const nextCount = Math.max(1, count);
+    if (nextCount === this.onlineCount) return;
+
+    const prevHpMult = this.appliedHpMult;
+    const prevAtkMult = this.appliedAtkMult;
+    this.onlineCount = nextCount;
+
+    if (!this.ctx.isHuntingMode() || this.campNodes.size === 0) return;
+
+    const scaling = this.getDifficultyMultipliers();
+    const hpRatio = prevHpMult > 0 ? scaling.hpMult / prevHpMult : 1;
+    const atkRatio = prevAtkMult > 0 ? scaling.atkMult / prevAtkMult : 1;
+    this.appliedHpMult = scaling.hpMult;
+    this.appliedAtkMult = scaling.atkMult;
+
+    if (Math.abs(hpRatio - 1) <= 0.01 && Math.abs(atkRatio - 1) <= 0.01) return;
+
+    const islands = this.ctx.getIslands();
+    for (const node of this.campNodes.values()) {
+      const { camp } = node;
+      if (!camp.destroyed) {
+        const coreRatio = camp.coreHp / Math.max(1, camp.coreMaxHp);
+        camp.coreMaxHp = Math.max(1, Math.round(camp.coreMaxHp * hpRatio));
+        camp.coreHp = Math.max(1, Math.round(camp.coreMaxHp * coreRatio));
+        this.updateCampHpVisual(node, false);
+        const isl = islands.find((i) => i.id === camp.territoryId);
+        if (isl) {
+          isl.coreMaxHp = camp.coreMaxHp;
+          isl.coreHp = camp.coreHp;
+        }
+      }
     }
-    return {
-      hpMult: diff.monsterHpMultiplier,
-      atkMult: diff.monsterAttackMultiplier,
-      countMult: HUNTING_AI_CONFIG.campCountMultiplierByDifficulty[diff.id] ?? 1,
-    };
+
+    for (const mv of this.ctx.getMonsters().values()) {
+      const m = mv.monster;
+      if (!m.isCampMonster || m.hp <= 0) continue;
+      const hpPct = m.hp / Math.max(1, m.maxHp);
+      m.maxHp = Math.max(1, Math.round(m.maxHp * hpRatio));
+      m.hp = Math.max(1, Math.round(m.maxHp * hpPct));
+      m.attack = Math.max(1, Math.round(m.attack * atkRatio));
+      MonsterVisualManager.updateHpBar(mv, false);
+    }
   }
 
   public initializeCamps(): void {
     if (!this.ctx.isHuntingMode()) return;
 
-    const { hpMult } = this.getDifficultyMultipliers();
+    const { hpMult, atkMult } = this.getDifficultyMultipliers();
+    this.appliedHpMult = hpMult;
+    this.appliedAtkMult = atkMult;
     const islands = this.ctx.getIslands();
     for (const isl of islands) {
       if (isl.id === 0) continue; // 중앙 본거지(id: 0)만 유일한 수호 마을로 유지
@@ -246,16 +286,15 @@ export class MonsterCampSystem {
     const cx = origin.x + TERRITORY_CENTER_X;
     const cy = origin.y + TERRITORY_CENTER_Y;
     const monsters = this.ctx.getMonsters();
-    const { hpMult, atkMult, countMult } = this.getDifficultyMultipliers();
+    const { hpMult, atkMult, countMult, eliteChance } = this.getDifficultyMultipliers();
     const clearScale = 1 + camp.clearCount * 0.25;
     const totalSpecsCount = tpl.garrisonSpecs.reduce(
       (sum, s) => sum + Math.max(1, Math.round(s.count * countMult)),
       0
     );
 
-    const diffId = this.ctx.getDifficultyConfig?.()?.id ?? 'normal';
-    const eliteChance = ELITE_SPAWN_CHANCE_BY_DIFFICULTY[diffId] ?? 0.14;
-    let eliteSpawnedInCamp = false;
+    const minGuaranteedElites = camp.ring >= 3 ? 2 : 1;
+    let elitesSpawnedInCamp = 0;
 
     let idx = 0;
     for (const spec of tpl.garrisonSpecs) {
@@ -266,10 +305,12 @@ export class MonsterCampSystem {
         const mx = cx + Math.cos(angle) * dist;
         const my = cy + Math.sin(angle) * dist;
 
-        const forceElite = camp.ring >= 2 && !eliteSpawnedInCamp && idx === totalSpecsCount - 1;
+        const remainingSlots = totalSpecsCount - idx;
+        const neededElites = minGuaranteedElites - elitesSpawnedInCamp;
+        const forceElite = neededElites > 0 && remainingSlots <= neededElites;
         const isElite = forceElite || Math.random() < eliteChance;
         const affix = isElite ? pickRandomEliteAffix() : null;
-        if (isElite) eliteSpawnedInCamp = true;
+        if (isElite) elitesSpawnedInCamp++;
 
         const hp = Math.round(spec.hp * clearScale * hpMult * (affix?.hpMultiplier ?? 1));
         const attack = Math.round(spec.attack * clearScale * atkMult * (affix?.attackMultiplier ?? 1));

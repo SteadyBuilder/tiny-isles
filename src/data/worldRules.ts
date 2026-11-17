@@ -16,9 +16,9 @@ export const WORLD_CLOCK_CONFIG = {
  */
 export const ONLINE_SCALING_PROFILES: DynamicScalingProfile[] = [
   { minPlayers: 1, maxPlayers: 1, countMultiplier: 1.0, hpMultiplier: 1.0, attackMultiplier: 1.0, label: '1인 수호' },
-  { minPlayers: 2, maxPlayers: 2, countMultiplier: 1.4, hpMultiplier: 1.25, attackMultiplier: 1.1, label: '2인 협동' },
-  { minPlayers: 3, maxPlayers: 3, countMultiplier: 1.8, hpMultiplier: 1.5, attackMultiplier: 1.2, label: '3인 연합' },
-  { minPlayers: 4, maxPlayers: 99, countMultiplier: 2.2, hpMultiplier: 1.85, attackMultiplier: 1.3, label: '4인+ 총력전' },
+  { minPlayers: 2, maxPlayers: 2, countMultiplier: 1.35, hpMultiplier: 1.35, attackMultiplier: 1.15, label: '2인 협동' },
+  { minPlayers: 3, maxPlayers: 3, countMultiplier: 1.7, hpMultiplier: 1.7, attackMultiplier: 1.28, label: '3인 연합' },
+  { minPlayers: 4, maxPlayers: 99, countMultiplier: 2.1, hpMultiplier: 2.1, attackMultiplier: 1.4, label: '4인+ 총력전' },
 ];
 
 /**
@@ -76,7 +76,7 @@ export const PLAYER_COMBAT_CONFIG = {
   /** 플레이어 최대 체력 */
   maxHp: 100,
   /** 플레이어 근접 공격 기본 데미지 */
-  meleeDamage: 35,
+  meleeDamage: 28,
   /** 일반 몬스터 근접 공격 사거리 (px) - 자원 채집 거리와 동일 수준 */
   meleeRangeRegular: 60,
   /** 보스 몬스터 근접 공격 사거리 (px) */

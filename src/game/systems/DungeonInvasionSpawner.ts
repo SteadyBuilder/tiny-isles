@@ -62,7 +62,7 @@ export class DungeonInvasionSpawner {
     difficultyId?: RoomDifficultyId;
     difficultyHpMultiplier?: number;
     difficultyAttackMultiplier?: number;
-  }): { directionLabel: string; scalingLabel: string } | null {
+  }): { directionLabel: string; scalingLabel: string; totalSpawns: number } | null {
     const islands = this.ctx.getIslands();
     const edgeSpawn = pickRandomMapEdgeSpawn(islands);
     if (!edgeSpawn) return null;
@@ -70,15 +70,19 @@ export class DungeonInvasionSpawner {
     this.clearTimersAndPortal();
 
     const scaling = getDynamicScalingProfile(params.onlineCount);
-    const totalToSpawn = DUNGEON_INVASION_CONFIG.totalMonsterCount;
+    const totalToSpawn = Math.round(
+      DUNGEON_INVASION_CONFIG.totalMonsterCount * scaling.countMultiplier
+    );
     const pulses = DUNGEON_INVASION_CONFIG.pulseCount;
-    const perPulse = Math.floor(totalToSpawn / pulses);
+    const perPulse = Math.max(1, Math.floor(totalToSpawn / pulses));
     const waveScale = 1 + Math.max(0, params.waveCount - 1) * 0.15;
     const diffHpMult = params.difficultyHpMultiplier ?? 1;
     const diffAtkMult = params.difficultyAttackMultiplier ?? 1;
     const finalHpMult = scaling.hpMultiplier * waveScale * diffHpMult;
     const finalAtkMult = scaling.attackMultiplier * waveScale * diffAtkMult;
-    const eliteChance = ELITE_SPAWN_CHANCE_BY_DIFFICULTY[params.difficultyId ?? 'normal'] ?? 0.14;
+    const baseEliteChance = ELITE_SPAWN_CHANCE_BY_DIFFICULTY[params.difficultyId ?? 'normal'] ?? 0.2;
+    const coOpEliteBonus = Math.min(0.18, Math.max(0, params.onlineCount - 1) * 0.05);
+    const eliteChance = Math.min(0.65, baseEliteChance + coOpEliteBonus);
 
     this.portalState = {
       active: true,
@@ -88,21 +92,27 @@ export class DungeonInvasionSpawner {
       remainingSpawns: totalToSpawn,
       totalSpawns: totalToSpawn,
     };
-    this.createPortalVisual(edgeSpawn.spawnX, edgeSpawn.spawnY, edgeSpawn.directionLabel);
+    this.createPortalVisual(
+      edgeSpawn.spawnX,
+      edgeSpawn.spawnY,
+      edgeSpawn.directionLabel,
+      totalToSpawn
+    );
     GameEvents.emit('dungeon-portal-updated', { ...this.portalState });
 
-    // 즉시 1차 펄스(20마리) 스폰 후 1.35초 간격으로 나머지 4차례 펄스 스폰 (총 100마리)
+    // 즉시 1차 펄스 스폰 후 일정 간격으로 나머지 4차례 펄스 스폰 (총 totalToSpawn마리)
     this.spawnPulseBatch(edgeSpawn.spawnX, edgeSpawn.spawnY, perPulse, 0, finalHpMult, finalAtkMult, eliteChance, false);
 
     for (let p = 1; p < pulses; p++) {
       const isFinalPulse = p === pulses - 1;
+      const batchCount = isFinalPulse ? totalToSpawn - perPulse * (pulses - 1) : perPulse;
       const timer = this.ctx.scene.time.delayedCall(
         p * DUNGEON_INVASION_CONFIG.pulseIntervalMs,
         () => {
           this.spawnPulseBatch(
             edgeSpawn.spawnX,
             edgeSpawn.spawnY,
-            perPulse,
+            batchCount,
             p,
             finalHpMult,
             finalAtkMult,
@@ -122,6 +132,7 @@ export class DungeonInvasionSpawner {
     return {
       directionLabel: edgeSpawn.directionLabel,
       scalingLabel: scaling.label,
+      totalSpawns: totalToSpawn,
     };
   }
 
@@ -209,7 +220,12 @@ export class DungeonInvasionSpawner {
     this.ctx.onPulseSpawned();
   }
 
-  private createPortalVisual(x: number, y: number, directionLabel: string): void {
+  private createPortalVisual(
+    x: number,
+    y: number,
+    directionLabel: string,
+    totalSpawns: number
+  ): void {
     const { scene } = this.ctx;
     const container = scene.add.container(x, y);
     container.setDepth(DEPTH.INVASION_OVERLAY + 5);
@@ -224,7 +240,7 @@ export class DungeonInvasionSpawner {
     container.add(g);
 
     const label = scene.add
-      .text(0, -135, `🌀 심연의 던전 게이트 (${directionLabel} 100마리 진격!)`, {
+      .text(0, -135, `🌀 심연의 던전 게이트 (${directionLabel} ${totalSpawns}마리 진격!)`, {
         fontFamily: 'Pretendard, sans-serif',
         fontSize: '15px',
         fontStyle: 'bold',

@@ -223,6 +223,7 @@ export class WorldScene extends Phaser.Scene {
       getLocalPlayerState: () => this.controllers.playerMovement.getState(),
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,
+      getTerrainMap: () => this.terrainMap,
       getConstructedBuildings: () => this.constructedBuildings,
       getInventory: () => this.inventory,
       spendResources: (wood, stone, gold) => this.spendResources(wood, stone, gold),
@@ -283,8 +284,9 @@ export class WorldScene extends Phaser.Scene {
       resourceEntityRenderer: this.resourceEntityRenderer,
     });
 
-    // 3. Spawn World Cores, Monster Camps (Hunting Mode) & Resource Entities
+    // 3. Spawn World Cores, Monster Camps & Field Monsters (Hunting Mode) & Resource Entities
     this.systems.monsterCampSystem.initializeCamps();
+    this.systems.fieldMonsterSystem.initializeFieldMonsters();
     this.territoryStructureRenderer.spawnAllTerritoryCores(
       this.islands,
       this.systems.coreGemSystem
@@ -363,6 +365,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems.projectileSystem.update(time, delta);
     this.systems.playerProgressionSystem.update(delta);
     this.systems.monsterCampSystem.update(delta);
+    this.systems.fieldMonsterSystem.update(delta);
     this.systems.towerDefenseSystem.update(time, delta);
     this.systems.garrisonSystem.update(time, delta);
     this.missionSystem.setCampConqueredCount(
@@ -432,6 +435,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems?.playerHealthSystem?.destroy();
     this.systems?.projectileSystem?.destroy();
     this.systems?.monsterCampSystem?.destroy();
+    this.systems?.fieldMonsterSystem?.destroy();
     this.systems?.waveSystem?.destroy();
     this.systems?.coreGemSystem?.clearAllVisuals();
     this.territoryStructureRenderer?.destroy();

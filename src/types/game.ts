@@ -206,10 +206,12 @@ export interface Monster {
   direction: 'left' | 'right';
   role?: MonsterCombatRole;
   isCampMonster?: boolean;
+  isFieldMonster?: boolean;
   campTerritoryId?: number;
   campRing?: 1 | 2 | 3 | 4;
   homeX?: number;
   homeY?: number;
+  patrolRadiusPx?: number;
   expReward?: number;
 }
 
