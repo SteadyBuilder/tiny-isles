@@ -18,7 +18,7 @@ export const LobbyDioramaCanvas: React.FC = () => {
       parent,
       width: window.innerWidth,
       height: window.innerHeight,
-      backgroundColor: '#256c78',
+      backgroundColor: '#6ca94b',
       pixelArt: true,
       roundPixels: true,
       scale: {
@@ -34,7 +34,7 @@ export const LobbyDioramaCanvas: React.FC = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-0 bg-[#256c78]">
+    <div className="fixed inset-0 z-0 bg-[#6ca94b]">
       <div ref={containerRef} className="w-full h-full" />
       {/* Subtle atmospheric vignette for crisp title readability without hiding the world */}
       <div

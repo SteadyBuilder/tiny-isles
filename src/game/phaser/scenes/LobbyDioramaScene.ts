@@ -1,4 +1,12 @@
 import Phaser from 'phaser';
+import {
+  DIORAMA_ACTORS,
+  DIORAMA_BUILDINGS,
+  DIORAMA_CLOUDS,
+  DIORAMA_DECORS,
+  DIORAMA_TREES,
+  DIORAMA_WORLD,
+} from '../../../data/lobbyDioramaLayout';
 import { DEPTH } from '../../depthLayers';
 
 interface WanderActor {
@@ -20,18 +28,22 @@ interface DriftCloud {
   maxX: number;
 }
 
-const TILE = 64;
-const ISLAND_COLS = 14;
-const ISLAND_ROWS = 10;
-const TEX_KEY = 'lobby_diorama_terrain';
+interface PulseAura {
+  gfx: Phaser.GameObjects.Graphics;
+  baseAlpha: number;
+  phase: number;
+}
+
+const TEX_KEY = 'lobby_diorama_plains';
 
 /**
- * Necesse-style live animated title screen diorama featuring a coastal Tiny Isles settlement,
- * patrolling guardians, wandering sheep, swaying trees, drifting clouds, and gentle camera drift.
+ * Live animated title screen diorama showcasing a max-tier (Lv.6 대도시)
+ * grassland citadel with stone walls, special buildings, and defense towers.
  */
 export class LobbyDioramaScene extends Phaser.Scene {
   private actors: WanderActor[] = [];
   private clouds: DriftCloud[] = [];
+  private auras: PulseAura[] = [];
   private isDragging = false;
   private dragOffsetX = 0;
   private dragOffsetY = 0;
@@ -46,19 +58,36 @@ export class LobbyDioramaScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('d_water', '/assets/terrain/Water_Background_color.png');
     this.load.image('d_tilemap1', '/assets/terrain/Tilemap_color1.png');
-    this.load.image('d_tilemap2', '/assets/terrain/Tilemap_color2.png');
-    this.load.image('d_waterRock1', '/assets/terrain/Water_Rocks_01.png');
     this.load.image('d_bush1', '/assets/decorations/Bushe1.png');
     this.load.image('d_bush2', '/assets/decorations/Bushe2.png');
     this.load.image('d_rock1', '/assets/decorations/Rock1.png');
+    this.load.image('d_rock3', '/assets/decorations/Rock3.png');
+
+    // Buildings & Towers
     this.load.image('d_castle', '/assets/buildings/Castle.png');
+    this.load.image('d_barracks', '/assets/buildings/Barracks.png');
+    this.load.image('d_monastery', '/assets/buildings/Monastery.png');
+    this.load.image('d_alchemistLab', '/assets/buildings/Alchemist_Lab.png');
+    this.load.image('d_blacksmith', '/assets/buildings/Blacksmith.png');
+    this.load.image('d_lumberCamp', '/assets/buildings/Lumber_Camp.png');
+    this.load.image('d_stoneWorks', '/assets/buildings/Stone_Works.png');
+    this.load.image('d_market', '/assets/buildings/Market.png');
+    this.load.image('d_windmill', '/assets/buildings/Windmill.png');
+    this.load.image('d_archery', '/assets/buildings/Archery.png');
     this.load.image('d_house1', '/assets/buildings/House1.png');
     this.load.image('d_house2', '/assets/buildings/House2.png');
+    this.load.image('d_house3', '/assets/buildings/House3.png');
     this.load.image('d_tower', '/assets/buildings/Tower.png');
-    this.load.image('d_windmill', '/assets/buildings/Windmill.png');
-    this.load.image('d_palisade', '/assets/buildings/Wood_Palisade.png');
+    this.load.image('d_magicTower', '/assets/buildings/Magic_Tower.png');
+
+    // Stone Wall Perimeter
+    this.load.image('d_stoneWallH', '/assets/buildings/Stone_Wall_H.png');
+    this.load.image('d_stoneWallV', '/assets/buildings/Stone_Wall_V.png');
+    this.load.image('d_stoneWallGate', '/assets/buildings/Stone_Wall_Gate.png');
+    this.load.image('d_stoneWallGateV', '/assets/buildings/Stone_Wall_Gate_V.png');
+    this.load.image('d_stoneWallCorner', '/assets/buildings/Stone_Wall_Corner.png');
+
     this.load.image('d_cloud1', '/assets/decorations/Clouds_01.png');
     this.load.image('d_cloud2', '/assets/decorations/Clouds_02.png');
 
@@ -93,9 +122,13 @@ export class LobbyDioramaScene extends Phaser.Scene {
   }
 
   create() {
+    this.actors = [];
+    this.clouds = [];
+    this.auras = [];
     this.createDioramaAnimations();
-    this.buildWaterAndIslands();
-    this.populateSettlement();
+    this.buildGrasslandTerrain();
+    this.buildStoneWallPerimeter();
+    this.populateCitadel();
     this.setupCameraAndDrag();
   }
 
@@ -125,119 +158,163 @@ export class LobbyDioramaScene extends Phaser.Scene {
     safeAnim('d_red_run', 'd_redRun', 0, 5, 8);
   }
 
-  private buildWaterAndIslands() {
-    const worldW = 2400;
-    const worldH = 1600;
+  private buildGrasslandTerrain() {
+    const { width: worldW, height: worldH, tileSize } = DIORAMA_WORLD;
     this.baseCenterX = worldW / 2;
     this.baseCenterY = worldH / 2;
 
-    this.add
-      .tileSprite(worldW / 2, worldH / 2, worldW, worldH, 'd_water')
-      .setDepth(DEPTH.BACKGROUND - 10);
-
-    const islandW = ISLAND_COLS * TILE;
-    const islandH = ISLAND_ROWS * TILE;
     if (this.textures.exists(TEX_KEY)) this.textures.remove(TEX_KEY);
-    const canvasTex = this.textures.createCanvas(TEX_KEY, islandW, islandH);
+    const canvasTex = this.textures.createCanvas(TEX_KEY, worldW, worldH);
     if (canvasTex) {
       const ctx = canvasTex.getContext();
       const sheet = this.textures.get('d_tilemap1').getSourceImage() as CanvasImageSource;
-      for (let ry = 0; ry < ISLAND_ROWS; ry++) {
-        for (let rx = 0; rx < ISLAND_COLS; rx++) {
-          const isWaterEdge =
-            (rx === 0 && ry === 0) ||
-            (rx === ISLAND_COLS - 1 && ry === 0) ||
-            (rx === 0 && ry === ISLAND_ROWS - 1) ||
-            (rx === ISLAND_COLS - 1 && ry === ISLAND_ROWS - 1);
-          if (isWaterEdge) continue;
+      const cols = Math.ceil(worldW / tileSize);
+      const rows = Math.ceil(worldH / tileSize);
 
-          const col = rx === 0 ? 0 : rx === ISLAND_COLS - 1 ? 2 : 1;
-          const row = ry === 0 ? 0 : ry === ISLAND_ROWS - 1 ? 2 : 1;
-          ctx.drawImage(sheet, col * 64, row * 64, 64, 64, rx * TILE, ry * TILE, TILE, TILE);
+      // Continuous plains interior tile (col=1, row=1) matching TerrainChunkPainter
+      for (let ry = 0; ry < rows; ry++) {
+        for (let rx = 0; rx < cols; rx++) {
+          ctx.drawImage(sheet, 64, 64, 64, 64, rx * tileSize, ry * tileSize, tileSize, tileSize);
         }
       }
+
+      // Subtle gameplay-style dirt roads leading through the 4 gates and central plaza
+      this.drawRoadStrip(ctx, this.baseCenterX - 34, 0, 68, worldH);
+      this.drawRoadStrip(ctx, 0, this.baseCenterY - 30, worldW, 60);
+
+      // Central stone-paved citadel courtyard
+      ctx.fillStyle = 'rgba(194, 178, 146, 0.42)';
+      ctx.fillRect(this.baseCenterX - 180, this.baseCenterY - 120, 360, 240);
+      ctx.strokeStyle = 'rgba(148, 134, 108, 0.35)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(this.baseCenterX - 180, this.baseCenterY - 120, 360, 240);
+
       canvasTex.refresh();
     }
 
-    const ox = this.baseCenterX - islandW / 2;
-    const oy = this.baseCenterY - islandH / 2;
-    this.add.image(ox, oy, TEX_KEY).setOrigin(0, 0).setDepth(DEPTH.BACKGROUND);
+    this.add.image(0, 0, TEX_KEY).setOrigin(0, 0).setDepth(DEPTH.BACKGROUND);
+  }
 
-    // Decorative water rocks around the shore
-    const waterRocks = [
-      [ox - 90, oy + 140],
-      [ox + islandW + 85, oy + 220],
-      [ox + 140, oy + islandH + 70],
-      [ox + islandW - 110, oy - 65],
-    ];
-    for (const [wx, wy] of waterRocks) {
-      this.add.image(wx, wy, 'd_waterRock1').setDepth(DEPTH.BACKGROUND + 1);
+  private drawRoadStrip(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number
+  ) {
+    ctx.fillStyle = 'rgba(194, 178, 146, 0.56)';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(148, 134, 108, 0.36)';
+    if (w > h) {
+      ctx.fillRect(x, y, w, 3);
+      ctx.fillRect(x, y + h - 3, w, 3);
+    } else {
+      ctx.fillRect(x, y, 3, h);
+      ctx.fillRect(x + w - 3, y, 3, h);
     }
   }
 
-  private populateSettlement() {
+  private buildStoneWallPerimeter() {
+    const cx = this.baseCenterX;
+    const cy = this.baseCenterY;
+    const { wallHalfW, wallHalfH } = DIORAMA_WORLD;
+
+    const topY = cy - wallHalfH;
+    const bottomY = cy + wallHalfH;
+    const leftX = cx - wallHalfW;
+    const rightX = cx + wallHalfW;
+
+    // Top & Bottom horizontal walls with gates
+    for (const wy of [topY, bottomY]) {
+      const depth = wy + 10;
+      this.add.image(cx, wy, 'd_stoneWallGate').setDisplaySize(128, 64).setDepth(depth + 2);
+      this.addHorizontalWing(cx - wallHalfW + 32, cx - 64, wy, depth);
+      this.addHorizontalWing(cx + 64, cx + wallHalfW - 32, wy, depth);
+      this.add.image(leftX, wy, 'd_stoneWallCorner').setDisplaySize(64, 64).setDepth(depth + 3);
+      this.add.image(rightX, wy, 'd_stoneWallCorner').setDisplaySize(64, 64).setDepth(depth + 3);
+    }
+
+    // Left & Right vertical walls with gates
+    for (const wx of [leftX, rightX]) {
+      this.add.image(wx, cy, 'd_stoneWallGateV').setDisplaySize(64, 128).setDepth(cy + 12);
+      this.addVerticalWing(wx, topY + 32, cy - 64);
+      this.addVerticalWing(wx, cy + 64, bottomY - 32);
+    }
+  }
+
+  private addHorizontalWing(startX: number, endX: number, y: number, depth: number) {
+    const totalW = Math.max(64, endX - startX);
+    const segments = Math.max(1, Math.round(totalW / 192));
+    const segW = totalW / segments;
+    for (let i = 0; i < segments; i++) {
+      const sx = startX + (i + 0.5) * segW;
+      this.add.image(sx, y, 'd_stoneWallH').setDisplaySize(segW + 2, 64).setDepth(depth);
+    }
+  }
+
+  private addVerticalWing(x: number, startY: number, endY: number) {
+    const totalH = Math.max(64, endY - startY);
+    const segments = Math.max(1, Math.round(totalH / 192));
+    const segH = totalH / segments;
+    for (let i = 0; i < segments; i++) {
+      const sy = startY + (i + 0.5) * segH;
+      this.add.image(x, sy, 'd_stoneWallV').setDisplaySize(64, segH + 2).setDepth(sy + 10);
+    }
+  }
+
+  private populateCitadel() {
     const cx = this.baseCenterX;
     const cy = this.baseCenterY;
 
-    // Scenic village buildings (kept slightly left/right/top so center menu frames nicely)
-    const placements: Array<{ x: number; y: number; key: string; scale?: number }> = [
-      { x: cx - 20, y: cy - 120, key: 'd_castle', scale: 0.92 },
-      { x: cx - 260, y: cy - 30, key: 'd_windmill', scale: 0.9 },
-      { x: cx + 240, y: cy - 60, key: 'd_tower', scale: 0.95 },
-      { x: cx - 220, y: cy + 140, key: 'd_house1', scale: 0.95 },
-      { x: cx + 220, y: cy + 125, key: 'd_house2', scale: 0.95 },
-      { x: cx - 320, y: cy + 65, key: 'd_palisade', scale: 0.9 },
-      { x: cx + 310, y: cy + 50, key: 'd_palisade', scale: 0.9 },
-    ];
-    for (const p of placements) {
-      const img = this.add.image(p.x, p.y, p.key).setScale(p.scale ?? 1);
-      img.setDepth(p.y + 40);
-    }
+    // Lv.6 Citadel, special buildings & defense towers
+    DIORAMA_BUILDINGS.forEach((b, idx) => {
+      const bx = cx + b.dx;
+      const by = cy + b.dy;
 
-    // Swaying trees & bushes
-    const trees = [
-      { x: cx - 360, y: cy - 170, anim: 'd_tree1_anim', tex: 'd_tree1' },
-      { x: cx + 340, y: cy - 165, anim: 'd_tree3_anim', tex: 'd_tree3' },
-      { x: cx - 345, y: cy + 205, anim: 'd_tree3_anim', tex: 'd_tree3' },
-      { x: cx + 350, y: cy + 195, anim: 'd_tree1_anim', tex: 'd_tree1' },
-      { x: cx - 120, y: cy - 210, anim: 'd_tree3_anim', tex: 'd_tree3' },
-      { x: cx + 140, y: cy - 215, anim: 'd_tree1_anim', tex: 'd_tree1' },
-    ];
-    trees.forEach((t, i) => {
-      const sp = this.add.sprite(t.x, t.y, t.tex).setScale(0.85);
-      sp.setDepth(t.y + 30);
+      if (b.auraColor && b.auraRadius) {
+        const aura = this.add.graphics();
+        aura.setPosition(bx, by + 16);
+        aura.lineStyle(2, b.auraColor, 0.24);
+        aura.strokeCircle(0, 0, b.auraRadius);
+        aura.fillStyle(b.auraColor, 0.05);
+        aura.fillCircle(0, 0, b.auraRadius);
+        aura.setDepth(DEPTH.BACKGROUND + 5);
+        this.auras.push({ gfx: aura, baseAlpha: 1, phase: idx * 0.9 });
+      }
+
+      const img = this.add.image(bx, by, b.key).setDisplaySize(b.width, b.height);
+      if (b.tint) img.setTint(b.tint);
+      img.setDepth(by + (b.depthBias ?? 50));
+    });
+
+    // Swaying trees around the grassland perimeter
+    DIORAMA_TREES.forEach((t, i) => {
+      const sp = this.add.sprite(cx + t.dx, cy + t.dy, t.tex).setScale(t.scale ?? 0.88);
+      sp.setDepth(cy + t.dy + 30);
       sp.play({ key: t.anim, startFrame: i % 6 });
     });
 
-    const bushes = [
-      [cx - 140, cy + 185, 'd_bush1'],
-      [cx + 120, cy + 175, 'd_bush2'],
-      [cx - 295, cy - 120, 'd_bush2'],
-      [cx + 285, cy + 175, 'd_rock1'],
-    ] as const;
-    for (const [bx, by, key] of bushes) {
-      this.add.image(bx, by, key).setScale(0.7).setDepth(by);
+    // Bushes & rocks
+    for (const d of DIORAMA_DECORS) {
+      this.add
+        .image(cx + d.dx, cy + d.dy, d.key)
+        .setScale(d.scale)
+        .setDepth(cy + d.dy);
     }
 
-    // Wandering sheep & patrolling blue/red pawns
-    this.spawnActor(cx - 110, cy + 75, 'd_blueIdle', 'd_blue_idle', 'd_blue_run', 55);
-    this.spawnActor(cx + 125, cy + 60, 'd_redIdle', 'd_red_idle', 'd_red_run', 52);
-    this.spawnActor(cx - 190, cy + 195, 'd_sheep', 'd_sheep_anim', 'd_sheep_anim', 24, 0.72);
-    this.spawnActor(cx + 175, cy + 210, 'd_sheep', 'd_sheep_anim', 'd_sheep_anim', 22, 0.72);
+    // Patrolling blue/red guardians & wandering sheep
+    for (const a of DIORAMA_ACTORS) {
+      this.spawnActor(cx + a.dx, cy + a.dy, a.tex, a.idleAnim, a.runAnim, a.speed, a.scale);
+    }
 
     // Drifting clouds
-    const cloudConfigs = [
-      { x: cx - 420, y: cy - 260, key: 'd_cloud1', speed: 14, alpha: 0.48 },
-      { x: cx + 180, y: cy + 240, key: 'd_cloud2', speed: 11, alpha: 0.42 },
-      { x: cx - 80, y: cy - 330, key: 'd_cloud2', speed: 9, alpha: 0.36 },
-    ];
-    for (const c of cloudConfigs) {
-      const img = this.add.image(c.x, c.y, c.key).setAlpha(c.alpha).setDepth(9000);
+    for (const c of DIORAMA_CLOUDS) {
+      const img = this.add.image(cx + c.dx, cy + c.dy, c.key).setAlpha(c.alpha).setDepth(9000);
       this.clouds.push({
         sprite: img,
         speed: c.speed,
-        minX: cx - 720,
-        maxX: cx + 720,
+        minX: cx - 860,
+        maxX: cx + 860,
       });
     }
   }
@@ -269,7 +346,7 @@ export class LobbyDioramaScene extends Phaser.Scene {
 
   private setupCameraAndDrag() {
     const cam = this.cameras.main;
-    cam.setZoom(1.1);
+    cam.setZoom(1.0);
     cam.centerOn(this.baseCenterX, this.baseCenterY);
 
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
@@ -281,8 +358,8 @@ export class LobbyDioramaScene extends Phaser.Scene {
       if (!this.isDragging || !ptr.isDown) return;
       const dx = (ptr.x - this.lastPointerX) / cam.zoom;
       const dy = (ptr.y - this.lastPointerY) / cam.zoom;
-      this.dragOffsetX = Phaser.Math.Clamp(this.dragOffsetX - dx, -260, 260);
-      this.dragOffsetY = Phaser.Math.Clamp(this.dragOffsetY - dy, -180, 180);
+      this.dragOffsetX = Phaser.Math.Clamp(this.dragOffsetX - dx, -320, 320);
+      this.dragOffsetY = Phaser.Math.Clamp(this.dragOffsetY - dy, -220, 220);
       this.lastPointerX = ptr.x;
       this.lastPointerY = ptr.y;
     });
@@ -295,13 +372,19 @@ export class LobbyDioramaScene extends Phaser.Scene {
     const dt = Math.min(delta, 50) / 1000;
     this.elapsedSec += dt;
 
-    // Gentle Necesse-style scenic camera drift + user drag offset
-    const driftX = Math.sin(this.elapsedSec * 0.16) * 110;
-    const driftY = Math.cos(this.elapsedSec * 0.12) * 55;
+    // Gentle scenic camera drift + user drag offset
+    const driftX = Math.sin(this.elapsedSec * 0.16) * 95;
+    const driftY = Math.cos(this.elapsedSec * 0.12) * 48;
     this.cameras.main.centerOn(
       this.baseCenterX + driftX + this.dragOffsetX,
       this.baseCenterY + driftY + this.dragOffsetY
     );
+
+    // Subtle pulsing magic & sanctuary auras
+    for (const aura of this.auras) {
+      const pulse = 0.65 + 0.35 * Math.sin(this.elapsedSec * 2.1 + aura.phase);
+      aura.gfx.setAlpha(aura.baseAlpha * pulse);
+    }
 
     for (const c of this.clouds) {
       c.sprite.x += c.speed * dt;
