@@ -226,7 +226,7 @@ html, body {
 
 .ts-wood-bar-compact {
   border-style: solid;
-  border-width: 7px 10px 8px 10px;
+  border-width: 4px 7px 5px 7px;
   border-image-source: url('/assets/ui/bar_wood_tight.png');
   border-image-slice: 14 22 16 22 fill;
   border-image-repeat: stretch;

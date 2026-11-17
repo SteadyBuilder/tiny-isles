@@ -119,7 +119,8 @@ export class LootChestDropRenderer {
         chestSprite.y = 0;
         chestSprite.setDisplaySize(54, 54);
 
-        // 착지 순간 등급별 빛나는 링 & 조명 점등
+        // 착지 순간 등급별 빛나는 링 & 조명 점등 + 보석/액세서리 드랍 음향
+        sound.playGemDrop();
         this.spawnPulseRing(landX, landY + 4, rarityColor, 48);
         labelText.setAlpha(1);
 
@@ -167,7 +168,7 @@ export class LootChestDropRenderer {
       chestSprite.angle = 0;
       chestSprite.setDisplaySize(56, 56);
 
-      sound.playUnlock();
+      sound.playPop();
       this.spawnPulseRing(landX, landY, rarityColor, 78);
       this.spawnRaritySparks(landX, landY - 8, rarityColor);
 

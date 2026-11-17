@@ -9,7 +9,7 @@ export interface PixelVirtualJoystickProps {
   joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
 }
 
-const JOYSTICK_RADIUS = 46;
+const JOYSTICK_RADIUS = 36;
 
 export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joystickRef }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -99,15 +99,15 @@ export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joys
       {...GESTURE_BLOCK_PROPS}
       className="absolute pointer-events-auto touch-none"
       style={{
-        bottom: 'max(1.25rem, env(safe-area-inset-bottom, 1.25rem))',
-        left: 'max(1.25rem, env(safe-area-inset-left, 1.25rem))',
+        bottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))',
+        left: 'max(0.75rem, env(safe-area-inset-left, 0.75rem))',
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={resetJoystick}
       onTouchCancel={resetJoystick}
     >
-      <div className="relative w-28 h-28 flex items-center justify-center">
+      <div className="relative w-[88px] h-[88px] flex items-center justify-center">
         <img
           src="/assets/ui/joystick_compass_base.png"
           alt="이동 조이스틱"
@@ -119,7 +119,7 @@ export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joys
         />
         <div
           ref={knobElRef}
-          className="absolute w-14 h-14 flex items-center justify-center pointer-events-none will-change-transform"
+          className="absolute w-11 h-11 flex items-center justify-center pointer-events-none will-change-transform"
         >
           <img
             src={isDragging ? '/assets/ui/round_red.png' : '/assets/ui/round_blue.png'}
@@ -129,7 +129,7 @@ export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joys
           <img
             src="/assets/ui/Icons/Icon_Compass.png"
             alt=""
-            className="absolute w-6 h-6 pixel-art -translate-y-[1px] drop-shadow-[0_1px_0_rgba(0,0,0,0.7)]"
+            className="absolute w-5 h-5 pixel-art -translate-y-[1px] drop-shadow-[0_1px_0_rgba(0,0,0,0.7)]"
           />
         </div>
       </div>

@@ -76,7 +76,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       {nearIsland && (
         <div
           className="absolute left-1/2 -translate-x-1/2 pointer-events-auto animate-bounce"
-          style={{ bottom: 'max(8.5rem, calc(env(safe-area-inset-bottom, 0px) + 7.5rem))' }}
+          style={{ bottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.75rem))' }}
         >
           <button
             type="button"

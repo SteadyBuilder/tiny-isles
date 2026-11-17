@@ -162,6 +162,36 @@ class SoundSystem {
     );
   }
   public playTowerShoot() { this.playTone('sine', 880, 220, 0.15, 0.35); }
+  public playGemDrop() {
+    if (this.settings.muted || !this.settings.sfxEnabled) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const sfxVol = this.settings.sfxVolume;
+    const notes: Array<{ freq: number; delay: number; dur: number; vol: number; type: OscillatorType }> = [
+      { freq: 1567.98, delay: 0.0, dur: 0.09, vol: 0.22, type: 'triangle' },
+      { freq: 3135.96, delay: 0.0, dur: 0.11, vol: 0.12, type: 'sine' },
+      { freq: 2093.0, delay: 0.065, dur: 0.1, vol: 0.24, type: 'sine' },
+      { freq: 2637.02, delay: 0.135, dur: 0.12, vol: 0.22, type: 'sine' },
+      { freq: 3520.0, delay: 0.21, dur: 0.22, vol: 0.18, type: 'sine' },
+    ];
+
+    for (const n of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const startTime = now + n.delay;
+      osc.type = n.type;
+      osc.frequency.setValueAtTime(n.freq, startTime);
+      gain.gain.setValueAtTime(0.0001, startTime);
+      gain.gain.linearRampToValueAtTime(n.vol * sfxVol, startTime + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + n.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + n.dur + 0.01);
+    }
+  }
   public playClick() { if (!this.playBuffer('click', 0.6)) this.playTone('sine', 800, 400, 0.04, 0.2); }
 }
 

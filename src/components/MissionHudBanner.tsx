@@ -37,20 +37,20 @@ export const MissionHudBanner: React.FC<MissionHudBannerProps> = ({
 
   if (variant === 'mobile-inline') {
     return (
-      <div className="ts-wood-bar-compact w-full flex items-center justify-between gap-2 text-[#fef5df] pointer-events-auto">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <img src="/assets/ui/Icons/Icon_05.png" alt="" className="w-4 h-4 pixel-art shrink-0" />
-          <span className="text-[11px] font-black text-[#fde68a] pixel-btn-shadow truncate">
+      <div className="ts-wood-bar-compact w-full flex items-center justify-between gap-1.5 text-[#fef5df] pointer-events-auto">
+        <div className="flex items-center gap-1 min-w-0">
+          <img src="/assets/ui/Icons/Icon_05.png" alt="" className="w-3.5 h-3.5 pixel-art shrink-0" />
+          <span className="text-[10px] font-black text-[#fde68a] pixel-btn-shadow truncate">
             {progress.title}
           </span>
-          <span className="text-[11px] font-extrabold text-[#fef5df] pixel-btn-shadow shrink-0 tabular-nums">
+          <span className="text-[10px] font-extrabold text-[#fef5df] pixel-btn-shadow shrink-0 tabular-nums">
             · {progress.currentCount}/{progress.targetCount} ({pct}%)
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#24160e]/85 border border-[#85532a] text-[11px] font-mono font-black text-[#fef3c7] tabular-nums">
-            <img src="/assets/ui/Icons/Icon_Clock.png" alt="" className="w-3 h-3 pixel-art shrink-0" />
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 px-1 py-0 rounded bg-[#24160e]/85 border border-[#85532a] text-[10px] font-mono font-black text-[#fef3c7] tabular-nums">
+            <img src="/assets/ui/Icons/Icon_Clock.png" alt="" className="w-2.5 h-2.5 pixel-art shrink-0" />
             <span>{formatHudSeconds(remainingSec)}</span>
           </div>
 

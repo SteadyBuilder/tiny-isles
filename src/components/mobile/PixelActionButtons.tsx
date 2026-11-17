@@ -76,10 +76,10 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
     <div
       ref={actionZoneRef}
       {...GESTURE_BLOCK_PROPS}
-      className="absolute pointer-events-auto touch-none flex flex-col items-center gap-2"
+      className="absolute pointer-events-auto touch-none flex flex-col items-center gap-1.5"
       style={{
-        bottom: 'max(1.25rem, env(safe-area-inset-bottom, 1.25rem))',
-        right: 'max(1.25rem, env(safe-area-inset-right, 1.25rem))',
+        bottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))',
+        right: 'max(0.75rem, env(safe-area-inset-right, 0.75rem))',
       }}
     >
       {canBuild && onOpenVillageModal && (
@@ -96,7 +96,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           onPointerUp={() => setIsBuildPressed(false)}
           onPointerLeave={() => setIsBuildPressed(false)}
           onPointerCancel={() => setIsBuildPressed(false)}
-          className="relative w-11 h-11 flex items-center justify-center select-none hover:brightness-110"
+          className="relative w-9 h-9 flex items-center justify-center select-none hover:brightness-110"
           aria-label="마을 건설 버튼"
           title="마을 발전 및 건설"
         >
@@ -112,7 +112,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           <img
             src="/assets/ui/Icons/Tool_Hammer.png"
             alt="건설"
-            className={`absolute w-5 h-5 pixel-art drop-shadow-[0_1px_0_rgba(0,0,0,0.7)] transition-transform duration-75 ${
+            className={`absolute w-4 h-4 pixel-art drop-shadow-[0_1px_0_rgba(0,0,0,0.7)] transition-transform duration-75 ${
               isBuildPressed ? 'translate-y-[2px]' : '-translate-y-[1px]'
             }`}
           />
@@ -136,7 +136,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           onPointerUp={() => setIsSkillPressed(false)}
           onPointerLeave={() => setIsSkillPressed(false)}
           onPointerCancel={() => setIsSkillPressed(false)}
-          className={`relative w-12 h-12 rounded-full flex items-center justify-center select-none transition-[filter] ${
+          className={`relative w-10 h-10 rounded-full flex items-center justify-center select-none transition-[filter] ${
             isSkillOnCooldown
               ? 'cursor-not-allowed grayscale opacity-75'
               : 'hover:brightness-110'
@@ -158,12 +158,12 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
               isSkillPressed && !isSkillOnCooldown ? 'translate-y-[2px]' : '-translate-y-[1px]'
             }`}
           >
-            <span className="text-lg leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
+            <span className="text-base leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
               {classDef.skillIcon}
             </span>
           </span>
           {isSkillOnCooldown && (
-            <span className="absolute inset-1 rounded-full bg-black/60 flex items-center justify-center text-[11px] font-black text-[#fca5a5] pixel-btn-shadow pointer-events-none">
+            <span className="absolute inset-1 rounded-full bg-black/60 flex items-center justify-center text-[10px] font-black text-[#fca5a5] pixel-btn-shadow pointer-events-none">
               {skillCooldownSec}s
             </span>
           )}
@@ -176,7 +176,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
         onPointerUp={stopActionHold}
         onPointerLeave={stopActionHold}
         onPointerCancel={stopActionHold}
-        className="relative w-20 h-20 flex flex-col items-center justify-center select-none hover:brightness-110"
+        className="relative w-16 h-16 flex flex-col items-center justify-center select-none hover:brightness-110"
         aria-label="채집 및 공격 액션 버튼"
       >
         <img
@@ -200,11 +200,11 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           <img
             src="/assets/ui/Icons/Icon_05.png"
             alt=""
-            className={`w-8 h-8 pixel-art drop-shadow-[0_2px_0_rgba(0,0,0,0.8)] ${
+            className={`w-6 h-6 pixel-art drop-shadow-[0_2px_0_rgba(0,0,0,0.8)] ${
               isActionActive ? 'animate-pulse' : ''
             }`}
           />
-          <span className="text-[10px] font-black text-[#fef5df] pixel-btn-shadow tracking-wider leading-none mt-0.5">
+          <span className="text-[9px] font-black text-[#fef5df] pixel-btn-shadow tracking-wider leading-none mt-0.5">
             ACTION
           </span>
         </span>

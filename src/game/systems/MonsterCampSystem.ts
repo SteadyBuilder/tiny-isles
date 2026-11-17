@@ -288,7 +288,7 @@ export class MonsterCampSystem {
     }
 
     this.ctx.playExplosionAt(container.x, container.y);
-    sound.playUnlock();
+    sound.playBreak();
     this.updateCampHpVisual(node);
 
     // 1. 자원 + 개인 경험치 + 위협도 상승
