@@ -79,6 +79,7 @@ export interface GameEventPayloads {
 
   // 사냥 특화 모드: 개인 성장, 전직, 장비 인벤토리, 몬스터 부락, 던전 게이트
   'player-progression-updated': PlayerProgressionState;
+  'job-hall-proximity-changed': boolean;
   'open-job-hall-modal': void;
   'open-inventory-modal': void;
   'select-player-class': PlayerClassId;

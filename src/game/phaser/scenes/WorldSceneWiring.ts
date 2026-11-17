@@ -208,6 +208,7 @@ export function createWorldControllersBundle(
       host.resourceEntityRenderer.getEntityInteractionPoint(visual),
     onInteract: () => playerInteraction.tryInteract(),
     isPlacementActive: () => towerPlacement.isActive(),
+    getConstructedBuildings: host.getConstructedBuildings,
   });
 
   const eventBus = new WorldEventBusController({

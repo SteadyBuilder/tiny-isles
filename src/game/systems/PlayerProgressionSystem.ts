@@ -41,6 +41,9 @@ export interface IPlayerProgressionContext {
   projectileSystem: ProjectileSystem;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   playExplosionAt: (x: number, y: number) => void;
+  getJobHallStatus?: () => { hasBuilt: boolean; isNear: boolean };
+  playLevelUpEffect?: (x: number, y: number, level: number, delayMs?: number) => void;
+  playClassAdvancementEffect?: (x: number, y: number, classId: PlayerClassId) => void;
 }
 
 /**
@@ -131,7 +134,7 @@ export class PlayerProgressionSystem {
   public gainExp(amount: number): void {
     if (amount <= 0) return;
     this.exp += amount;
-    let leveledUp = false;
+    const gainedLevels: number[] = [];
     let hpGainTotal = 0;
 
     while (this.level < LEVEL_PROGRESSION_CONFIG.maxLevel && this.exp >= this.nextLevelExp) {
@@ -139,27 +142,33 @@ export class PlayerProgressionSystem {
       this.level += 1;
       this.nextLevelExp = getRequiredExpForLevel(this.level);
       hpGainTotal += LEVEL_PROGRESSION_CONFIG.hpGainPerLevel;
-      leveledUp = true;
+      gainedLevels.push(this.level);
 
       if (this.level === LEVEL_PROGRESSION_CONFIG.firstJobAdvancementLevel) {
         this.jobPoints += 1;
         GameEvents.emit(
           'game-alert',
-          '🌟 Lv.3 달성! 전직 포인트 획득! 마을에 [왕국 전직소]를 짓고 상위 클래스로 전직하세요!'
+          `🌟 Lv.${LEVEL_PROGRESSION_CONFIG.firstJobAdvancementLevel} 달성! 전직 포인트 획득! 마을에 [왕국 전직소]를 건설하고 전직소 앞으로 이동해 [E] 키로 전직하세요!`
         );
       }
     }
 
-    if (leveledUp) {
+    if (gainedLevels.length > 0) {
       sound.playUnlock();
       const pos = this.ctx.getPlayerPosition();
       this.ctx.onMaxHpChanged(this.getTotalMaxHp(), hpGainTotal + 35);
-      this.ctx.showFloatingText(
-        pos.x,
-        pos.y - 62,
-        `🆙 LEVEL UP! Lv.${this.level} (공격력 ${this.getTotalAttack()})`,
-        '#fde047'
-      );
+      gainedLevels.forEach((lv, idx) => {
+        if (this.ctx.playLevelUpEffect) {
+          this.ctx.playLevelUpEffect(pos.x, pos.y, lv, idx * 260);
+        } else {
+          this.ctx.showFloatingText(
+            pos.x,
+            pos.y - 62 - idx * 20,
+            `🆙 LEVEL UP! Lv.${lv} (공격력 ${this.getTotalAttack()})`,
+            '#fde047'
+          );
+        }
+      });
     }
     this.emitState();
   }
@@ -238,6 +247,22 @@ export class PlayerProgressionSystem {
     const def = PLAYER_CLASS_DEFINITIONS[targetClassId];
     if (!def) return false;
 
+    const jobHallStatus = this.ctx.getJobHallStatus?.() ?? { hasBuilt: true, isNear: true };
+    if (!jobHallStatus.hasBuilt) {
+      GameEvents.emit(
+        'game-alert',
+        '⚠️ 먼저 마을에 [왕국 전직소] 건물을 건설해야 전직할 수 있습니다.'
+      );
+      return false;
+    }
+    if (!jobHallStatus.isNear) {
+      GameEvents.emit(
+        'game-alert',
+        '⚠️ [왕국 전직소] 건물 앞으로 이동해야 전직할 수 있습니다.'
+      );
+      return false;
+    }
+
     if (this.level < def.requiredLevel) {
       GameEvents.emit(
         'game-alert',
@@ -269,13 +294,17 @@ export class PlayerProgressionSystem {
 
     sound.playUnlock();
     const pos = this.ctx.getPlayerPosition();
-    this.ctx.playExplosionAt(pos.x, pos.y);
-    this.ctx.showFloatingText(
-      pos.x,
-      pos.y - 65,
-      `✨ [${def.name}] 전직 완료! ([Q] ${def.skillName})`,
-      '#38bdf8'
-    );
+    if (this.ctx.playClassAdvancementEffect) {
+      this.ctx.playClassAdvancementEffect(pos.x, pos.y, targetClassId);
+    } else {
+      this.ctx.playExplosionAt(pos.x, pos.y);
+      this.ctx.showFloatingText(
+        pos.x,
+        pos.y - 65,
+        `✨ [${def.name}] 전직 완료! ([Q] ${def.skillName})`,
+        '#38bdf8'
+      );
+    }
     GameEvents.emit(
       'game-alert',
       `🎉 ${def.icon} [${def.name}] 클래스로 전직했습니다! [Q] 키로 전용 스킬 '${def.skillName}'을 사용할 수 있습니다!`

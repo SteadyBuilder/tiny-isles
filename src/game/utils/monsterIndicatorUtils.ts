@@ -2,11 +2,14 @@ import { MonsterIndicatorConfig, MonsterIndicatorStyle } from '../../data/monste
 
 export type MonsterIndicatorMode = 'overhead' | 'edge';
 
+export type MonsterIndicatorTargetKind = 'normal' | 'boss' | 'camp' | 'dungeon';
+
 export interface MonsterIndicatorTarget {
   id: string;
   x: number;
   y: number;
   isBoss: boolean;
+  kind?: MonsterIndicatorTargetKind;
 }
 
 export interface CameraWorldBounds {
@@ -33,8 +36,28 @@ export interface MonsterIndicatorPlacement {
   style: MonsterIndicatorStyle;
 }
 
+function resolveTargetStyleAndOffset(
+  target: MonsterIndicatorTarget,
+  config: MonsterIndicatorConfig
+): { style: MonsterIndicatorStyle; overheadOffsetY: number } {
+  const kind = target.kind ?? (target.isBoss ? 'boss' : 'normal');
+  if (kind === 'camp') {
+    return { style: config.campStyle, overheadOffsetY: config.campOverheadOffsetY };
+  }
+  if (kind === 'dungeon') {
+    return {
+      style: config.dungeonStyle,
+      overheadOffsetY: target.isBoss ? config.bossOverheadOffsetY : config.campOverheadOffsetY,
+    };
+  }
+  if (kind === 'boss' || (config.differentiateBossColor && target.isBoss)) {
+    return { style: config.bossStyle, overheadOffsetY: config.bossOverheadOffsetY };
+  }
+  return { style: config.normalStyle, overheadOffsetY: config.normalOverheadOffsetY };
+}
+
 /**
- * 몬스터 위치와 카메라 뷰포트를 기반으로 타게팅 화살표 배치 정보를 계산합니다. (순수 함수)
+ * 타겟 위치와 카메라 뷰포트를 기반으로 타게팅 화살표 배치 정보를 계산합니다. (순수 함수)
  */
 export function computeMonsterIndicatorPlacement(
   target: MonsterIndicatorTarget,
@@ -44,8 +67,7 @@ export function computeMonsterIndicatorPlacement(
   config: MonsterIndicatorConfig
 ): MonsterIndicatorPlacement {
   const safeZoom = Math.max(0.1, zoom);
-  const style =
-    config.differentiateBossColor && target.isBoss ? config.bossStyle : config.normalStyle;
+  const { style, overheadOffsetY } = resolveTargetStyleAndOffset(target, config);
 
   const worldSize = style.size / safeZoom;
   const worldStrokeWidth = style.strokeWidth / safeZoom;
@@ -58,14 +80,13 @@ export function computeMonsterIndicatorPlacement(
     target.y <= view.bottom - inViewPad;
 
   if (isInsideView) {
-    const baseOffsetY = target.isBoss ? config.bossOverheadOffsetY : config.normalOverheadOffsetY;
     const bobWorld =
       (Math.sin(timeMs * config.bobSpeedRadPerMs) * config.bobAmplitudePx) / safeZoom;
 
     return {
       mode: 'overhead',
       x: target.x,
-      y: target.y - baseOffsetY + bobWorld,
+      y: target.y - overheadOffsetY + bobWorld,
       angle: Math.PI / 2,
       worldSize,
       worldStrokeWidth,

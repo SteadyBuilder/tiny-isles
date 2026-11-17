@@ -17,6 +17,8 @@ export interface MonsterIndicatorConfig {
   normalOverheadOffsetY: number;
   /** 보스 몬스터 머리 위 오프셋 (월드 px) */
   bossOverheadOffsetY: number;
+  /** 몬스터 부락 머리 위 오프셋 (월드 px) */
+  campOverheadOffsetY: number;
   /** 머리 위 화살표 상하 바운스 진폭 (스크린 px) */
   bobAmplitudePx: number;
   /** 머리 위 화살표 바운스 주기 속도 (rad/ms) */
@@ -27,6 +29,10 @@ export interface MonsterIndicatorConfig {
   normalStyle: MonsterIndicatorStyle;
   /** 보스 몬스터 화살표 스타일 (차별화된 진홍색 + 골드 테두리) */
   bossStyle: MonsterIndicatorStyle;
+  /** 몬스터 부락 화살표 스타일 (주황색 + 암적색 테두리) */
+  campStyle: MonsterIndicatorStyle;
+  /** 던전 게이트 및 던전 보스 화살표 스타일 (보라색 + 골드 테두리) */
+  dungeonStyle: MonsterIndicatorStyle;
 }
 
 export const MONSTER_INDICATOR_CONFIG: MonsterIndicatorConfig = {
@@ -34,6 +40,7 @@ export const MONSTER_INDICATOR_CONFIG: MonsterIndicatorConfig = {
   inViewPaddingPx: 20,
   normalOverheadOffsetY: 56,
   bossOverheadOffsetY: 92,
+  campOverheadOffsetY: 138,
   bobAmplitudePx: 5,
   bobSpeedRadPerMs: 0.007,
   differentiateBossColor: true,
@@ -48,5 +55,17 @@ export const MONSTER_INDICATOR_CONFIG: MonsterIndicatorConfig = {
     strokeColor: 0xfacc15,
     strokeWidth: 2.5,
     size: 18,
+  },
+  campStyle: {
+    fillColor: 0xf97316,
+    strokeColor: 0x7c2d12,
+    strokeWidth: 2,
+    size: 14,
+  },
+  dungeonStyle: {
+    fillColor: 0xa855f7,
+    strokeColor: 0xfacc15,
+    strokeWidth: 2.5,
+    size: 19,
   },
 };

@@ -5,12 +5,16 @@ import { PlayerProgressionState } from '../types/game';
 
 interface PlayerProgressionHudProps {
   progression: PlayerProgressionState;
+  hasJobHallBuilt: boolean;
+  isNearJobHall: boolean;
   onOpenInventory: () => void;
   onOpenJobHall: () => void;
 }
 
 export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   progression,
+  hasJobHallBuilt,
+  isNearJobHall,
   onOpenInventory,
   onOpenJobHall,
 }) => {
@@ -25,6 +29,25 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   );
 
   const equippedCount = Object.values(progression.equipped).filter(Boolean).length;
+  const canEnterJobHall = hasJobHallBuilt && isNearJobHall;
+
+  const handleJobHallClick = () => {
+    if (!hasJobHallBuilt) {
+      GameEvents.emit(
+        'game-alert',
+        '🏗️ 먼저 중앙 마을 [B]에서 [왕국 전직소]를 건설한 뒤 전직소 앞으로 이동하세요!'
+      );
+      return;
+    }
+    if (!isNearJobHall) {
+      GameEvents.emit(
+        'game-alert',
+        '🚶 [왕국 전직소] 건물 앞으로 직접 이동해야 전직할 수 있습니다! (접근 후 [E] 또는 클릭)'
+      );
+      return;
+    }
+    onOpenJobHall();
+  };
 
   return (
     <div className="fixed bottom-3 left-3 z-30 flex flex-col gap-1.5 pointer-events-auto max-w-[330px] sm:max-w-[380px]">
@@ -95,15 +118,23 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
 
           <button
             type="button"
-            onClick={onOpenJobHall}
-            className={`px-2 py-1 rounded-md border text-[11px] font-black flex items-center gap-1 hover:brightness-110 active:scale-95 ${
-              progression.jobPoints > 0 && progression.classId === 'pawn'
-                ? 'bg-[#581c87] border-[#c084fc] text-[#f3e8ff] animate-pulse'
-                : 'bg-[#3b2313] border-[#9e815b] text-[#e5d0b1]'
+            onClick={handleJobHallClick}
+            className={`px-2 py-1 rounded-md border text-[11px] font-black flex items-center gap-1 transition-transform active:scale-95 ${
+              canEnterJobHall && progression.jobPoints > 0 && progression.classId === 'pawn'
+                ? 'bg-[#581c87] border-[#c084fc] text-[#f3e8ff] animate-pulse hover:brightness-110'
+                : canEnterJobHall
+                  ? 'bg-[#3b2313] border-[#fde047] text-[#fef3c7] hover:brightness-110'
+                  : 'bg-[#291d14] border-[#5c422a] text-[#a8a29e]'
             }`}
-            title="왕국 전직소 클래스 확인 및 전직"
+            title={
+              canEnterJobHall
+                ? '왕국 전직소 입장 [E]'
+                : hasJobHallBuilt
+                  ? '왕국 전직소 앞으로 이동하면 전직할 수 있습니다'
+                  : '마을에 왕국 전직소 건설 후 방문 시 전직 가능'
+            }
           >
-            <span>🏛️ 전직</span>
+            <span>{canEnterJobHall ? '🏛️ 전직 [E]' : '🏛️ 전직'}</span>
             {progression.jobPoints > 0 && (
               <span className="px-1 rounded-full bg-[#a855f7] text-white text-[9px]">
                 +{progression.jobPoints}

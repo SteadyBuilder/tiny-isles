@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MONSTER_INDICATOR_CONFIG } from '../../../data/monsterIndicator';
+import { DungeonPortalState } from '../../../types/game';
 import { DEPTH } from '../../depthLayers';
 import { MonsterVisual } from '../../systems/MonsterVisualManager';
 import {
@@ -8,8 +9,16 @@ import {
   computeMonsterIndicatorPlacement,
 } from '../../utils/monsterIndicatorUtils';
 
+export interface HuntingIndicatorTargets {
+  isHuntingMode: boolean;
+  campTargets: ReadonlyArray<{ id: number; x: number; y: number }>;
+  dungeonPortal: DungeonPortalState | null;
+}
+
 /**
- * 몬스터 웨이브 시 화면 내(머리 위 ▼) 및 화면 밖(가장자리 방향 지시) 붉은색 타게팅 화살표 전담 렌더러
+ * 타게팅 화살표 렌더러
+ * - 사냥 특화 모드: 활성 몬스터 부락, 던전 게이트, 던전 수문장 보스(생존 시)만 가리킴
+ * - 일반/클래식 모드: 각 침공 몬스터를 가리킴
  */
 export class MonsterTargetIndicatorRenderer {
   private scene: Phaser.Scene;
@@ -23,11 +32,13 @@ export class MonsterTargetIndicatorRenderer {
     this.graphics.setDepth(DEPTH.MONSTER_INDICATOR);
   }
 
-  public update(timeMs: number, monsterVisuals: Map<string, MonsterVisual>): void {
+  public update(
+    timeMs: number,
+    monsterVisuals: Map<string, MonsterVisual>,
+    huntingTargets?: HuntingIndicatorTargets
+  ): void {
     if (!this.isSceneAlive()) return;
     this.graphics.clear();
-
-    if (monsterVisuals.size === 0) return;
 
     const cam = this.scene.cameras?.main;
     if (!cam) return;
@@ -43,6 +54,47 @@ export class MonsterTargetIndicatorRenderer {
       centerX: wv.centerX,
       centerY: wv.centerY,
     };
+
+    if (huntingTargets?.isHuntingMode) {
+      for (const camp of huntingTargets.campTargets) {
+        const placement = computeMonsterIndicatorPlacement(
+          { id: `camp_${camp.id}`, x: camp.x, y: camp.y, isBoss: false, kind: 'camp' },
+          view,
+          cam.zoom,
+          timeMs,
+          MONSTER_INDICATOR_CONFIG
+        );
+        this.drawArrow(placement);
+      }
+
+      if (huntingTargets.dungeonPortal?.active) {
+        const portal = huntingTargets.dungeonPortal;
+        const placement = computeMonsterIndicatorPlacement(
+          { id: 'dungeon_portal', x: portal.x, y: portal.y, isBoss: false, kind: 'dungeon' },
+          view,
+          cam.zoom,
+          timeMs,
+          MONSTER_INDICATOR_CONFIG
+        );
+        this.drawArrow(placement);
+      }
+
+      for (const mv of monsterVisuals.values()) {
+        const m = mv.monster;
+        if (m.hp <= 0 || !m.isBoss) continue;
+        const placement = computeMonsterIndicatorPlacement(
+          { id: m.id, x: m.x, y: m.y, isBoss: true, kind: 'dungeon' },
+          view,
+          cam.zoom,
+          timeMs,
+          MONSTER_INDICATOR_CONFIG
+        );
+        this.drawArrow(placement);
+      }
+      return;
+    }
+
+    if (monsterVisuals.size === 0) return;
 
     for (const mv of monsterVisuals.values()) {
       const m = mv.monster;

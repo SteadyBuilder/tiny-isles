@@ -1,5 +1,6 @@
 import {
   ConstructedBuilding,
+  DungeonPortalState,
   Island,
   Monster,
   WaveState,
@@ -22,7 +23,13 @@ export interface IWaveSystemContext {
   isHuntingMode?: () => boolean;
   projectileSystem?: ProjectileSystem;
   healCampCore?: (territoryId: number, amount: number) => void;
-  onMonsterKilledReward?: (x: number, y: number, isBoss: boolean, expReward: number) => void;
+  onMonsterKilledReward?: (
+    x: number,
+    y: number,
+    isBoss: boolean,
+    expReward: number,
+    isCampMonster: boolean
+  ) => void;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
   destroyConstructedBuilding: (buildingId: string) => void;
@@ -121,8 +128,8 @@ export class WaveSystem {
           );
         }
       },
-      onMonsterKilled: (x, y, isBoss, expReward) => {
-        this.ctx.onMonsterKilledReward?.(x, y, isBoss, expReward);
+      onMonsterKilled: (x, y, isBoss, expReward, isCampMonster) => {
+        this.ctx.onMonsterKilledReward?.(x, y, isBoss, expReward, isCampMonster);
       },
       showFloatingText: (x, y, text, color) => this.ctx.showFloatingText(x, y, text, color),
       shakeObject: (target) => this.ctx.shakeObject(target),
@@ -193,6 +200,10 @@ export class WaveSystem {
 
   public getMonsterVisuals(): Map<string, MonsterVisual> {
     return this.monsters;
+  }
+
+  public getDungeonPortalState(): DungeonPortalState | null {
+    return this.dungeonSpawner.getPortalState();
   }
 
   public setOnlineCount(count: number): void {

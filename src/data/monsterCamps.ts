@@ -50,7 +50,7 @@ export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
     coreMaxHp: 360,
     buildingSprite: 'blackTower',
     respawnSec: 180,
-    threatGainOnClear: 18,
+    threatGainOnClear: 19,
     clearBonusExp: 55,
     clearResourceReward: { wood: 25, stone: 20, gold: 12 },
     garrisonSpecs: [
@@ -83,7 +83,7 @@ export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
     coreMaxHp: 620,
     buildingSprite: 'blackTower',
     respawnSec: 180,
-    threatGainOnClear: 22,
+    threatGainOnClear: 24,
     clearBonusExp: 95,
     clearResourceReward: { wood: 40, stone: 35, gold: 22 },
     garrisonSpecs: [
@@ -116,7 +116,7 @@ export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
     coreMaxHp: 980,
     buildingSprite: 'blackCastle',
     respawnSec: 180,
-    threatGainOnClear: 28,
+    threatGainOnClear: 30,
     clearBonusExp: 150,
     clearResourceReward: { wood: 65, stone: 55, gold: 38 },
     garrisonSpecs: [
@@ -159,7 +159,7 @@ export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
     coreMaxHp: 1450,
     buildingSprite: 'purpleCastle',
     respawnSec: 180,
-    threatGainOnClear: 34,
+    threatGainOnClear: 36,
     clearBonusExp: 240,
     clearResourceReward: { wood: 95, stone: 85, gold: 65 },
     garrisonSpecs: [

@@ -106,6 +106,20 @@ export class ConstructedBuildingRenderer {
         container.add(rangeRing);
       }
 
+      if (cb.type === 'job_hall') {
+        const badge = this.scene.add
+          .text(0, -104, '🏛️ 왕국 전직소 [E]', {
+            fontFamily: 'Pretendard, sans-serif',
+            fontSize: '12px',
+            fontStyle: 'bold',
+            color: '#fde047',
+            stroke: '#000000',
+            strokeThickness: 3,
+          })
+          .setOrigin(0.5);
+        container.add(badge);
+      }
+
       const footBox = getConstructedBuildingFootprintBox(cb);
       const footCol = this.scene.physics.add.staticSprite(
         footBox.x + footBox.w / 2,

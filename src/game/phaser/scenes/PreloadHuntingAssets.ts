@@ -115,6 +115,75 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
     g.generateTexture('boss_aura_tex', 120, 120);
     g.destroy();
   }
+  if (!scene.textures.exists('loot_glow_tex')) {
+    const g = scene.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0xffffff, 0.16);
+    g.fillCircle(48, 48, 46);
+    g.fillStyle(0xffffff, 0.28);
+    g.fillCircle(48, 48, 30);
+    g.fillStyle(0xffffff, 0.45);
+    g.fillCircle(48, 48, 16);
+    g.generateTexture('loot_glow_tex', 96, 96);
+    g.destroy();
+  }
+  if (!scene.textures.exists('loot_chest_closed')) {
+    const g = scene.make.graphics({ x: 0, y: 0 });
+    // 그림자
+    g.fillStyle(0x000000, 0.35);
+    g.fillEllipse(24, 42, 36, 10);
+    // 상자 본체 (나무 + 금속/금테)
+    g.fillStyle(0x78350f, 1);
+    g.fillRoundedRect(8, 20, 32, 20, 3);
+    // 상단 뚜껑 (약간 둥근 덮개)
+    g.fillStyle(0x92400e, 1);
+    g.fillRoundedRect(7, 13, 34, 11, 4);
+    // 목재 판자 줄무늬
+    g.fillStyle(0x451a03, 0.55);
+    g.fillRect(9, 25, 30, 2);
+    g.fillRect(9, 32, 30, 2);
+    // 황금 테두리 및 보강 띠
+    g.lineStyle(2, 0xfbbf24, 1);
+    g.strokeRoundedRect(8, 14, 32, 26, 3);
+    g.fillStyle(0xfbbf24, 1);
+    g.fillRect(13, 14, 3, 25);
+    g.fillRect(32, 14, 3, 25);
+    g.fillRect(8, 22, 32, 3);
+    // 중앙 자물쇠
+    g.fillStyle(0xfde047, 1);
+    g.fillRoundedRect(20, 20, 8, 9, 2);
+    g.fillStyle(0x451a03, 1);
+    g.fillRect(23, 23, 2, 4);
+    g.generateTexture('loot_chest_closed', 48, 48);
+    g.destroy();
+  }
+  if (!scene.textures.exists('loot_chest_open')) {
+    const g = scene.make.graphics({ x: 0, y: 0 });
+    // 그림자
+    g.fillStyle(0x000000, 0.35);
+    g.fillEllipse(24, 42, 36, 10);
+    // 열린 뚜껑 (뒤로 젖혀짐)
+    g.fillStyle(0x78350f, 1);
+    g.fillRoundedRect(8, 6, 32, 11, 3);
+    g.lineStyle(2, 0xfbbf24, 1);
+    g.strokeRoundedRect(8, 6, 32, 11, 3);
+    // 내부 황금빛 보물 광채
+    g.fillStyle(0xfef08a, 0.95);
+    g.fillRect(11, 16, 26, 8);
+    g.fillStyle(0xffffff, 0.85);
+    g.fillRect(15, 17, 18, 5);
+    // 상자 하부 본체
+    g.fillStyle(0x78350f, 1);
+    g.fillRoundedRect(8, 22, 32, 18, 3);
+    g.lineStyle(2, 0xfbbf24, 1);
+    g.strokeRoundedRect(8, 22, 32, 18, 3);
+    g.fillStyle(0xfbbf24, 1);
+    g.fillRect(13, 22, 3, 17);
+    g.fillRect(32, 22, 3, 17);
+    g.fillStyle(0xfde047, 1);
+    g.fillRoundedRect(21, 22, 6, 5, 1);
+    g.generateTexture('loot_chest_open', 48, 48);
+    g.destroy();
+  }
 
   const colors = ['blue', 'red'] as const;
   const classSpecs = [

@@ -1,5 +1,9 @@
 import React from 'react';
-import { ADVANCEMENT_CLASS_LIST, PLAYER_CLASS_DEFINITIONS } from '../data/classes';
+import {
+  ADVANCEMENT_CLASS_LIST,
+  LEVEL_PROGRESSION_CONFIG,
+  PLAYER_CLASS_DEFINITIONS,
+} from '../data/classes';
 import { GameEvents } from '../game/events/gameEvents';
 import { PlayerProgressionState } from '../types/game';
 import { PixelGameButton } from './ui/PixelGameButton';
@@ -10,6 +14,7 @@ interface JobAdvancementModalProps {
   onClose: () => void;
   progression: PlayerProgressionState;
   hasJobHallBuilt: boolean;
+  isNearJobHall: boolean;
 }
 
 export const JobAdvancementModal: React.FC<JobAdvancementModalProps> = ({
@@ -17,10 +22,12 @@ export const JobAdvancementModal: React.FC<JobAdvancementModalProps> = ({
   onClose,
   progression,
   hasJobHallBuilt,
+  isNearJobHall,
 }) => {
   if (!isOpen) return null;
 
   const currentClass = PLAYER_CLASS_DEFINITIONS[progression.classId];
+  const canUseHall = hasJobHallBuilt && isNearJobHall;
 
   return (
     <WoodModalFrame
@@ -49,16 +56,20 @@ export const JobAdvancementModal: React.FC<JobAdvancementModalProps> = ({
           </span>
           <span
             className={`px-2 py-0.5 rounded text-[10px] font-black border ${
-              hasJobHallBuilt
+              canUseHall
                 ? 'bg-[#dcfce7] border-[#15803d] text-[#14532d]'
                 : 'bg-[#fef3c7] border-[#b45309] text-[#78350f]'
             }`}
           >
-            {hasJobHallBuilt ? '🏛️ 전직소 건설 완료' : '🏗️ 마을에 왕국 전직소 건설 필요'}
+            {canUseHall
+              ? '🏛️ 전직소 입장 중'
+              : hasJobHallBuilt
+                ? '🚶 전직소 앞으로 이동 필요'
+                : '🏗️ 마을에 왕국 전직소 건설 필요'}
           </span>
         </div>
         <p className="text-[11px] font-bold text-[#6e4625]">
-          사냥으로 <strong>Lv.3</strong> 이상 달성 및 중앙 마을에 <strong>왕국 전직소</strong> 건설 시 4대 전투 클래스로 전직하거나 클래스를 변경할 수 있습니다.
+          사냥으로 <strong>Lv.{LEVEL_PROGRESSION_CONFIG.firstJobAdvancementLevel}</strong> 이상 달성 후 중앙 마을에 <strong>왕국 전직소</strong>를 건설하고 건물 앞으로 이동하면 4대 전투 클래스로 전직할 수 있습니다.
         </p>
       </div>
 
@@ -67,6 +78,19 @@ export const JobAdvancementModal: React.FC<JobAdvancementModalProps> = ({
         {ADVANCEMENT_CLASS_LIST.map((cls) => {
           const isCurrent = progression.classId === cls.id;
           const levelMet = progression.level >= cls.requiredLevel;
+          const canAdvance = !isCurrent && levelMet && canUseHall;
+
+          const buttonLabel = isCurrent
+            ? '전직 완료됨'
+            : !hasJobHallBuilt
+              ? '전직소 건설 필요'
+              : !isNearJobHall
+                ? '전직소 이동 필요'
+                : !levelMet
+                  ? `Lv.${cls.requiredLevel} 필요`
+                  : progression.classId === 'pawn' && progression.jobPoints > 0
+                    ? '전직하기 (무료 · 1pt)'
+                    : `전직하기 (${cls.costGold}🪙)`;
 
           return (
             <div
@@ -120,17 +144,11 @@ export const JobAdvancementModal: React.FC<JobAdvancementModalProps> = ({
               </div>
 
               <PixelGameButton
-                label={
-                  isCurrent
-                    ? '전직 완료됨'
-                    : !levelMet
-                      ? `Lv.${cls.requiredLevel} 필요`
-                      : `전직하기 (${cls.costGold}🪙)`
-                }
+                label={buttonLabel}
                 variant={isCurrent ? 'red' : 'blue'}
                 size="sm"
                 fullWidth
-                disabled={isCurrent || !levelMet}
+                disabled={!canAdvance}
                 onClick={() => {
                   GameEvents.emit('select-player-class', cls.id);
                   onClose();

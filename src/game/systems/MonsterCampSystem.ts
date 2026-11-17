@@ -35,11 +35,16 @@ export interface IMonsterCampContext {
   addThreat: (amount: number) => void;
   gainExp: (amount: number) => void;
   grantRewardItem: (item: EquipmentItem) => void;
+  playChestDropAt?: (
+    x: number,
+    y: number,
+    item: EquipmentItem,
+    onOpened: (item: EquipmentItem) => void
+  ) => void;
   playExplosionAt: (x: number, y: number) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   emitTerritoriesUpdated: () => void;
-  spawnGoldMineClusterAndAnnounce?: () => void;
 }
 
 /**
@@ -273,7 +278,6 @@ export class MonsterCampSystem {
 
     camp.destroyed = true;
     camp.clearCount += 1;
-    const wasFirstClear = !camp.firstCleared;
     camp.firstCleared = true;
     camp.respawnRemainingSec = tpl.respawnSec;
 
@@ -293,13 +297,18 @@ export class MonsterCampSystem {
     this.ctx.gainExp(tpl.clearBonusExp);
     this.ctx.addThreat(tpl.threatGainOnClear);
 
-    // 2. 개인별 특별 장비 보상 지급
+    // 2. 개인별 특별 장비 보상 상자 드랍 연출 (~1초 후 자동 개봉 및 지급)
     const rewardItem = rollCampRewardItem(camp.ring, camp.clearCount);
-    this.ctx.grantRewardItem(rewardItem);
-
-    // 3. 황금광산 인접 부락(id: 11) 초회 파괴 시 황금광산 해금
-    if (wasFirstClear && camp.territoryId === 11) {
-      this.ctx.spawnGoldMineClusterAndAnnounce?.();
+    if (this.ctx.playChestDropAt) {
+      this.ctx.playChestDropAt(container.x, container.y, rewardItem, (openedItem) => {
+        this.ctx.grantRewardItem(openedItem);
+        GameEvents.emit(
+          'game-alert',
+          `🎁 [${camp.name}] 보물 상자 오픈! [${openedItem.icon}${openedItem.name}] 획득!`
+        );
+      });
+    } else {
+      this.ctx.grantRewardItem(rewardItem);
     }
 
     const firstClearedTotal = Array.from(this.campNodes.values()).filter(
@@ -313,7 +322,7 @@ export class MonsterCampSystem {
     });
     GameEvents.emit(
       'game-alert',
-      `🏆 [${camp.name}] 본진 파괴! 개인 장비 [${rewardItem.icon}${rewardItem.name}] 및 +${tpl.clearBonusExp} EXP 획득!`
+      `🏆 [${camp.name}] 본진 파괴! +${tpl.clearBonusExp} EXP! 보물 상자가 드랍되었습니다!`
     );
     this.ctx.emitTerritoriesUpdated();
   }
@@ -324,6 +333,20 @@ export class MonsterCampSystem {
       if (node.camp.firstCleared) count++;
     }
     return count;
+  }
+
+  public getActiveCampTargets(): Array<{ id: number; x: number; y: number; ring: 1 | 2 | 3 | 4 }> {
+    const targets: Array<{ id: number; x: number; y: number; ring: 1 | 2 | 3 | 4 }> = [];
+    for (const node of this.campNodes.values()) {
+      if (node.camp.destroyed) continue;
+      targets.push({
+        id: node.camp.territoryId,
+        x: node.container.x,
+        y: node.container.y,
+        ring: node.camp.ring,
+      });
+    }
+    return targets;
   }
 
   public healCampCore(territoryId: number, amount: number): void {

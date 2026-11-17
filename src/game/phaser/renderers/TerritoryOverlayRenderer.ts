@@ -103,7 +103,7 @@ export class TerritoryOverlayRenderer {
 
     // Gold Mine biome seal/unlocked perimeter overlay
     const gmUnlocked = islands.some(
-      (i) => i.id === gmZone.unlockTerritoryId && (i.unlocked || i.campDestroyed)
+      (i) => i.id === gmZone.unlockTerritoryId && i.unlocked
     );
     const radius = gmZone.radiusPx - 18;
     if (gmUnlocked) {

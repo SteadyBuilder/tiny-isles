@@ -46,6 +46,7 @@ export function App() {
     setShowInventoryModal,
     showJobHallModal,
     setShowJobHallModal,
+    isNearJobHall,
     playerProgression,
     alertMessage,
     zoom,
@@ -262,6 +263,8 @@ export function App() {
 
       <PlayerProgressionHud
         progression={playerProgression}
+        hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall' && b.hp > 0)}
+        isNearJobHall={isNearJobHall}
         onOpenInventory={() => setShowInventoryModal(true)}
         onOpenJobHall={() => setShowJobHallModal(true)}
       />
@@ -276,7 +279,8 @@ export function App() {
         isOpen={showJobHallModal}
         onClose={() => setShowJobHallModal(false)}
         progression={playerProgression}
-        hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall')}
+        hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall' && b.hp > 0)}
+        isNearJobHall={isNearJobHall}
       />
 
       {sessionStatus === 'paused' && (

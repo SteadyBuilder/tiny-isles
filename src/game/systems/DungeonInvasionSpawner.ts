@@ -46,6 +46,10 @@ export class DungeonInvasionSpawner {
     this.ctx = ctx;
   }
 
+  public getPortalState(): DungeonPortalState | null {
+    return this.portalState ? { ...this.portalState } : null;
+  }
+
   public startDungeonInvasion(params: {
     onlineCount: number;
     waveCount: number;

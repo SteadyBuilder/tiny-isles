@@ -335,7 +335,7 @@ export class TerritoryActionController {
     ownerId?: string
   ): void {
     const target = this.ctx.getIslands().find((i) => i.id === islandId);
-    if (!target) return;
+    if (!target || target.isMonsterCamp) return;
 
     if (target.unlocked) {
       // 동시 점령 경합 시 결정론적 소유권 통일 (사전순으로 앞선 ownerId 우선)

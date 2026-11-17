@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { THREAT_WAVE_CONFIG } from '../data/worldRules';
+import { getRequiredExpForLevel } from '../data/classes';
+import { PLAYER_COMBAT_CONFIG, THREAT_WAVE_CONFIG } from '../data/worldRules';
 import { getInitialConstructedBuildings, INITIAL_ISLANDS } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
 import { storage } from '../lib/storage';
@@ -23,7 +24,7 @@ const INITIAL_SESSION_INVENTORY: Inventory = {
 const INITIAL_PLAYER_PROGRESSION: PlayerProgressionState = {
   level: 1,
   exp: 0,
-  nextLevelExp: 60,
+  nextLevelExp: getRequiredExpForLevel(1),
   jobPoints: 0,
   classId: 'pawn',
   skillCooldownRemainingMs: 0,
@@ -34,9 +35,9 @@ const INITIAL_PLAYER_PROGRESSION: PlayerProgressionState = {
     relic: null,
   },
   bagItems: [],
-  totalAttack: 18,
-  totalMaxHp: 100,
-  totalSpeed: 230,
+  totalAttack: PLAYER_COMBAT_CONFIG.meleeDamage,
+  totalMaxHp: PLAYER_COMBAT_CONFIG.maxHp,
+  totalSpeed: 250,
 };
 
 function createInitialWaveState(): WaveState {
@@ -78,6 +79,7 @@ export function useGameShellState() {
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<number>(0);
   const [showInventoryModal, setShowInventoryModal] = useState<boolean>(false);
   const [showJobHallModal, setShowJobHallModal] = useState<boolean>(false);
+  const [isNearJobHall, setIsNearJobHall] = useState<boolean>(false);
   const [playerProgression, setPlayerProgression] = useState<PlayerProgressionState>(
     INITIAL_PLAYER_PROGRESSION
   );
@@ -108,17 +110,22 @@ export function useGameShellState() {
     const handleOpenJobHall = () => {
       setShowJobHallModal(true);
     };
+    const handleJobHallProximity = (isNear: boolean) => {
+      setIsNearJobHall(isNear);
+    };
     const handleOpenInventory = () => {
       setShowInventoryModal((prev) => !prev);
     };
     GameEvents.on('player-hp-updated', handleHpUpdated);
     GameEvents.on('player-progression-updated', handleProgressionUpdated);
     GameEvents.on('open-job-hall-modal', handleOpenJobHall);
+    GameEvents.on('job-hall-proximity-changed', handleJobHallProximity);
     GameEvents.on('open-inventory-modal', handleOpenInventory);
     return () => {
       GameEvents.off('player-hp-updated', handleHpUpdated);
       GameEvents.off('player-progression-updated', handleProgressionUpdated);
       GameEvents.off('open-job-hall-modal', handleOpenJobHall);
+      GameEvents.off('job-hall-proximity-changed', handleJobHallProximity);
       GameEvents.off('open-inventory-modal', handleOpenInventory);
     };
   }, []);
@@ -235,6 +242,7 @@ export function useGameShellState() {
     setSelectedTerritoryId(0);
     setShowInventoryModal(false);
     setShowJobHallModal(false);
+    setIsNearJobHall(false);
     setPlayerProgression(INITIAL_PLAYER_PROGRESSION);
     setShowMinimapModal(false);
     setNearIsland(null);
@@ -270,6 +278,7 @@ export function useGameShellState() {
     setShowInventoryModal,
     showJobHallModal,
     setShowJobHallModal,
+    isNearJobHall,
     playerProgression,
     alertMessage,
     zoom,

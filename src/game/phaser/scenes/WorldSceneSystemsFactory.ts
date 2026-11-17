@@ -19,8 +19,11 @@ import { PlayerProgressionSystem } from '../../systems/PlayerProgressionSystem';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
+import { checkJobHallProximity } from '../../utils/jobHallUtils';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
+import { LootChestDropRenderer } from '../renderers/LootChestDropRenderer';
+import { PlayerCelebrationEffects } from '../renderers/PlayerCelebrationEffects';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
@@ -72,6 +75,8 @@ export interface IWorldSystemsHost {
   onRemoteBuildingDestroyed?: (buildingId: string) => void;
   onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
   effectsRenderer: WorldEffectsRenderer;
+  lootChestRenderer: LootChestDropRenderer;
+  celebrationEffects: PlayerCelebrationEffects;
   territoryStructureRenderer: TerritoryStructureRenderer;
   constructedBuildingRenderer: ConstructedBuildingRenderer;
   resourceEntityRenderer: ResourceEntityRenderer;
@@ -136,10 +141,13 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       isHuntingMode: host.isHuntingMode,
       projectileSystem,
       healCampCore: (territoryId, amount) => monsterCampSystem?.healCampCore(territoryId, amount),
-      onMonsterKilledReward: (x, y, _isBoss, expReward) => {
+      onMonsterKilledReward: (x, y, _isBoss, expReward, isCampMonster) => {
         playerProgressionSystem?.gainExp(expReward);
-        waveSystem.addThreat(THREAT_WAVE_CONFIG.huntThreatGain, true);
-        host.effectsRenderer.emitThreatOrbFromWorld(x, y, THREAT_WAVE_CONFIG.huntThreatGain);
+        // 사냥 특화 모드에서는 몬스터 웨이브(던전 침공) 처치 시 위협도 미증가, 부락 주둔 마물만 증가
+        if (isCampMonster || !host.isHuntingMode()) {
+          waveSystem.addThreat(THREAT_WAVE_CONFIG.huntThreatGain, true);
+          host.effectsRenderer.emitThreatOrbFromWorld(x, y, THREAT_WAVE_CONFIG.huntThreatGain);
+        }
       },
       getIslands: host.getIslands,
       getConstructedBuildings: host.getConstructedBuildings,
@@ -196,6 +204,15 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     projectileSystem,
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
+    getJobHallStatus: () => {
+      const pos = host.getPlayerPosition();
+      const status = checkJobHallProximity(pos.x, pos.y, host.getConstructedBuildings());
+      return { hasBuilt: status.hasBuilt, isNear: status.isNear };
+    },
+    playLevelUpEffect: (x, y, level, delayMs) =>
+      host.celebrationEffects.playLevelUpEffect(x, y, level, delayMs),
+    playClassAdvancementEffect: (x, y, classId) =>
+      host.celebrationEffects.playClassAdvancementEffect(x, y, classId),
   });
 
   monsterCampSystem = new MonsterCampSystem({
@@ -207,6 +224,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     addThreat: (amount) => waveSystem.addThreat(amount, true),
     gainExp: (exp) => playerProgressionSystem.gainExp(exp),
     grantRewardItem: (item) => playerProgressionSystem.grantRewardItem(item),
+    playChestDropAt: (x, y, item, onOpened) =>
+      host.lootChestRenderer.playDropAnimation({ x, y, item, onOpened }),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     shakeObject: (target) => host.effectsRenderer.shakeObject(target),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
@@ -214,8 +233,6 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       host.refreshTerritoryDecorations();
       host.emitWorldStateToReact(true);
     },
-    spawnGoldMineClusterAndAnnounce: () =>
-      host.resourceEntityRenderer.spawnGoldMineClusterAndAnnounce(),
   });
 
   const towerDefenseSystem = new TowerDefenseSystem(

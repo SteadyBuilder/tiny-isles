@@ -3,20 +3,32 @@ import { PlayerClassDefinition, PlayerClassId } from '../types/hunting';
 /**
  * 개인 경험치(EXP) 및 레벨업 밸런스 설정 데이터
  */
+export const LEVEL_EXP_TABLE: readonly number[] = [
+  // Lv.1 → Lv.10 (누적 500 EXP: 초급 부락 4개 토벌 시 Lv.10 도달)
+  20, 30, 40, 50, 55, 65, 75, 80, 85,
+  // Lv.10 → Lv.15 (누적 +780 EXP: 중급 부락 공략 구간)
+  110, 130, 155, 180, 205,
+  // Lv.15 → Lv.20 (누적 +1,420 EXP: 상급 부락 공략 구간)
+  230, 260, 290, 310, 330,
+  // Lv.20 → Lv.25 (누적 +2,430 EXP: 최외곽 요새 전반 및 던전 방어)
+  380, 430, 480, 540, 600,
+  // Lv.25 → Lv.30 (누적 +3,970 EXP: 후반 최종 성장 구간)
+  660, 720, 780, 850, 960,
+] as const;
+
 export const LEVEL_PROGRESSION_CONFIG = {
   maxLevel: 30,
-  baseExpRequired: 60,
-  expGrowthPerLevel: 35,
   hpGainPerLevel: 18,
   attackGainPerLevel: 5,
-  firstJobAdvancementLevel: 3,
+  firstJobAdvancementLevel: 10,
 } as const;
 
 export function getRequiredExpForLevel(level: number): number {
-  return (
-    LEVEL_PROGRESSION_CONFIG.baseExpRequired +
-    Math.max(0, level - 1) * LEVEL_PROGRESSION_CONFIG.expGrowthPerLevel
-  );
+  if (level >= LEVEL_PROGRESSION_CONFIG.maxLevel) {
+    return LEVEL_EXP_TABLE[LEVEL_EXP_TABLE.length - 1];
+  }
+  const idx = Math.max(0, Math.min(LEVEL_EXP_TABLE.length - 1, level - 1));
+  return LEVEL_EXP_TABLE[idx];
 }
 
 /**
@@ -44,14 +56,14 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     skillCooldownMs: 7000,
     skillDamageMultiplier: 2.0,
     skillRadius: 150,
-    passiveDescription: '레벨 3 달성 후 전직소에서 상위 클래스로 전직할 수 있습니다.',
+    passiveDescription: '레벨 10 달성 후 왕국 전직소를 건설하고 방문하여 상위 클래스로 전직할 수 있습니다.',
   },
   guardian: {
     id: 'guardian',
     name: '가디언 (전사)',
     title: '불굴의 성벽 수호기사',
     icon: '🛡️',
-    requiredLevel: 3,
+    requiredLevel: 10,
     costGold: 15,
     baseHpBonus: 120,
     baseAttackBonus: 22,
@@ -75,7 +87,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     name: '드래곤 랜서 (창병)',
     title: '전장을 가르는 폭풍의 창',
     icon: '🔱',
-    requiredLevel: 3,
+    requiredLevel: 10,
     costGold: 15,
     baseHpBonus: 65,
     baseAttackBonus: 32,
@@ -100,7 +112,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     name: '레인저 (궁수)',
     title: '백발백중의 바람 사수',
     icon: '🏹',
-    requiredLevel: 3,
+    requiredLevel: 10,
     costGold: 15,
     baseHpBonus: 35,
     baseAttackBonus: 26,
@@ -125,7 +137,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     name: '아크메이지 (마법사)',
     title: '심연과 성광의 대현자',
     icon: '🔮',
-    requiredLevel: 3,
+    requiredLevel: 10,
     costGold: 15,
     baseHpBonus: 50,
     baseAttackBonus: 35,

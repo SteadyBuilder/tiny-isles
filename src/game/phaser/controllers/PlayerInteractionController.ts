@@ -19,6 +19,7 @@ import {
 } from '../../constants';
 import { GameEvents } from '../../events/gameEvents';
 import { canClaimTerritory } from '../../territoryAccessRules';
+import { checkJobHallProximity } from '../../utils/jobHallUtils';
 import { nearestPointOnCollisionBox } from '../../wallCollisionGeometry';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { MonsterVisual } from '../../systems/WaveSystem';
@@ -171,14 +172,11 @@ export class PlayerInteractionController {
 
     // 2. 건설된 '왕국 전직소(job_hall)' 앞에서 상호작용 시 전직 창 열기
     const buildings = this.ctx.getConstructedBuildings?.() ?? [];
-    for (const cb of buildings) {
-      if (cb.type === 'job_hall' && cb.hp > 0) {
-        if (Math.hypot(px - cb.x, py - cb.y) < 120) {
-          sound.playUnlock();
-          GameEvents.emit('open-job-hall-modal');
-          return;
-        }
-      }
+    const jobHallStatus = checkJobHallProximity(px, py, buildings);
+    if (jobHallStatus.isNear) {
+      sound.playUnlock();
+      GameEvents.emit('open-job-hall-modal');
+      return;
     }
 
     // 3. 미점령 영지 개척 제단 확인 (몬스터 부락은 제외)

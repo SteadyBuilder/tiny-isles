@@ -37,7 +37,13 @@ export interface IMonsterCombatContext {
   healCampCore?: (territoryId: number, amount: number) => void;
   projectileSystem?: ProjectileSystem;
   onMonsterDamaged?: () => void;
-  onMonsterKilled?: (x: number, y: number, isBoss: boolean, expReward: number) => void;
+  onMonsterKilled?: (
+    x: number,
+    y: number,
+    isBoss: boolean,
+    expReward: number,
+    isCampMonster: boolean
+  ) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   playExplosionAt: (x: number, y: number) => void;
@@ -344,7 +350,7 @@ export class MonsterCombatAI {
       ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} +✨${expReward}EXP)`
       : `⚔️ +🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} (+${expReward}EXP)`;
     this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
-    this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss, expReward);
+    this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss, expReward, Boolean(deadM.isCampMonster));
     return true;
   }
 

@@ -1,6 +1,13 @@
 import Phaser from 'phaser';
 import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
-import { Island, PlayerAction, PlayerClassId, PlayerColor, PlayerHpState } from '../../../types/game';
+import {
+  ConstructedBuilding,
+  Island,
+  PlayerAction,
+  PlayerClassId,
+  PlayerColor,
+  PlayerHpState,
+} from '../../../types/game';
 import {
   TERRITORY_CENTER_X,
   TERRITORY_CENTER_Y,
@@ -11,6 +18,7 @@ import {
 import { setDepthIfChanged, ySortDepth } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { MonsterVisual } from '../../systems/WaveSystem';
+import { checkJobHallProximity } from '../../utils/jobHallUtils';
 import { resolveSafeSpawnPosition } from '../../utils/playerSpawnUtils';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
@@ -33,6 +41,7 @@ export interface IPlayerMovementContext {
   onInteract: () => void;
   isPlacementActive?: () => boolean;
   getMoveSpeed?: () => number;
+  getConstructedBuildings?: () => ConstructedBuilding[];
 }
 
 /**
@@ -63,6 +72,7 @@ export class PlayerMovementController {
 
   private lastGridPos = { gridX: 0, gridY: 0 };
   private lastNearIsland: Island | null = null;
+  private lastNearJobHall = false;
   private lastInteractTime = 0;
   private unbindInputs: Array<() => void> = [];
 
@@ -424,7 +434,7 @@ export class PlayerMovementController {
 
     let nearLocked: Island | null = null;
     for (const isl of this.ctx.getIslands()) {
-      if (!isl.unlocked) {
+      if (!isl.unlocked && !isl.isMonsterCamp) {
         const origin = getIslandOrigin(isl.gridX, isl.gridY);
         const signX = origin.x + TERRITORY_CENTER_X;
         const signY = origin.y + TERRITORY_CENTER_Y;
@@ -445,6 +455,16 @@ export class PlayerMovementController {
     if (gridX !== this.lastGridPos.gridX || gridY !== this.lastGridPos.gridY) {
       this.lastGridPos = { gridX, gridY };
       GameEvents.emit('player-grid-pos-changed', { gridX, gridY });
+    }
+
+    const jobHallStatus = checkJobHallProximity(
+      px,
+      py,
+      this.ctx.getConstructedBuildings?.() ?? []
+    );
+    if (jobHallStatus.isNear !== this.lastNearJobHall) {
+      this.lastNearJobHall = jobHallStatus.isNear;
+      GameEvents.emit('job-hall-proximity-changed', jobHallStatus.isNear);
     }
   }
 
