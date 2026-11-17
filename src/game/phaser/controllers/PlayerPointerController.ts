@@ -254,23 +254,7 @@ export class PlayerPointerController {
     }
 
     for (const isl of this.ctx.getIslands()) {
-      if (isl.unlocked) {
-        const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);
-        const mainBld = getTerritoryMainBuilding(isl.id, isl.gridX, isl.gridY, isl.villageTier);
-        const mainBounds = {
-          x: mainBld.x,
-          y: mainBld.y,
-          w: mainBld.width,
-          h: mainBld.height,
-        };
-        if (
-          isPointInCollisionBox(wx, wy, mainBounds, 16) ||
-          Math.hypot(wx - cPos.x, wy - cPos.y) < 60
-        ) {
-          GameEvents.emit('open-village-modal', isl.id);
-          return { x: cPos.x, y: cPos.y };
-        }
-      } else {
+      if (!isl.unlocked) {
         const origin = getIslandOrigin(isl.gridX, isl.gridY);
         const signX = origin.x + TERRITORY_CENTER_X;
         const signY = origin.y + TERRITORY_CENTER_Y;
