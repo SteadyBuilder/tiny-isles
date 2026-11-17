@@ -24,6 +24,8 @@ export interface SpawnWaveParams {
   onlineCount: number;
   waveCount: number;
   bossWaveCount: number;
+  difficultyHpMultiplier?: number;
+  difficultyAttackMultiplier?: number;
 }
 
 export interface SpawnWaveResult {
@@ -83,8 +85,10 @@ export class WaveSpawner {
       const spawnX = sp.spawnX + jitterX;
       const spawnY = sp.spawnY + jitterY;
       const targetCore = getTerritoryCorePos(sp.territory.gridX, sp.territory.gridY);
-      const scaledHp = Math.round(template.hp * scaling.hpMultiplier);
-      const scaledAttack = Math.round(template.attack * scaling.attackMultiplier);
+      const diffHp = params.difficultyHpMultiplier ?? 1;
+      const diffAtk = params.difficultyAttackMultiplier ?? 1;
+      const scaledHp = Math.round(template.hp * scaling.hpMultiplier * diffHp);
+      const scaledAttack = Math.round(template.attack * scaling.attackMultiplier * diffAtk);
 
       const monster: Monster = {
         id: `m_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
@@ -111,8 +115,10 @@ export class WaveSpawner {
       const bossSpawn = pickRandomMapEdgeSpawn(islands);
       if (bossSpawn) {
         const bossTemplate = getBossMonsterTemplate(params.bossWaveCount);
-        const bossHp = Math.round(bossTemplate.hp * scaling.hpMultiplier);
-        const bossAttack = Math.round(bossTemplate.attack * scaling.attackMultiplier);
+        const diffHp = params.difficultyHpMultiplier ?? 1;
+        const diffAtk = params.difficultyAttackMultiplier ?? 1;
+        const bossHp = Math.round(bossTemplate.hp * scaling.hpMultiplier * diffHp);
+        const bossAttack = Math.round(bossTemplate.attack * scaling.attackMultiplier * diffAtk);
         const bossCore = getTerritoryCorePos(bossSpawn.territory.gridX, bossSpawn.territory.gridY);
         spawnedBossName = bossTemplate.name;
         bossDirectionLabel = bossSpawn.directionLabel;

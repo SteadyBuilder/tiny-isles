@@ -109,8 +109,46 @@ export class PlayerProgressionSystem {
     return 250 + cls.baseSpeedBonus + eqBonus;
   }
 
+  public getTotalCritChance(): number {
+    const eqCrit =
+      (this.equipped.weapon?.bonusCritChance ?? 0) +
+      (this.equipped.armor?.bonusCritChance ?? 0) +
+      (this.equipped.relic?.bonusCritChance ?? 0);
+    return Math.min(75, 5 + eqCrit);
+  }
+
+  public getTotalLifestealPercent(): number {
+    const eqLifesteal =
+      (this.equipped.weapon?.bonusLifestealPercent ?? 0) +
+      (this.equipped.armor?.bonusLifestealPercent ?? 0) +
+      (this.equipped.relic?.bonusLifestealPercent ?? 0);
+    return Math.min(35, eqLifesteal);
+  }
+
+  public getTotalCooldownReductionPercent(): number {
+    const eqCdr =
+      (this.equipped.weapon?.bonusCooldownReductionPercent ?? 0) +
+      (this.equipped.armor?.bonusCooldownReductionPercent ?? 0) +
+      (this.equipped.relic?.bonusCooldownReductionPercent ?? 0);
+    return Math.min(50, eqCdr);
+  }
+
+  public rollDamageWithAffixes(baseDamage: number): {
+    finalDamage: number;
+    isCrit: boolean;
+    lifestealHeal: number;
+  } {
+    const critChance = this.getTotalCritChance();
+    const isCrit = Math.random() * 100 < critChance;
+    const finalDamage = isCrit ? Math.round(baseDamage * 1.75) : baseDamage;
+    const lifestealPct = this.getTotalLifestealPercent();
+    const lifestealHeal = lifestealPct > 0 ? Math.max(1, Math.round((finalDamage * lifestealPct) / 100)) : 0;
+    return { finalDamage, isCrit, lifestealHeal };
+  }
+
   public getState(): PlayerProgressionState {
     const cls = this.getClassDef();
+    const cdrRatio = 1 - this.getTotalCooldownReductionPercent() / 100;
     return {
       level: this.level,
       exp: this.exp,
@@ -118,12 +156,15 @@ export class PlayerProgressionSystem {
       jobPoints: this.jobPoints,
       classId: this.classId,
       skillCooldownRemainingMs: Math.max(0, Math.ceil(this.skillCooldownRemainingMs)),
-      skillCooldownMaxMs: cls.skillCooldownMs,
+      skillCooldownMaxMs: Math.round(cls.skillCooldownMs * cdrRatio),
       equipped: { ...this.equipped },
       bagItems: [...this.bagItems],
       totalAttack: this.getTotalAttack(),
       totalMaxHp: this.getTotalMaxHp(),
       totalSpeed: this.getTotalSpeed(),
+      totalCritChance: this.getTotalCritChance(),
+      totalLifestealPercent: this.getTotalLifestealPercent(),
+      totalCooldownReductionPercent: this.getTotalCooldownReductionPercent(),
     };
   }
 
@@ -316,14 +357,31 @@ export class PlayerProgressionSystem {
   public castActiveSkill(): void {
     if (this.skillCooldownRemainingMs > 0) return;
     const cls = this.getClassDef();
-    this.skillCooldownRemainingMs = cls.skillCooldownMs;
+    const cdrRatio = 1 - this.getTotalCooldownReductionPercent() / 100;
+    this.skillCooldownRemainingMs = Math.round(cls.skillCooldownMs * cdrRatio);
 
     const pos = this.ctx.getPlayerPosition();
-    const skillDmg = Math.round(this.getTotalAttack() * cls.skillDamageMultiplier);
+    const baseSkillDmg = Math.round(this.getTotalAttack() * cls.skillDamageMultiplier);
     const monsters = this.ctx.getMonsterVisuals();
 
     sound.playUnlock();
     this.ctx.showFloatingText(pos.x, pos.y - 58, `${cls.skillIcon} ${cls.skillName}!`, '#38bdf8');
+
+    const dealSkillHit = (targetId: string, tx: number, ty: number) => {
+      const rolled = this.rollDamageWithAffixes(baseSkillDmg);
+      this.ctx.damageMonster(
+        targetId,
+        rolled.finalDamage,
+        this.ctx.getPlayerName(),
+        this.ctx.getPlayerId()
+      );
+      if (rolled.isCrit) {
+        this.ctx.showFloatingText(tx, ty - 42, '💥 치명타!', '#fde047');
+      }
+      if (rolled.lifestealHeal > 0) {
+        this.ctx.healPlayer(rolled.lifestealHeal);
+      }
+    };
 
     if (cls.id === 'ranger') {
       let fired = 0;
@@ -333,26 +391,21 @@ export class PlayerProgressionSystem {
         if (d <= cls.skillRadius) {
           fired++;
           const targetId = mv.monster.id;
+          const mx = mv.monster.x;
+          const my = mv.monster.y;
           this.ctx.projectileSystem.fireProjectile({
             startX: pos.x,
             startY: pos.y - 20,
-            targetX: mv.monster.x,
-            targetY: mv.monster.y,
+            targetX: mx,
+            targetY: my,
             durationMs: 170,
             tint: 0x38bdf8,
             size: 40,
-            onArrive: () => {
-              this.ctx.damageMonster(
-                targetId,
-                skillDmg,
-                this.ctx.getPlayerName(),
-                this.ctx.getPlayerId()
-              );
-            },
+            onArrive: () => dealSkillHit(targetId, mx, my),
           });
         }
       }
-      this.ctx.tryDamageCampCoreInRadius?.(pos.x, pos.y, cls.skillRadius, skillDmg);
+      this.ctx.tryDamageCampCoreInRadius?.(pos.x, pos.y, cls.skillRadius, baseSkillDmg);
     } else {
       this.ctx.projectileSystem.spawnTelegraphZone({
         x: pos.x,
@@ -365,15 +418,10 @@ export class PlayerProgressionSystem {
           for (const mv of monsters.values()) {
             const d = Math.hypot(mv.monster.x - pos.x, mv.monster.y - pos.y);
             if (d <= cls.skillRadius) {
-              this.ctx.damageMonster(
-                mv.monster.id,
-                skillDmg,
-                this.ctx.getPlayerName(),
-                this.ctx.getPlayerId()
-              );
+              dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);
             }
           }
-          this.ctx.tryDamageCampCoreInRadius?.(pos.x, pos.y, cls.skillRadius, skillDmg);
+          this.ctx.tryDamageCampCoreInRadius?.(pos.x, pos.y, cls.skillRadius, baseSkillDmg);
         },
       });
 

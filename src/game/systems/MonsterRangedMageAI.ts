@@ -1,4 +1,4 @@
-import { DUNGEON_INVASION_CONFIG } from '../../data/monsterCamps';
+import { DUNGEON_INVASION_CONFIG, HUNTING_AI_CONFIG } from '../../data/monsterCamps';
 import { ConstructedBuilding } from '../../types/game';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { resolveMonsterWallClamping } from '../wallCollisionGeometry';
@@ -37,7 +37,8 @@ export class MonsterRangedMageAI {
     dt: number,
     aliveWalls: ConstructedBuilding[],
     sepX: number,
-    sepY: number
+    sepY: number,
+    hasActiveAggro = false
   ): boolean {
     const m = mv.monster;
     if (!m.isCampMonster) return false;
@@ -55,11 +56,19 @@ export class MonsterRangedMageAI {
       this.performMageSupportHeal(mv);
     }
 
-    // 플레이어가 기절했거나 부락 중심에서 너무 멀리(560px 초과) 유인된 경우 본래 위치로 귀환
-    if (playerFainted || distToPlayer > 380 || distFromHome > 560) {
+    const aggroDetectRadius = hasActiveAggro
+      ? HUNTING_AI_CONFIG.campLeashRadiusPx
+      : HUNTING_AI_CONFIG.campAggroRadiusPx;
+
+    // 플레이어가 기절했거나 탐지 반경/최대 추격 이탈 거리를 벗어난 경우 본래 위치로 귀환
+    if (
+      playerFainted ||
+      distToPlayer > aggroDetectRadius ||
+      distFromHome > HUNTING_AI_CONFIG.campLeashRadiusPx
+    ) {
       if (distFromHome > 18) {
-        const vx = ((homeX - m.x) / distFromHome) * m.speed * 0.85;
-        const vy = ((homeY - m.y) / distFromHome) * m.speed * 0.85;
+        const vx = ((homeX - m.x) / distFromHome) * m.speed * 0.9;
+        const vy = ((homeY - m.y) / distFromHome) * m.speed * 0.9;
         m.x += vx * dt;
         m.y += vy * dt;
         m.direction = vx < 0 ? 'left' : 'right';
@@ -104,7 +113,8 @@ export class MonsterRangedMageAI {
       return true;
     }
 
-    const cooldownMs = m.role === 'mage' ? 1850 : m.role === 'ranged' ? 1400 : 1100;
+    const baseCooldownMs = m.role === 'mage' ? 1850 : m.role === 'ranged' ? 1400 : 1100;
+    const cooldownMs = m.eliteAffix === 'berserker' ? Math.round(baseCooldownMs * 0.8) : baseCooldownMs;
     if (time - mv.lastAttackTime >= cooldownMs) {
       mv.lastAttackTime = time;
       this.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y);
@@ -123,6 +133,15 @@ export class MonsterRangedMageAI {
     return defaultRange;
   }
 
+  private applyVampiricHeal(mv: MonsterVisual): void {
+    const m = mv.monster;
+    if (m.eliteAffix !== 'vampiric' || m.hp <= 0 || m.hp >= m.maxHp) return;
+    const heal = Math.max(8, Math.round(m.attack * 0.5));
+    m.hp = Math.min(m.maxHp, m.hp + heal);
+    MonsterVisualManager.updateHpBar(mv);
+    this.ctx.showFloatingText(m.x, m.y - 36, `🩸 +${heal}`, '#fb7185');
+  }
+
   public executeRoleAttackOnPlayer(mv: MonsterVisual, targetX: number, targetY: number): void {
     const m = mv.monster;
 
@@ -139,6 +158,7 @@ export class MonsterRangedMageAI {
           const curPlayer = this.ctx.getLocalPlayerPosition();
           if (Math.hypot(curPlayer.x - targetX, curPlayer.y - targetY) <= 58) {
             this.ctx.damageLocalPlayer(m.attack, m.name);
+            this.applyVampiricHeal(mv);
           }
         },
       });
@@ -159,6 +179,7 @@ export class MonsterRangedMageAI {
           const curPlayer = this.ctx.getLocalPlayerPosition();
           if (Math.hypot(curPlayer.x - strikeX, curPlayer.y - strikeY) <= 82) {
             this.ctx.damageLocalPlayer(m.attack, m.name);
+            this.applyVampiricHeal(mv);
           }
         },
       });
@@ -166,6 +187,7 @@ export class MonsterRangedMageAI {
     }
 
     this.ctx.damageLocalPlayer(m.attack, m.name);
+    this.applyVampiricHeal(mv);
   }
 
   private performMageSupportHeal(mageMv: MonsterVisual): void {

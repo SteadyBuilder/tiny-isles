@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { rollMonsterDropItem } from '../../../data/items';
 import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import {
@@ -9,7 +10,7 @@ import {
   PlayerClassId,
   PlayerColor,
 } from '../../../types/game';
-import { RoomMode } from '../../../types/room';
+import { MissionDifficultyConfig, RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
@@ -32,6 +33,7 @@ export interface IWorldSystemsHost {
   scene: Phaser.Scene;
   isSceneAlive: () => boolean;
   isHuntingMode: () => boolean;
+  getDifficultyConfig?: () => MissionDifficultyConfig;
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
@@ -139,14 +141,39 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     {
       scene: host.scene,
       isHuntingMode: host.isHuntingMode,
+      getDifficultyConfig: host.getDifficultyConfig,
       projectileSystem,
       healCampCore: (territoryId, amount) => monsterCampSystem?.healCampCore(territoryId, amount),
-      onMonsterKilledReward: (x, y, _isBoss, expReward, isCampMonster) => {
+      onMonsterKilledReward: (x, y, isBoss, expReward, isCampMonster, meta) => {
         playerProgressionSystem?.gainExp(expReward);
         // 사냥 특화 모드에서는 몬스터 웨이브(던전 침공) 처치 시 위협도 미증가, 부락 주둔 마물만 증가
         if (isCampMonster || !host.isHuntingMode()) {
           waveSystem.addThreat(THREAT_WAVE_CONFIG.huntThreatGain, true);
           host.effectsRenderer.emitThreatOrbFromWorld(x, y, THREAT_WAVE_CONFIG.huntThreatGain);
+        }
+        // 사냥 특화 모드: 일반·정예·보스 처치 시 디아블로식 필드 장비 드랍
+        if (host.isHuntingMode()) {
+          const difficultyId = host.getDifficultyConfig?.().id ?? 'normal';
+          const dropItem = rollMonsterDropItem({
+            ring: meta?.campRing ?? 2,
+            isElite: Boolean(meta?.isElite),
+            isBoss,
+            difficultyId,
+          });
+          if (dropItem) {
+            host.lootChestRenderer.playDropAnimation({
+              x,
+              y,
+              item: dropItem,
+              onOpened: (openedItem) => {
+                playerProgressionSystem?.grantRewardItem(openedItem);
+                GameEvents.emit(
+                  'game-alert',
+                  `💎 전리품 드랍! [${openedItem.icon}${openedItem.name}] 획득!`
+                );
+              },
+            });
+          }
         }
       },
       getIslands: host.getIslands,
@@ -218,6 +245,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
   monsterCampSystem = new MonsterCampSystem({
     scene: host.scene,
     isHuntingMode: host.isHuntingMode,
+    getDifficultyConfig: host.getDifficultyConfig,
     getIslands: host.getIslands,
     getMonsters: () => waveSystem.getMonsterVisuals(),
     addResources: host.addResources,
@@ -226,6 +254,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     grantRewardItem: (item) => playerProgressionSystem.grantRewardItem(item),
     playChestDropAt: (x, y, item, onOpened) =>
       host.lootChestRenderer.playDropAnimation({ x, y, item, onOpened }),
+    onCampCoreDamaged: (territoryId) =>
+      waveSystem.aggroCampMonsters(territoryId, host.getPlayerId()),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     shakeObject: (target) => host.effectsRenderer.shakeObject(target),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),

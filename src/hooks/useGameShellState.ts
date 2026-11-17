@@ -38,6 +38,9 @@ const INITIAL_PLAYER_PROGRESSION: PlayerProgressionState = {
   totalAttack: PLAYER_COMBAT_CONFIG.meleeDamage,
   totalMaxHp: PLAYER_COMBAT_CONFIG.maxHp,
   totalSpeed: 250,
+  totalCritChance: 5,
+  totalLifestealPercent: 0,
+  totalCooldownReductionPercent: 0,
 };
 
 function createInitialWaveState(): WaveState {

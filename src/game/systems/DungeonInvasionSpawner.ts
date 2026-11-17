@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
+import {
+  ELITE_SPAWN_CHANCE_BY_DIFFICULTY,
+  pickRandomEliteAffix,
+} from '../../data/elites';
 import { DUNGEON_INVASION_CONFIG } from '../../data/monsterCamps';
 import { DungeonPortalState, Island, Monster, MonsterCombatRole, MonsterType } from '../../types/game';
+import { RoomDifficultyId } from '../../types/room';
 import { getTerritoryCorePos } from '../constants';
 import { DEPTH } from '../depthLayers';
 import { GameEvents } from '../events/gameEvents';
@@ -54,6 +59,9 @@ export class DungeonInvasionSpawner {
     onlineCount: number;
     waveCount: number;
     bossWaveCount: number;
+    difficultyId?: RoomDifficultyId;
+    difficultyHpMultiplier?: number;
+    difficultyAttackMultiplier?: number;
   }): { directionLabel: string; scalingLabel: string } | null {
     const islands = this.ctx.getIslands();
     const edgeSpawn = pickRandomMapEdgeSpawn(islands);
@@ -66,6 +74,11 @@ export class DungeonInvasionSpawner {
     const pulses = DUNGEON_INVASION_CONFIG.pulseCount;
     const perPulse = Math.floor(totalToSpawn / pulses);
     const waveScale = 1 + Math.max(0, params.waveCount - 1) * 0.15;
+    const diffHpMult = params.difficultyHpMultiplier ?? 1;
+    const diffAtkMult = params.difficultyAttackMultiplier ?? 1;
+    const finalHpMult = scaling.hpMultiplier * waveScale * diffHpMult;
+    const finalAtkMult = scaling.attackMultiplier * waveScale * diffAtkMult;
+    const eliteChance = ELITE_SPAWN_CHANCE_BY_DIFFICULTY[params.difficultyId ?? 'normal'] ?? 0.14;
 
     this.portalState = {
       active: true,
@@ -79,7 +92,7 @@ export class DungeonInvasionSpawner {
     GameEvents.emit('dungeon-portal-updated', { ...this.portalState });
 
     // 즉시 1차 펄스(20마리) 스폰 후 1.35초 간격으로 나머지 4차례 펄스 스폰 (총 100마리)
-    this.spawnPulseBatch(edgeSpawn.spawnX, edgeSpawn.spawnY, perPulse, 0, scaling.hpMultiplier * waveScale, scaling.attackMultiplier * waveScale, false);
+    this.spawnPulseBatch(edgeSpawn.spawnX, edgeSpawn.spawnY, perPulse, 0, finalHpMult, finalAtkMult, eliteChance, false);
 
     for (let p = 1; p < pulses; p++) {
       const isFinalPulse = p === pulses - 1;
@@ -91,8 +104,9 @@ export class DungeonInvasionSpawner {
             edgeSpawn.spawnY,
             perPulse,
             p,
-            scaling.hpMultiplier * waveScale,
-            scaling.attackMultiplier * waveScale,
+            finalHpMult,
+            finalAtkMult,
+            eliteChance,
             isFinalPulse
           );
           if (isFinalPulse) {
@@ -118,6 +132,7 @@ export class DungeonInvasionSpawner {
     pulseIdx: number,
     hpMult: number,
     atkMult: number,
+    eliteChance: number,
     spawnGatekeeperBoss: boolean
   ): void {
     const monsters = this.ctx.getMonsters();
@@ -133,26 +148,32 @@ export class DungeonInvasionSpawner {
       const r = 35 + Math.random() * radius;
       const sx = portalX + Math.cos(angle) * r;
       const sy = portalY + Math.sin(angle) * r;
-      const hp = Math.round(spec.hp * hpMult);
-      const attack = Math.round(spec.attack * atkMult);
+      const isElite = i === 0 || Math.random() < eliteChance * 0.45;
+      const affix = isElite ? pickRandomEliteAffix() : null;
+      const hp = Math.round(spec.hp * hpMult * (affix?.hpMultiplier ?? 1));
+      const attack = Math.round(spec.attack * atkMult * (affix?.attackMultiplier ?? 1));
+      const speed = Math.round(spec.speed * (affix?.speedMultiplier ?? 1));
 
       const m: Monster = {
         id: `dng_${Date.now()}_${pulseIdx}_${i}_${Math.random().toString(36).slice(2, 5)}`,
         type: spec.type,
-        name: spec.name,
+        name: affix ? `★ ${affix.label} ${spec.name}` : spec.name,
         isBoss: false,
+        isElite,
+        eliteAffix: affix?.id,
         x: sx,
         y: sy,
         hp,
         maxHp: hp,
         attack,
-        speed: spec.speed,
+        speed,
         targetTerritoryId: 0,
         spawnTerritoryId: 0,
         direction: sx > centralCore.x ? 'left' : 'right',
         role: spec.role,
         isCampMonster: false,
-        expReward: spec.exp,
+        campRing: 3,
+        expReward: Math.round(spec.exp * (affix?.expMultiplier ?? 1)),
       };
       monsters.set(m.id, MonsterVisualManager.create(this.ctx.scene, m));
     }

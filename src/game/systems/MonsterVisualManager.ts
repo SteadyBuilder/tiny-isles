@@ -1,3 +1,4 @@
+import { ELITE_AFFIXES } from '../../data/elites';
 import { Monster } from '../../types/game';
 import { ySortDepth } from '../depthLayers';
 
@@ -18,10 +19,18 @@ export class MonsterVisualManager {
     const container = scene.add.container(monster.x, monster.y);
     container.setDepth(ySortDepth(monster.y, 28));
 
+    const eliteDef = monster.isElite && monster.eliteAffix ? ELITE_AFFIXES[monster.eliteAffix] : null;
+
     // Graphics 드로우콜 폭증 방지를 위해 프리베이킹된 그림자/오라 텍스처(Image) 우선 사용
     if (monster.isBoss && scene.textures.exists('boss_aura_tex')) {
       const auraImg = scene.add.image(0, 10, 'boss_aura_tex');
       container.add(auraImg);
+    } else if (monster.isElite && scene.textures.exists('boss_aura_tex')) {
+      const eliteAura = scene.add.image(0, 14, 'boss_aura_tex');
+      eliteAura.setScale(0.68);
+      eliteAura.setAlpha(0.75);
+      if (eliteDef) eliteAura.setTint(eliteDef.auraColorHex);
+      container.add(eliteAura);
     } else if (!monster.isBoss && scene.textures.exists('unit_shadow_tex')) {
       const shadowImg = scene.add.image(0, 22, 'unit_shadow_tex');
       container.add(shadowImg);
@@ -55,10 +64,16 @@ export class MonsterVisualManager {
       displaySize = 126;
     }
 
+    if (monster.isElite && !monster.isBoss) {
+      displaySize = Math.round(displaySize * 1.22);
+    }
+
     const sprite = scene.add.sprite(0, 0, texKey);
     sprite.setDisplaySize(displaySize, displaySize);
 
-    if (monster.type === 'zombie') {
+    if (monster.isElite && eliteDef) {
+      sprite.setTint(eliteDef.auraColorHex);
+    } else if (monster.type === 'zombie') {
       sprite.setTint(0x86efac);
     } else if (monster.type === 'skeleton' || monster.role === 'ranged') {
       sprite.setTint(0xe2e8f0);
@@ -77,6 +92,20 @@ export class MonsterVisualManager {
 
     const hpBar = scene.add.graphics();
     container.add(hpBar);
+
+    if (monster.isElite && eliteDef) {
+      const badgeText = scene.add
+        .text(0, -48, `★ ${eliteDef.badge}`, {
+          fontFamily: 'Pretendard, sans-serif',
+          fontSize: '11px',
+          fontStyle: 'bold',
+          color: '#fde047',
+          stroke: '#000000',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5);
+      container.add(badgeText);
+    }
 
     const visual: MonsterVisual = {
       monster,

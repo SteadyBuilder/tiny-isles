@@ -6,6 +6,8 @@ export type PlayerClassId = 'pawn' | 'guardian' | 'lancer' | 'ranger' | 'archmag
 
 export type MonsterCombatRole = 'melee' | 'lancer' | 'ranged' | 'mage';
 
+export type EliteAffixId = 'berserker' | 'swift' | 'vampiric' | 'arcane_nova' | 'fortified';
+
 export type EquipmentSlot = 'weapon' | 'armor' | 'relic';
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
@@ -27,6 +29,10 @@ export interface ItemTemplate {
 export interface EquipmentItem extends ItemTemplate {
   instanceId: string;
   obtainedAt: number;
+  bonusCritChance?: number;
+  bonusLifestealPercent?: number;
+  bonusCooldownReductionPercent?: number;
+  affixLabel?: string;
 }
 
 export interface EquippedItemsMap {
@@ -72,6 +78,9 @@ export interface PlayerProgressionState {
   totalAttack: number;
   totalMaxHp: number;
   totalSpeed: number;
+  totalCritChance: number;
+  totalLifestealPercent: number;
+  totalCooldownReductionPercent: number;
 }
 
 export interface MonsterCampState {

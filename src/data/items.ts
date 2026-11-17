@@ -186,6 +186,58 @@ export const ITEM_CATALOG: ItemTemplate[] = [
   },
 ];
 
+interface ItemAffixSpec {
+  label: string;
+  critRange: [number, number];
+  lifestealRange: [number, number];
+  cdrRange: [number, number];
+  attackBonus: number;
+}
+
+const ITEM_AFFIX_POOL: ItemAffixSpec[] = [
+  { label: '치명의', critRange: [6, 15], lifestealRange: [0, 0], cdrRange: [0, 0], attackBonus: 4 },
+  { label: '흡혈의', critRange: [0, 0], lifestealRange: [3, 8], cdrRange: [0, 0], attackBonus: 3 },
+  { label: '신속한', critRange: [0, 0], lifestealRange: [0, 0], cdrRange: [6, 14], attackBonus: 2 },
+  { label: '파멸의', critRange: [5, 12], lifestealRange: [2, 5], cdrRange: [0, 0], attackBonus: 8 },
+  { label: '초월의', critRange: [4, 10], lifestealRange: [0, 0], cdrRange: [5, 12], attackBonus: 6 },
+];
+
+function randInt(min: number, max: number): number {
+  if (max <= min) return min;
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function applyRandomAffix(item: EquipmentItem, guaranteeAffix: boolean): EquipmentItem {
+  const shouldRoll = guaranteeAffix || item.rarity !== 'common' || Math.random() < 0.45;
+  if (!shouldRoll) return item;
+
+  const affix = ITEM_AFFIX_POOL[Math.floor(Math.random() * ITEM_AFFIX_POOL.length)];
+  const rarityBoost = item.rarity === 'legendary' ? 1.4 : item.rarity === 'epic' ? 1.2 : 1.0;
+
+  const bonusCritChance =
+    affix.critRange[1] > 0
+      ? Math.round(randInt(affix.critRange[0], affix.critRange[1]) * rarityBoost)
+      : undefined;
+  const bonusLifestealPercent =
+    affix.lifestealRange[1] > 0
+      ? Math.round(randInt(affix.lifestealRange[0], affix.lifestealRange[1]) * rarityBoost)
+      : undefined;
+  const bonusCooldownReductionPercent =
+    affix.cdrRange[1] > 0
+      ? Math.round(randInt(affix.cdrRange[0], affix.cdrRange[1]) * rarityBoost)
+      : undefined;
+
+  return {
+    ...item,
+    affixLabel: affix.label,
+    name: `${affix.label} ${item.name}`,
+    bonusAttack: item.bonusAttack + Math.round(affix.attackBonus * rarityBoost),
+    bonusCritChance,
+    bonusLifestealPercent,
+    bonusCooldownReductionPercent,
+  };
+}
+
 /**
  * 부락 링 등급(1~4) 및 반복 토벌 횟수에 비례하여 개인 보상 장비를 추첨하는 순수 함수
  */
@@ -199,7 +251,7 @@ export function rollCampRewardItem(ring: 1 | 2 | 3 | 4, clearCount: number): Equ
   const clearScale = 1 + Math.min(5, Math.max(0, clearCount - 1)) * 0.15;
   const suffix = clearCount > 1 ? ` +${clearCount - 1}` : '';
 
-  return {
+  const baseItem: EquipmentItem = {
     ...picked,
     instanceId: `item_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     name: `${picked.name}${suffix}`,
@@ -207,4 +259,44 @@ export function rollCampRewardItem(ring: 1 | 2 | 3 | 4, clearCount: number): Equ
     bonusMaxHp: Math.round(picked.bonusMaxHp * clearScale),
     obtainedAt: Date.now(),
   };
+  return applyRandomAffix(baseItem, true);
+}
+
+/**
+ * 일반·정예·보스 몬스터 처치 시 디아블로식 필드 장비 드랍을 추첨하는 순수 함수
+ */
+export function rollMonsterDropItem(params: {
+  ring: 1 | 2 | 3 | 4;
+  isElite: boolean;
+  isBoss: boolean;
+  difficultyId: 'normal' | 'hard' | 'nightmare';
+}): EquipmentItem | null {
+  const diffBonus =
+    params.difficultyId === 'nightmare' ? 0.2 : params.difficultyId === 'hard' ? 0.1 : 0;
+  const dropChance = params.isBoss
+    ? 1.0
+    : params.isElite
+    ? 0.45 + diffBonus
+    : 0.04 + diffBonus * 0.15;
+
+  if (Math.random() > dropChance) return null;
+
+  const effectiveRing = params.isBoss
+    ? 4
+    : (Math.min(4, params.ring + (params.isElite && Math.random() < 0.4 ? 1 : 0)) as 1 | 2 | 3 | 4);
+  const candidates = ITEM_CATALOG.filter((item) => item.minRing <= effectiveRing);
+  const minRarityFilter = params.isBoss
+    ? candidates.filter((i) => i.rarity === 'epic' || i.rarity === 'legendary')
+    : params.isElite
+    ? candidates.filter((i) => i.rarity !== 'common')
+    : candidates;
+  const pool = minRarityFilter.length > 0 ? minRarityFilter : candidates;
+  const picked = pool[Math.floor(Math.random() * pool.length)] || ITEM_CATALOG[0];
+
+  const baseItem: EquipmentItem = {
+    ...picked,
+    instanceId: `drop_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    obtainedAt: Date.now(),
+  };
+  return applyRandomAffix(baseItem, params.isElite || params.isBoss);
 }

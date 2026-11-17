@@ -1,6 +1,14 @@
 import Phaser from 'phaser';
+import {
+  ELITE_SPAWN_CHANCE_BY_DIFFICULTY,
+  pickRandomEliteAffix,
+} from '../../data/elites';
 import { rollCampRewardItem } from '../../data/items';
-import { CAMP_RING_TEMPLATES, computeCampRing } from '../../data/monsterCamps';
+import {
+  CAMP_RING_TEMPLATES,
+  HUNTING_AI_CONFIG,
+  computeCampRing,
+} from '../../data/monsterCamps';
 import { sound } from '../../lib/sound';
 import {
   EquipmentItem,
@@ -8,6 +16,7 @@ import {
   Monster,
   MonsterCampState,
 } from '../../types/game';
+import { MissionDifficultyConfig } from '../../types/room';
 import {
   TERRITORY_CENTER_X,
   TERRITORY_CENTER_Y,
@@ -29,6 +38,7 @@ interface CampVisualNode {
 export interface IMonsterCampContext {
   scene: Phaser.Scene;
   isHuntingMode: () => boolean;
+  getDifficultyConfig?: () => MissionDifficultyConfig;
   getIslands: () => Island[];
   getMonsters: () => Map<string, MonsterVisual>;
   addResources: (wood: number, stone: number, gold: number) => void;
@@ -41,6 +51,7 @@ export interface IMonsterCampContext {
     item: EquipmentItem,
     onOpened: (item: EquipmentItem) => void
   ) => void;
+  onCampCoreDamaged?: (territoryId: number) => void;
   playExplosionAt: (x: number, y: number) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
@@ -60,14 +71,28 @@ export class MonsterCampSystem {
     this.ctx = ctx;
   }
 
+  private getDifficultyMultipliers(): { hpMult: number; atkMult: number; countMult: number } {
+    const diff = this.ctx.getDifficultyConfig?.();
+    if (!diff) {
+      return { hpMult: 1, atkMult: 1, countMult: 1 };
+    }
+    return {
+      hpMult: diff.monsterHpMultiplier,
+      atkMult: diff.monsterAttackMultiplier,
+      countMult: HUNTING_AI_CONFIG.campCountMultiplierByDifficulty[diff.id] ?? 1,
+    };
+  }
+
   public initializeCamps(): void {
     if (!this.ctx.isHuntingMode()) return;
 
+    const { hpMult } = this.getDifficultyMultipliers();
     const islands = this.ctx.getIslands();
     for (const isl of islands) {
       if (isl.id === 0) continue; // 중앙 본거지(id: 0)만 유일한 수호 마을로 유지
       const ring = computeCampRing(isl.gridX, isl.gridY);
       const tpl = CAMP_RING_TEMPLATES[ring];
+      const scaledCoreHp = Math.round(tpl.coreMaxHp * hpMult);
 
       isl.unlocked = false;
       isl.isMonsterCamp = true;
@@ -75,8 +100,8 @@ export class MonsterCampSystem {
       isl.campLevel = tpl.baseLevel;
       isl.campDestroyed = false;
       isl.campRespawnSec = null;
-      isl.coreHp = tpl.coreMaxHp;
-      isl.coreMaxHp = tpl.coreMaxHp;
+      isl.coreHp = scaledCoreHp;
+      isl.coreMaxHp = scaledCoreHp;
 
       const campState: MonsterCampState = {
         territoryId: isl.id,
@@ -85,8 +110,8 @@ export class MonsterCampSystem {
         name: isl.name.replace('마을터', '마물 부락'),
         ring,
         level: tpl.baseLevel,
-        coreHp: tpl.coreMaxHp,
-        coreMaxHp: tpl.coreMaxHp,
+        coreHp: scaledCoreHp,
+        coreMaxHp: scaledCoreHp,
         destroyed: false,
         respawnRemainingSec: null,
         firstCleared: false,
@@ -196,38 +221,60 @@ export class MonsterCampSystem {
     const cx = origin.x + TERRITORY_CENTER_X;
     const cy = origin.y + TERRITORY_CENTER_Y;
     const monsters = this.ctx.getMonsters();
-    const scale = 1 + camp.clearCount * 0.25;
+    const { hpMult, atkMult, countMult } = this.getDifficultyMultipliers();
+    const clearScale = 1 + camp.clearCount * 0.25;
+    const totalSpecsCount = tpl.garrisonSpecs.reduce(
+      (sum, s) => sum + Math.max(1, Math.round(s.count * countMult)),
+      0
+    );
+
+    const diffId = this.ctx.getDifficultyConfig?.()?.id ?? 'normal';
+    const eliteChance = ELITE_SPAWN_CHANCE_BY_DIFFICULTY[diffId] ?? 0.14;
+    let eliteSpawnedInCamp = false;
 
     let idx = 0;
     for (const spec of tpl.garrisonSpecs) {
-      for (let i = 0; i < spec.count; i++) {
-        const angle = (Math.PI * 2 * idx) / 5 + (Math.random() - 0.5) * 0.3;
-        const dist = 135 + (idx % 2) * 45;
+      const spawnCount = Math.max(1, Math.round(spec.count * countMult));
+      for (let i = 0; i < spawnCount; i++) {
+        const angle = (Math.PI * 2 * idx) / Math.max(1, totalSpecsCount) + (Math.random() - 0.5) * 0.3;
+        const dist = 125 + (idx % 3) * 42;
         const mx = cx + Math.cos(angle) * dist;
         const my = cy + Math.sin(angle) * dist;
-        const hp = Math.round(spec.hp * scale);
-        const attack = Math.round(spec.attack * scale);
+
+        const forceElite = camp.ring >= 2 && !eliteSpawnedInCamp && idx === totalSpecsCount - 1;
+        const isElite = forceElite || Math.random() < eliteChance;
+        const affix = isElite ? pickRandomEliteAffix() : null;
+        if (isElite) eliteSpawnedInCamp = true;
+
+        const hp = Math.round(spec.hp * clearScale * hpMult * (affix?.hpMultiplier ?? 1));
+        const attack = Math.round(spec.attack * clearScale * atkMult * (affix?.attackMultiplier ?? 1));
+        const speed = Math.round(spec.speed * (affix?.speedMultiplier ?? 1));
 
         const monster: Monster = {
           id: `camp_${camp.territoryId}_${Date.now()}_${idx}`,
           type: spec.type,
-          name: `Lv.${camp.level} ${spec.name}`,
+          name: affix
+            ? `★ Lv.${camp.level} ${affix.label} ${spec.name}`
+            : `Lv.${camp.level} ${spec.name}`,
           isBoss: false,
+          isElite,
+          eliteAffix: affix?.id,
           x: mx,
           y: my,
           hp,
           maxHp: hp,
           attack,
-          speed: spec.speed,
+          speed,
           targetTerritoryId: 0,
           spawnTerritoryId: camp.territoryId,
           direction: idx % 2 === 0 ? 'left' : 'right',
           role: spec.role,
           isCampMonster: true,
           campTerritoryId: camp.territoryId,
+          campRing: camp.ring,
           homeX: mx,
           homeY: my,
-          expReward: Math.round(spec.expReward * scale),
+          expReward: Math.round(spec.expReward * clearScale * (affix?.expMultiplier ?? 1)),
         };
         monsters.set(monster.id, MonsterVisualManager.create(this.ctx.scene, monster));
         idx++;
@@ -266,6 +313,7 @@ export class MonsterCampSystem {
     this.ctx.shakeObject(container);
     this.ctx.showFloatingText(container.x, container.y - 60, `💥 -${damage}`, '#fbbf24');
     this.updateCampHpVisual(node);
+    this.ctx.onCampCoreDamaged?.(camp.territoryId);
 
     if (camp.coreHp <= 0) {
       this.handleCampDestroyed(node);
@@ -373,10 +421,11 @@ export class MonsterCampSystem {
       camp.respawnRemainingSec = Math.max(0, camp.respawnRemainingSec - 1);
       if (camp.respawnRemainingSec <= 0) {
         const tpl = CAMP_RING_TEMPLATES[camp.ring];
+        const { hpMult } = this.getDifficultyMultipliers();
         camp.destroyed = false;
         camp.respawnRemainingSec = null;
         camp.level += 2;
-        camp.coreMaxHp = Math.round(tpl.coreMaxHp * (1 + camp.clearCount * 0.25));
+        camp.coreMaxHp = Math.round(tpl.coreMaxHp * (1 + camp.clearCount * 0.25) * hpMult);
         camp.coreHp = camp.coreMaxHp;
 
         const isl = this.ctx.getIslands().find((i) => i.id === camp.territoryId);

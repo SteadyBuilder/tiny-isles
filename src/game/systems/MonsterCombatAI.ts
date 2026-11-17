@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { HUNTING_AI_CONFIG } from '../../data/monsterCamps';
 import { PERFORMANCE_CONFIG } from '../../data/performanceConfig';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
 import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
@@ -42,7 +43,8 @@ export interface IMonsterCombatContext {
     y: number,
     isBoss: boolean,
     expReward: number,
-    isCampMonster: boolean
+    isCampMonster: boolean,
+    meta?: { isElite: boolean; campRing?: 1 | 2 | 3 | 4 }
   ) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
@@ -109,12 +111,28 @@ export class MonsterCombatAI {
       const m = mv.monster;
       const sep = this.spatialGrid.computeSeparation(m.id, m.x, m.y);
 
+      const existingAggro = this.aggroTargets.get(m.id);
+      const hasActiveAggro =
+        Boolean(existingAggro) &&
+        existingAggro!.playerId === this.ctx.getLocalPlayerId() &&
+        performance.now() <= existingAggro!.expiresAt;
+
       // 0-A순위: 몬스터 부락 주둔 수비병(근거리/창병/원거리/마법사) AI
-      if (this.rangedMageAI.tryUpdateCampMonster(mv, time, dt, aliveWalls, sep.pushX, sep.pushY)) {
+      if (
+        this.rangedMageAI.tryUpdateCampMonster(
+          mv,
+          time,
+          dt,
+          aliveWalls,
+          sep.pushX,
+          sep.pushY,
+          hasActiveAggro
+        )
+      ) {
         continue;
       }
 
-      // 0-B순위: 플레이어에게 피격당한 웨이브 몬스터의 반격 어그로 처리
+      // 0-B순위: 플레이어에게 피격당했거나 근접한 웨이브/던전 몬스터의 플레이어 추격·공격 처리
       if (this.tryUpdatePlayerAggro(mv, time, dt, aliveWalls, sep.pushX, sep.pushY)) {
         continue;
       }
@@ -300,6 +318,9 @@ export class MonsterCombatAI {
         playerId: params.attackerId,
         expiresAt: performance.now() + PLAYER_COMBAT_CONFIG.monsterAggroDurationMs,
       });
+      if (mv.monster.campTerritoryId !== undefined) {
+        this.aggroCampMonsters(mv.monster.campTerritoryId, params.attackerId);
+      }
     }
 
     if (!params.isHost && !params.fromRemote) {
@@ -338,6 +359,28 @@ export class MonsterCombatAI {
     this.blockerCache.delete(params.monsterId);
     this.aggroTargets.delete(params.monsterId);
 
+    // 정예 '비전 폭발' 능력: 사망 시 1.1초 예고 후 110px 반경 폭발 피해
+    if (deadM.eliteAffix === 'arcane_nova' && this.ctx.projectileSystem) {
+      const novaX = deadM.x;
+      const novaY = deadM.y;
+      const novaDamage = Math.round(deadM.attack * 1.45);
+      this.ctx.showFloatingText(novaX, novaY - 40, '💀 비전 폭발 경고!', '#e879f9');
+      this.ctx.projectileSystem.spawnTelegraphZone({
+        x: novaX,
+        y: novaY,
+        radius: 110,
+        durationMs: 1100,
+        color: 0xd946ef,
+        onDetonate: () => {
+          this.ctx.playExplosionAt(novaX, novaY);
+          const curPlayer = this.ctx.getLocalPlayerPosition();
+          if (Math.hypot(curPlayer.x - novaX, curPlayer.y - novaY) <= 112) {
+            this.ctx.damageLocalPlayer(novaDamage, `${deadM.name} (비전 폭발)`);
+          }
+        },
+      });
+    }
+
     const rewardTier = deadM.isBoss ? MONSTER_KILL_REWARDS.boss : MONSTER_KILL_REWARDS.regular;
     const rewardWood = Math.round(rewardTier.wood * params.bonusMultiplier);
     const rewardStone = Math.round(rewardTier.stone * params.bonusMultiplier);
@@ -350,7 +393,10 @@ export class MonsterCombatAI {
       ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} +✨${expReward}EXP)`
       : `⚔️ +🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} (+${expReward}EXP)`;
     this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
-    this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss, expReward, Boolean(deadM.isCampMonster));
+    this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss, expReward, Boolean(deadM.isCampMonster), {
+      isElite: Boolean(deadM.isElite),
+      campRing: deadM.campRing,
+    });
     return true;
   }
 
@@ -380,6 +426,15 @@ export class MonsterCombatAI {
     }
   }
 
+  public aggroCampMonsters(campTerritoryId: number, playerId: string): void {
+    const expiresAt = performance.now() + HUNTING_AI_CONFIG.campAlertDurationMs;
+    for (const mv of this.ctx.getMonsters().values()) {
+      if (mv.monster.campTerritoryId === campTerritoryId) {
+        this.aggroTargets.set(mv.monster.id, { playerId, expiresAt });
+      }
+    }
+  }
+
   private tryUpdatePlayerAggro(
     mv: MonsterVisual,
     time: number,
@@ -388,18 +443,28 @@ export class MonsterCombatAI {
     sepX: number,
     sepY: number
   ): boolean {
-    const m = mv.monster;
-    const aggro = this.aggroTargets.get(m.id);
-    if (!aggro || aggro.playerId !== this.ctx.getLocalPlayerId()) return false;
-
-    if (this.ctx.isLocalPlayerFainted() || performance.now() > aggro.expiresAt) {
-      this.aggroTargets.delete(m.id);
+    if (this.ctx.isLocalPlayerFainted()) {
+      this.aggroTargets.delete(mv.monster.id);
       return false;
     }
 
+    const m = mv.monster;
     const playerPos = this.ctx.getLocalPlayerPosition();
     const dist = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
-    if (dist > PLAYER_COMBAT_CONFIG.monsterAggroMaxDistance) {
+    let aggro = this.aggroTargets.get(m.id);
+
+    // 근접 어그로: 웨이브/던전 몬스터가 진격 중 일정 반경 내 플레이어를 발견하면 즉시 추격·공격
+    if (!aggro && dist <= HUNTING_AI_CONFIG.waveProximityAggroRadiusPx) {
+      aggro = {
+        playerId: this.ctx.getLocalPlayerId(),
+        expiresAt: performance.now() + PLAYER_COMBAT_CONFIG.monsterAggroDurationMs,
+      };
+      this.aggroTargets.set(m.id, aggro);
+    }
+
+    if (!aggro || aggro.playerId !== this.ctx.getLocalPlayerId()) return false;
+
+    if (performance.now() > aggro.expiresAt || dist > HUNTING_AI_CONFIG.waveProximityChaseMaxPx) {
       this.aggroTargets.delete(m.id);
       return false;
     }

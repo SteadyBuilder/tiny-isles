@@ -192,6 +192,8 @@ export interface Monster {
   type: MonsterType;
   name: string;
   isBoss: boolean;
+  isElite?: boolean;
+  eliteAffix?: import('./hunting').EliteAffixId;
   x: number;
   y: number;
   hp: number;
@@ -204,6 +206,7 @@ export interface Monster {
   role?: MonsterCombatRole;
   isCampMonster?: boolean;
   campTerritoryId?: number;
+  campRing?: 1 | 2 | 3 | 4;
   homeX?: number;
   homeY?: number;
   expReward?: number;

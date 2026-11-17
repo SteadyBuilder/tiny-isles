@@ -23,6 +23,9 @@ function formatItemStats(item: EquipmentItem): string {
   if (item.bonusAttack) parts.push(`공격력 +${item.bonusAttack}`);
   if (item.bonusMaxHp) parts.push(`체력 +${item.bonusMaxHp}`);
   if (item.bonusSpeed) parts.push(`이속 +${item.bonusSpeed}`);
+  if (item.bonusCritChance) parts.push(`치명타 +${item.bonusCritChance}%`);
+  if (item.bonusLifestealPercent) parts.push(`흡혈 +${item.bonusLifestealPercent}%`);
+  if (item.bonusCooldownReductionPercent) parts.push(`쿨감 +${item.bonusCooldownReductionPercent}%`);
   return parts.join(' · ');
 }
 
@@ -56,7 +59,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
     >
       {/* Combat Summary Banner */}
       <div className="ts-paper-sheet p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-black text-[#2b1810]">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>
             ⚔️ 총 공격력: <strong className="text-[#b91c1c]">{progression.totalAttack}</strong>
           </span>
@@ -66,9 +69,18 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
           <span>
             👟 이동속도: <strong className="text-[#1d4ed8]">{progression.totalSpeed}</strong>
           </span>
+          <span>
+            💥 치명타: <strong className="text-[#d97706]">{progression.totalCritChance}%</strong>
+          </span>
+          <span>
+            🩸 흡혈: <strong className="text-[#be123c]">{progression.totalLifestealPercent}%</strong>
+          </span>
+          <span>
+            ⏱️ 쿨감: <strong className="text-[#7c3aed]">{progression.totalCooldownReductionPercent}%</strong>
+          </span>
         </div>
         <span className="text-[11px] font-bold text-[#6e4625]">
-          몬스터 부락 본진 파괴 시 전리품 획득!
+          정예·보스 및 부락 본진 처치 시 랜덤 옵션 장비 드랍!
         </span>
       </div>
 

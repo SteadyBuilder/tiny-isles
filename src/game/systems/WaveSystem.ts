@@ -5,6 +5,7 @@ import {
   Monster,
   WaveState,
 } from '../../types/game';
+import { MissionDifficultyConfig } from '../../types/room';
 import { THREAT_WAVE_CONFIG, WORLD_CLOCK_CONFIG } from '../../data/worldRules';
 import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
@@ -21,6 +22,7 @@ export type { MonsterVisual };
 export interface IWaveSystemContext {
   scene: Phaser.Scene;
   isHuntingMode?: () => boolean;
+  getDifficultyConfig?: () => MissionDifficultyConfig;
   projectileSystem?: ProjectileSystem;
   healCampCore?: (territoryId: number, amount: number) => void;
   onMonsterKilledReward?: (
@@ -28,7 +30,8 @@ export interface IWaveSystemContext {
     y: number,
     isBoss: boolean,
     expReward: number,
-    isCampMonster: boolean
+    isCampMonster: boolean,
+    meta?: { isElite: boolean; campRing?: 1 | 2 | 3 | 4 }
   ) => void;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
@@ -128,8 +131,8 @@ export class WaveSystem {
           );
         }
       },
-      onMonsterKilled: (x, y, isBoss, expReward, isCampMonster) => {
-        this.ctx.onMonsterKilledReward?.(x, y, isBoss, expReward, isCampMonster);
+      onMonsterKilled: (x, y, isBoss, expReward, isCampMonster, meta) => {
+        this.ctx.onMonsterKilledReward?.(x, y, isBoss, expReward, isCampMonster, meta);
       },
       showFloatingText: (x, y, text, color) => this.ctx.showFloatingText(x, y, text, color),
       shakeObject: (target) => this.ctx.shakeObject(target),
@@ -200,6 +203,10 @@ export class WaveSystem {
 
   public getMonsterVisuals(): Map<string, MonsterVisual> {
     return this.monsters;
+  }
+
+  public aggroCampMonsters(campTerritoryId: number, playerId: string): void {
+    this.combatAI.aggroCampMonsters(campTerritoryId, playerId);
   }
 
   public getDungeonPortalState(): DungeonPortalState | null {
@@ -461,12 +468,19 @@ export class WaveSystem {
 
     const bonusSuffix = isEarlySummon ? ' (조기 소환 보상 +35%)' : '';
 
+    const diff = this.ctx.getDifficultyConfig?.();
+    const diffHpMult = diff?.monsterHpMultiplier ?? 1;
+    const diffAtkMult = diff?.monsterAttackMultiplier ?? 1;
+
     // 사냥 특화 모드: 위협도 100% 도달 시 심연의 던전 게이트 출현 -> 마물 100마리 중앙 마을 진격!
     if (this.ctx.isHuntingMode?.()) {
       const dng = this.dungeonSpawner.startDungeonInvasion({
         onlineCount: this.onlineCount,
         waveCount: this.waveState.waveCount,
         bossWaveCount: this.waveState.bossWaveCount,
+        difficultyId: diff?.id,
+        difficultyHpMultiplier: diffHpMult,
+        difficultyAttackMultiplier: diffAtkMult,
       });
       if (!dng) return;
 
@@ -487,6 +501,8 @@ export class WaveSystem {
       onlineCount: this.onlineCount,
       waveCount: this.waveState.waveCount,
       bossWaveCount: this.waveState.bossWaveCount,
+      difficultyHpMultiplier: diffHpMult,
+      difficultyAttackMultiplier: diffAtkMult,
     });
     if (!result) return;
 

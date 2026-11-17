@@ -198,6 +198,7 @@ export class WorldScene extends Phaser.Scene {
       scene: this,
       isSceneAlive: () => this.isSceneAlive(),
       isHuntingMode: () => this.missionSystem.isHuntingMode(),
+      getDifficultyConfig: () => this.missionSystem.getDifficulty(),
       getPlayerId: () => this.playerId,
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
