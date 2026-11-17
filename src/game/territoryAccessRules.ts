@@ -1,10 +1,61 @@
+import { TERRITORY_BUILD_SLOTS } from '../data/buildings';
 import { Island } from '../types/game';
+import { getIslandOrigin } from './world/territoryGrid';
 
 export const MAIN_VILLAGE_ID = 0;
 
 export interface TerritoryAccessResult {
   allowed: boolean;
   reason?: string;
+}
+
+export interface TerritoryWallBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+const WALL_SLOTS = TERRITORY_BUILD_SLOTS.filter((slot) => slot.role === 'wall');
+const REL_WALL_MIN_X = Math.min(...WALL_SLOTS.map((slot) => slot.relX));
+const REL_WALL_MAX_X = Math.max(...WALL_SLOTS.map((slot) => slot.relX));
+const REL_WALL_MIN_Y = Math.min(...WALL_SLOTS.map((slot) => slot.relY));
+const REL_WALL_MAX_Y = Math.max(...WALL_SLOTS.map((slot) => slot.relY));
+
+/**
+ * 영지 외곽 목책/성벽 슬롯(TERRITORY_BUILD_SLOTS) 기준 월드 좌표 사각 경계 반환
+ */
+export function getTerritoryWallBounds(gridX: number, gridY: number): TerritoryWallBounds {
+  const origin = getIslandOrigin(gridX, gridY);
+  return {
+    minX: origin.x + REL_WALL_MIN_X,
+    maxX: origin.x + REL_WALL_MAX_X,
+    minY: origin.y + REL_WALL_MIN_Y,
+    maxY: origin.y + REL_WALL_MAX_Y,
+  };
+}
+
+/**
+ * 월드 좌표(x, y)가 해당 영지의 목책/성벽 울타리 내부에 있는지 판별 (순수 함수)
+ */
+export function isPointInsideTerritoryWalls(
+  x: number,
+  y: number,
+  territory: Pick<Island, 'gridX' | 'gridY'>
+): boolean {
+  const bounds = getTerritoryWallBounds(territory.gridX, territory.gridY);
+  return x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY;
+}
+
+/**
+ * 월드 좌표(x, y)를 둘러싼 영지(목책/성벽 내부)를 조회 (순수 함수)
+ */
+export function findTerritoryInsideWalls(
+  x: number,
+  y: number,
+  territories: ReadonlyArray<Island>
+): Island | undefined {
+  return territories.find((t) => isPointInsideTerritoryWalls(x, y, t));
 }
 
 /**

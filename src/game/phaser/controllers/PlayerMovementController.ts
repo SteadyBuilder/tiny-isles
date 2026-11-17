@@ -18,6 +18,7 @@ import {
 import { setDepthIfChanged, ySortDepth } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { MonsterVisual } from '../../systems/WaveSystem';
+import { findTerritoryInsideWalls } from '../../territoryAccessRules';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
 import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { resolveSafeSpawnPosition } from '../../utils/playerSpawnUtils';
@@ -81,6 +82,7 @@ export class PlayerMovementController {
   private isActionHolding = false;
 
   private lastGridPos = { gridX: 0, gridY: 0 };
+  private lastStandingTerritoryId: number | null = 0;
   private lastNearIsland: Island | null = null;
   private lastNearJobHall = false;
   private lastNearToolShop = false;
@@ -236,9 +238,7 @@ export class PlayerMovementController {
   public getCurrentStandingTerritoryId(): number | null {
     const islands = this.ctx.getIslands();
     const { x, y } = this.getPosition();
-    const gx = Math.round((x - 320) / TERRITORY_STEP);
-    const gy = Math.round((y - 320) / TERRITORY_STEP);
-    return islands.find((i) => i.gridX === gx && i.gridY === gy)?.id ?? null;
+    return findTerritoryInsideWalls(x, y, islands)?.id ?? null;
   }
 
   public getCurrentTerritory(): Island {
@@ -612,6 +612,13 @@ export class PlayerMovementController {
     if (gridX !== this.lastGridPos.gridX || gridY !== this.lastGridPos.gridY) {
       this.lastGridPos = { gridX, gridY };
       GameEvents.emit('player-grid-pos-changed', { gridX, gridY });
+    }
+
+    const standingTerritoryId =
+      findTerritoryInsideWalls(px, py, this.ctx.getIslands())?.id ?? null;
+    if (standingTerritoryId !== this.lastStandingTerritoryId) {
+      this.lastStandingTerritoryId = standingTerritoryId;
+      GameEvents.emit('player-standing-territory-changed', standingTerritoryId);
     }
 
     const buildings = this.ctx.getConstructedBuildings?.() ?? [];

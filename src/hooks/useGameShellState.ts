@@ -118,6 +118,7 @@ export function useGameShellState() {
     gridX: 0,
     gridY: 0,
   });
+  const [playerStandingTerritoryId, setPlayerStandingTerritoryId] = useState<number | null>(0);
   const [playerHp, setPlayerHp] = useState<PlayerHpState>({
     hp: 100,
     maxHp: 100,
@@ -150,6 +151,9 @@ export function useGameShellState() {
     const handleOpenInventory = () => {
       setShowInventoryModal((prev) => !prev);
     };
+    const handleStandingTerritoryChanged = (territoryId: number | null) => {
+      setPlayerStandingTerritoryId(territoryId);
+    };
     GameEvents.on('player-hp-updated', handleHpUpdated);
     GameEvents.on('player-progression-updated', handleProgressionUpdated);
     GameEvents.on('dash-state-updated', handleDashStateUpdated);
@@ -158,6 +162,7 @@ export function useGameShellState() {
     GameEvents.on('open-tool-shop-modal', handleOpenToolShop);
     GameEvents.on('tool-shop-proximity-changed', handleToolShopProximity);
     GameEvents.on('open-inventory-modal', handleOpenInventory);
+    GameEvents.on('player-standing-territory-changed', handleStandingTerritoryChanged);
     return () => {
       GameEvents.off('player-hp-updated', handleHpUpdated);
       GameEvents.off('player-progression-updated', handleProgressionUpdated);
@@ -167,6 +172,7 @@ export function useGameShellState() {
       GameEvents.off('open-tool-shop-modal', handleOpenToolShop);
       GameEvents.off('tool-shop-proximity-changed', handleToolShopProximity);
       GameEvents.off('open-inventory-modal', handleOpenInventory);
+      GameEvents.off('player-standing-territory-changed', handleStandingTerritoryChanged);
     };
   }, []);
 
@@ -211,9 +217,10 @@ export function useGameShellState() {
     storage.saveZoom(newZoom);
   }, []);
 
-  const playerStandingTerritory = territories.find(
-    (t) => t.gridX === playerGridPos.gridX && t.gridY === playerGridPos.gridY
-  );
+  const playerStandingTerritory =
+    playerStandingTerritoryId !== null
+      ? territories.find((t) => t.id === playerStandingTerritoryId)
+      : undefined;
 
   const currentTerritory =
     (playerStandingTerritory?.unlocked ? playerStandingTerritory : undefined) || territories[0];
@@ -296,6 +303,7 @@ export function useGameShellState() {
     setShowMinimapModal(false);
     setNearIsland(null);
     setPlayerGridPos({ gridX: 0, gridY: 0 });
+    setPlayerStandingTerritoryId(0);
     setPlayerHp({ hp: 100, maxHp: 100, isFainted: false });
     setAlertMessage(null);
     if (alertTimerRef.current) {

@@ -126,6 +126,7 @@ export interface GameEventPayloads {
   'player-action-stop': void;
   'trigger-interact': void;
   'player-grid-pos-changed': { gridX: number; gridY: number };
+  'player-standing-territory-changed': number | null;
   'player-moved': { x: number; y: number; direction: string; action: string };
   'player-hp-updated': PlayerHpState;
   'player-fainted': void;
