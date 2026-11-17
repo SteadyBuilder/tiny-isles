@@ -10,6 +10,11 @@ import {
   WaveState,
 } from '../types/game';
 import { MetaBonusSummary, RoomConfig } from '../types/room';
+import { GameLoadingOverlay } from '../components/game/GameLoadingOverlay';
+import {
+  LOADING_STAGE_WEIGHTS,
+  mapAssetProgressToPercent,
+} from '../data/loadingConfig';
 
 interface PhaserGameProps {
   playerName: string;
@@ -59,7 +64,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadRatio, setLoadRatio] = useState(0);
+  const [loadingPercent, setLoadingPercent] = useState(0);
 
   const onUpdateInventoryRef = useRef(onUpdateInventory);
   onUpdateInventoryRef.current = onUpdateInventory;
@@ -103,9 +108,28 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
     let cancelled = false;
     let game: Phaser.Game | null = null;
+    let completeTimerId: number | null = null;
 
-    const handleProgress = (val: number) => setLoadRatio(val);
-    const handleComplete = () => setLoading(false);
+    const handleProgress = (val: number) => {
+      const next = mapAssetProgressToPercent(val);
+      setLoadingPercent((prev) => Math.max(prev, next));
+    };
+    const handleComplete = () => {
+      setLoadingPercent((prev) =>
+        Math.max(prev, LOADING_STAGE_WEIGHTS.ASSETS_COMPLETE_PERCENT)
+      );
+    };
+    const handleSceneReady = () => {
+      setLoadingPercent(LOADING_STAGE_WEIGHTS.SCENE_READY_PERCENT);
+      if (completeTimerId !== null) {
+        window.clearTimeout(completeTimerId);
+      }
+      completeTimerId = window.setTimeout(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }, LOADING_STAGE_WEIGHTS.COMPLETE_HOLD_MS);
+    };
 
     const handleInventoryUpdated = (newInv: Inventory) => {
       onUpdateInventoryRef.current(() => newInv);
@@ -154,6 +178,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
     GameEvents.on('load-progress', handleProgress);
     GameEvents.on('load-complete', handleComplete);
+    GameEvents.on('scene-ready', handleSceneReady);
     GameEvents.on('inventory-updated', handleInventoryUpdated);
     GameEvents.on('unlocked-islands', handleUnlockedIslands);
     GameEvents.on('territories-updated', handleTerritoriesUpdated);
@@ -183,9 +208,13 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafId);
+      if (completeTimerId !== null) {
+        window.clearTimeout(completeTimerId);
+      }
 
       GameEvents.off('load-progress', handleProgress);
       GameEvents.off('load-complete', handleComplete);
+      GameEvents.off('scene-ready', handleSceneReady);
       GameEvents.off('inventory-updated', handleInventoryUpdated);
       GameEvents.off('unlocked-islands', handleUnlockedIslands);
       GameEvents.off('territories-updated', handleTerritoriesUpdated);
@@ -242,21 +271,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
   return (
     <div className="relative w-full h-full">
-      {loading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 text-white">
-          <div className="text-xl font-bold mb-3 flex items-center gap-2">
-            <span className="animate-spin text-emerald-400">⚡</span>
-            <span>실시간 마을 타워디펜스 월드 로딩 중...</span>
-          </div>
-          <div className="w-64 h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-            <div
-              className="h-full bg-emerald-500 transition-all duration-150"
-              style={{ width: `${Math.round(loadRatio * 100)}%` }}
-            />
-          </div>
-          <p className="text-xs text-slate-400 mt-2">{Math.round(loadRatio * 100)}%</p>
-        </div>
-      )}
+      {loading && <GameLoadingOverlay percent={loadingPercent} />}
 
       <div
         ref={containerRef}

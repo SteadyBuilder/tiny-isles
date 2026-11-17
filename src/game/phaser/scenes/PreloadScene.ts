@@ -9,7 +9,8 @@ export class PreloadScene extends Phaser.Scene {
   preload() {
     // Loading progress events
     this.load.on('progress', (value: number) => {
-      GameEvents.emit('load-progress', value);
+      const clamped = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+      GameEvents.emit('load-progress', clamped);
     });
 
     this.load.on('complete', () => {
