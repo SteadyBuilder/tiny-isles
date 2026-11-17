@@ -331,7 +331,7 @@ export class MonsterCombatAI {
       }
     }
 
-    const triggerHitFeedback = () => {
+    const triggerHitFeedback = (includeSpriteFlash: boolean) => {
       this.ctx.onMonsterHitImpact?.(
         {
           x: mv.monster.x,
@@ -342,8 +342,8 @@ export class MonsterCombatAI {
           isLocalPlayerAttack,
           attackerX: playerPos.x,
           attackerY: playerPos.y,
-          targetSprite: mv.sprite,
-          targetContainer: mv.container,
+          targetSprite: includeSpriteFlash ? mv.sprite : undefined,
+          targetContainer: includeSpriteFlash ? mv.container : undefined,
         },
         mv.baseTint
       );
@@ -359,7 +359,7 @@ export class MonsterCombatAI {
         mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
       );
       this.ctx.shakeObject(mv.container);
-      triggerHitFeedback();
+      triggerHitFeedback(true);
       this.ctx.broadcastMonsterHit?.(params.monsterId, params.damage, params.sourceName);
       return false;
     }
@@ -375,12 +375,12 @@ export class MonsterCombatAI {
     if (mv.monster.hp > 0) {
       this.ctx.shakeObject(mv.container);
       MonsterVisualManager.updateHpBar(mv, true);
-      triggerHitFeedback();
+      triggerHitFeedback(true);
       this.ctx.onMonsterDamaged?.();
       return false;
     }
 
-    triggerHitFeedback();
+    triggerHitFeedback(false);
     const deadM = mv.monster;
     this.ctx.playExplosionAt(deadM.x, deadM.y);
     mv.container.destroy();

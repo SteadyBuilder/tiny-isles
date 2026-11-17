@@ -168,6 +168,8 @@ export class WorldScene extends Phaser.Scene {
     this.terrainRenderer.buildWaterColliders();
 
     this.effectsRenderer = new WorldEffectsRenderer(this, () => this.isSceneAlive());
+    this.combatFeedbackRenderer = new CombatFeedbackRenderer(this, () => this.isSceneAlive());
+    this.skillEffectsRenderer = new SkillEffectsRenderer(this, () => this.isSceneAlive());
     this.lootChestRenderer = new LootChestDropRenderer(this, () => this.isSceneAlive());
     this.celebrationEffects = new PlayerCelebrationEffects(this, () => this.isSceneAlive());
     this.monsterIndicatorRenderer = new MonsterTargetIndicatorRenderer(this, () => this.isSceneAlive());
