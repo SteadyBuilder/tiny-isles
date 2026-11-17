@@ -12,7 +12,10 @@ import {
   TERRITORY_BUILD_SLOTS,
   VILLAGE_TIER_CONFIGS,
 } from './constants';
-import { validateOuterTowerPosition } from './towerPlacementRules';
+import {
+  validateInnerBuildingPosition,
+  validateOuterTowerPosition,
+} from './towerPlacementRules';
 
 export interface SlotState {
   slotIndex: number;
@@ -68,14 +71,16 @@ export class BuildingSystem {
   }
 
   /**
-   * 해당 영지에서 실제 슬롯(#0~#15)을 점유 중인 건물 수 계산 (외곽 자유 배치 타워 slotIndex === -1 제외)
+   * 해당 영지에서 슬롯을 점유 중인 건물 수 계산 (외곽 자유 배치 방어 타워 제외)
    */
   public static getOccupiedSlotCount(
     territoryId: number,
     constructedBuildings: ConstructedBuilding[]
   ): number {
     return constructedBuildings.filter(
-      (b) => b.territoryId === territoryId && b.slotIndex >= 0
+      (b) =>
+        b.territoryId === territoryId &&
+        !(b.category === 'tower' && b.slotIndex < 0)
     ).length;
   }
 
@@ -218,6 +223,29 @@ export class BuildingSystem {
     // 방어 타워 자유 외곽 배치
     if (bp.category === 'tower' && customPos) {
       const validation = validateOuterTowerPosition(
+        customPos.x,
+        customPos.y,
+        territory,
+        constructedBuildings
+      );
+      if (!validation.valid) {
+        return {
+          canBuild: false,
+          reason: validation.reason || '배치할 수 없는 위치입니다.',
+          blueprint: bp,
+        };
+      }
+      return {
+        canBuild: true,
+        slotIndex: -1,
+        customPos: { x: validation.worldX, y: validation.worldY },
+        blueprint: bp,
+      };
+    }
+
+    // 기본/특수 건물 영지 내 자유 배치
+    if ((bp.category === 'basic' || bp.category === 'special') && customPos) {
+      const validation = validateInnerBuildingPosition(
         customPos.x,
         customPos.y,
         territory,

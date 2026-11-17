@@ -185,8 +185,14 @@ export function createWorldControllersBundle(
     getIslands: host.getIslands,
     getConstructedBuildings: host.getConstructedBuildings,
     getInventory: host.getInventory,
-    onConstructAt: (territoryId, type, pos) =>
-      territoryAction.handleConstructBuilding(territoryId, type, undefined, true, pos),
+    onConstructAt: (territoryId, type, pos, slotIndex) =>
+      territoryAction.handleConstructBuilding(
+        territoryId,
+        type,
+        slotIndex,
+        true,
+        slotIndex !== undefined ? undefined : pos
+      ),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
   });
 

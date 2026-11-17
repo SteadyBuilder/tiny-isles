@@ -13,6 +13,7 @@ export interface ConstructedVisualRef {
   lastFireTime: number;
   colliders?: Phaser.Physics.Arcade.Sprite[];
   extraVisuals?: Phaser.GameObjects.Image[];
+  timerGraphics?: Phaser.GameObjects.Graphics;
 }
 
 export interface ITowerDefenseContext {

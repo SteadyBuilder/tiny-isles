@@ -139,6 +139,15 @@ export class ConstructedBuildingRenderer {
     const hpBar = this.scene.add.graphics();
     container.add(hpBar);
 
+    const isResourceGenerator =
+      cb.type === 'lumber_camp' ||
+      cb.type === 'stone_works' ||
+      cb.type === 'special_goldmine';
+    const timerGraphics = isResourceGenerator ? this.scene.add.graphics() : undefined;
+    if (timerGraphics) {
+      container.add(timerGraphics);
+    }
+
     this.visuals.set(cb.id, {
       building: cb,
       container,
@@ -146,9 +155,53 @@ export class ConstructedBuildingRenderer {
       lastFireTime: 0,
       colliders,
       extraVisuals: extraVisuals.length > 0 ? extraVisuals : undefined,
+      timerGraphics,
     });
 
     this.updateHpBar(cb.id);
+    if (timerGraphics) {
+      this.drawResourceTimer(timerGraphics, cb.type, 0);
+    }
+  }
+
+  public updateResourceTimers(progress: number): void {
+    const clamped = Math.max(0, Math.min(1, progress));
+    for (const cv of this.visuals.values()) {
+      if (!cv.timerGraphics || !cv.container.visible) continue;
+      this.drawResourceTimer(cv.timerGraphics, cv.building.type, clamped);
+    }
+  }
+
+  private drawResourceTimer(
+    g: Phaser.GameObjects.Graphics,
+    type: ConstructedBuilding['type'],
+    progress: number
+  ): void {
+    const cx = 0;
+    const cy = -74;
+    const radius = 11;
+    const fillHex =
+      type === 'lumber_camp' ? 0x4ade80 : type === 'stone_works' ? 0x94a3b8 : 0xfde047;
+
+    g.clear();
+    g.fillStyle(0x0f172a, 0.85);
+    g.fillCircle(cx, cy, radius + 2);
+    g.lineStyle(1.5, 0x334155, 0.9);
+    g.strokeCircle(cx, cy, radius);
+
+    if (progress > 0.01) {
+      const startAngle = -Math.PI / 2;
+      const endAngle = startAngle + Math.PI * 2 * progress;
+      g.lineStyle(3, fillHex, 1);
+      g.beginPath();
+      g.arc(cx, cy, radius - 1.5, startAngle, endAngle, false);
+      g.strokePath();
+    }
+
+    // 작은 중앙 시계 바늘 포인트
+    const handAngle = -Math.PI / 2 + Math.PI * 2 * progress;
+    g.lineStyle(1.5, 0xffffff, 0.9);
+    g.lineBetween(cx, cy, cx + Math.cos(handAngle) * (radius - 4), cy + Math.sin(handAngle) * (radius - 4));
   }
 
   public updateHpBar(buildingId: string): void {

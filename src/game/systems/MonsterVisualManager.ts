@@ -45,8 +45,20 @@ export class MonsterVisualManager {
     let displaySize = monster.isBoss ? 190 : 120;
 
     if (monster.isBoss) {
-      texKey = 'enemyPurpleWarriorRun';
-      animKey = 'monster_boss_run';
+      const candidateKey = monster.bossSpriteKey || 'enemyPurpleWarriorRun';
+      texKey = scene.textures.exists(candidateKey) ? candidateKey : 'enemyPurpleWarriorRun';
+      if (texKey === 'enemyLancerRun' && scene.anims.exists('monster_lancer_run')) {
+        animKey = 'monster_lancer_run';
+      } else if (texKey === 'enemyMonkRun' && scene.anims.exists('monster_archmage_run')) {
+        animKey = 'monster_archmage_run';
+      } else if (texKey === 'enemyArcherRun' && scene.anims.exists('monster_skeleton_run')) {
+        animKey = 'monster_skeleton_run';
+      } else if (texKey === 'enemyBlackWarriorRun' && scene.anims.exists('monster_zombie_run')) {
+        animKey = 'monster_zombie_run';
+      } else {
+        animKey = 'monster_boss_run';
+      }
+      displaySize = Math.round(190 * (monster.bossScale ?? 1));
     } else if (monster.type === 'skeleton' || monster.role === 'ranged') {
       texKey = 'enemyArcherRun';
       animKey = 'monster_skeleton_run';
@@ -76,7 +88,9 @@ export class MonsterVisualManager {
     sprite.setDisplaySize(displaySize, displaySize);
 
     let baseTint: number | null = null;
-    if (monster.isElite && eliteDef) {
+    if (monster.isBoss) {
+      baseTint = monster.bossTintHex ?? 0xfca5a5;
+    } else if (monster.isElite && eliteDef) {
       baseTint = eliteDef.auraColorHex;
     } else if (monster.type === 'zombie') {
       baseTint = 0x86efac;
@@ -86,8 +100,6 @@ export class MonsterVisualManager {
       baseTint = 0xfbbf24;
     } else if (monster.type === 'archmage' || monster.role === 'mage') {
       baseTint = 0xd8b4fe;
-    } else if (monster.isBoss) {
-      baseTint = 0xfca5a5;
     }
     if (baseTint !== null) {
       sprite.setTint(baseTint);

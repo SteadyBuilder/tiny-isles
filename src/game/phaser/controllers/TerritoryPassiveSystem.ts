@@ -26,6 +26,13 @@ export class TerritoryPassiveSystem {
     this.ctx = ctx;
   }
 
+  public getCycleProgress(): number {
+    return Math.max(
+      0,
+      Math.min(1, this.passiveTickAccum / Math.max(1, WORLD_CLOCK_CONFIG.passiveTickIntervalMs))
+    );
+  }
+
   public update(delta: number): void {
     this.passiveTickAccum += delta;
     if (this.passiveTickAccum < WORLD_CLOCK_CONFIG.passiveTickIntervalMs) return;

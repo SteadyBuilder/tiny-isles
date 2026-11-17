@@ -34,15 +34,15 @@ export const MISSION_CATALOG: MissionDefinition[] = [
     title: '대군주 토벌전',
     subtitle: '보스 군단을 격파하고 섬을 해방하라',
     description:
-      '빠르게 자원을 모아 방어선을 구축하고, 침공해 오는 보스 군단(3회)을 모두 토벌하면 승리합니다.',
+      '빠르게 자원을 모아 방어선을 구축하고, 점점 강해지는 보스 군단(6회)을 모두 토벌하면 승리합니다.',
     estimatedMinutes: '30~45분',
     timeLimitSec: 45 * 60,
     goal: {
       type: 'boss_slay',
-      targetCount: 3,
+      targetCount: 6,
       label: '보스 웨이브 격파',
     },
-    baseRewardPoints: 120,
+    baseRewardPoints: 160,
     rewardTitleId: 'title_boss_slayer',
   },
   {

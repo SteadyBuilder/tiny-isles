@@ -18,12 +18,14 @@ import {
   nearestPointOnCollisionBox,
   resolveMonsterWallClamping,
 } from '../wallCollisionGeometry';
+import { BossSkillSystem } from './BossSkillSystem';
 import { FieldMonsterAI } from './FieldMonsterAI';
 import { MonsterRangedMageAI } from './MonsterRangedMageAI';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
 
 export interface IMonsterCombatContext {
+  scene: Phaser.Scene;
   getMonsters: () => Map<string, MonsterVisual>;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
@@ -79,6 +81,7 @@ export class MonsterCombatAI {
   private spatialGrid = new MonsterSpatialGrid();
   private rangedMageAI: MonsterRangedMageAI;
   private fieldMonsterAI: FieldMonsterAI;
+  private bossSkillSystem: BossSkillSystem;
 
   constructor(ctx: IMonsterCombatContext) {
     this.ctx = ctx;
@@ -97,6 +100,16 @@ export class MonsterCombatAI {
       isLocalPlayerFainted: ctx.isLocalPlayerFainted,
       executeRoleAttackOnPlayer: (mv, tx, ty) =>
         this.rangedMageAI.executeRoleAttackOnPlayer(mv, tx, ty),
+    });
+    this.bossSkillSystem = new BossSkillSystem({
+      scene: ctx.scene,
+      getMonsters: ctx.getMonsters,
+      getLocalPlayerPosition: ctx.getLocalPlayerPosition,
+      isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      damageLocalPlayer: ctx.damageLocalPlayer,
+      projectileSystem: ctx.projectileSystem,
+      playExplosionAt: ctx.playExplosionAt,
+      showFloatingText: ctx.showFloatingText,
     });
   }
 
@@ -119,6 +132,9 @@ export class MonsterCombatAI {
 
     for (const mv of monstersMap.values()) {
       const m = mv.monster;
+      if (m.isBoss) {
+        this.bossSkillSystem.tryCastSkill(mv, time);
+      }
       const sep = this.spatialGrid.computeSeparation(m.id, m.x, m.y);
 
       const existingAggro = this.aggroTargets.get(m.id);

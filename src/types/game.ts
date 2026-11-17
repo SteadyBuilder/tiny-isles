@@ -188,11 +188,24 @@ export type MonsterType =
   | 'archmage'
   | 'boss_deathlord';
 
+export type BossSkillId =
+  | 'shockwave'
+  | 'frost_nova'
+  | 'void_barrage'
+  | 'summon_minions'
+  | 'meteor_rain'
+  | 'lightning_judgment';
+
 export interface Monster {
   id: string;
   type: MonsterType;
   name: string;
   isBoss: boolean;
+  bossTemplateId?: string;
+  bossSkillId?: BossSkillId;
+  bossSpriteKey?: string;
+  bossTintHex?: number;
+  bossScale?: number;
   isElite?: boolean;
   eliteAffix?: import('./hunting').EliteAffixId;
   x: number;

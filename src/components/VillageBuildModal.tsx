@@ -70,12 +70,16 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
 
   const handleBuild = (type: ConstructableType) => {
     const bp = blueprints.find((b) => b.type === type);
-    if (bp?.category === 'tower' && onSelectTowerPlacement) {
+    if (bp && onSelectTowerPlacement) {
       const canAfford =
         inventory.wood >= bp.costWood &&
         inventory.stone >= bp.costStone &&
         inventory.gold >= bp.costGold;
       if (!canAfford) return;
+      if (bp.category !== 'tower') {
+        const hasSlot = existingCount < maxSlots;
+        if (!hasSlot) return;
+      }
       onSelectTowerPlacement(curTerritory.id, type);
       onClose();
       return;

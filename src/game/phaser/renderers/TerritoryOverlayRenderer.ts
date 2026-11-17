@@ -1,9 +1,7 @@
 import Phaser from 'phaser';
 import { Inventory, Island } from '../../../types/game';
 import {
-  TERRITORY_BUILD_SLOTS,
   TERRITORY_PX,
-  VILLAGE_TIER_CONFIGS,
   getIslandOrigin,
   getTerritoryCorePos,
 } from '../../constants';
@@ -54,28 +52,8 @@ export class TerritoryOverlayRenderer {
       const origin = getIslandOrigin(isl.gridX, isl.gridY);
       const corePos = getTerritoryCorePos(isl.gridX, isl.gridY);
       if (isl.unlocked) {
-        const plazaRadius = 56 + isl.villageTier * 8;
-        g.fillStyle(0xa8a29e, 0.48);
-        g.fillCircle(corePos.x, corePos.y, plazaRadius);
-        g.lineStyle(3, 0x78716c, 0.58);
-        g.strokeCircle(corePos.x, corePos.y, plazaRadius);
-
         g.lineStyle(2, 0x93c5fd, 0.28);
         g.strokeRect(origin.x, origin.y, TERRITORY_PX, TERRITORY_PX);
-
-        const maxSlots = VILLAGE_TIER_CONFIGS[isl.villageTier].maxBuildings;
-        for (let idx = 0; idx < TERRITORY_BUILD_SLOTS.length && idx < maxSlots; idx++) {
-          const slot = TERRITORY_BUILD_SLOTS[idx];
-          const sx = origin.x + slot.relX;
-          const sy = origin.y + slot.relY;
-          if (slot.role === 'wall') {
-            g.lineStyle(1.5, 0xfbbf24, 0.24);
-            g.strokeCircle(sx, sy, 18);
-          } else {
-            g.lineStyle(1, 0x94a3b8, 0.22);
-            g.strokeCircle(sx, sy, 16);
-          }
-        }
       } else if (isl.isMonsterCamp) {
         // 사냥 특화 모드: 몬스터 부락 영역 표시
         g.fillStyle(isl.campDestroyed ? 0x0f172a : 0x450a0a, isl.campDestroyed ? 0.2 : 0.28);

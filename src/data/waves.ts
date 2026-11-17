@@ -1,4 +1,4 @@
-import { MonsterType } from '../types/game';
+import { BossSkillId, MonsterType } from '../types/game';
 
 /**
  * 몬스터 기본 스탯 템플릿 인터페이스
@@ -57,6 +57,10 @@ export interface BossMonsterDataTemplate {
   id: string;
   name: string;
   type: MonsterType;
+  spriteKey: string;
+  tintHex: number;
+  scale: number;
+  skillId: BossSkillId;
   baseHp: number;
   hpPerBossWave: number;
   baseAttack: number;
@@ -70,23 +74,91 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_dark_knight',
     name: '⚔️ 암흑의 거인 기사',
     type: 'goblin',
-    baseHp: 900,
-    hpPerBossWave: 250,
-    baseAttack: 45,
-    attackPerBossWave: 8,
-    speed: 38,
+    spriteKey: 'enemyBlackWarriorRun',
+    tintHex: 0xfca5a5,
+    scale: 1.0,
+    skillId: 'shockwave',
+    baseHp: 950,
+    hpPerBossWave: 320,
+    baseAttack: 44,
+    attackPerBossWave: 10,
+    speed: 40,
     title: '멸망을 부르는 파괴자',
   },
   {
     id: 'boss_lich_king',
-    name: '👑 불사의 리치 킹',
+    name: '🔮 불사의 리치 킹',
+    type: 'archmage',
+    spriteKey: 'enemyMonkRun',
+    tintHex: 0xc084fc,
+    scale: 1.05,
+    skillId: 'frost_nova',
+    baseHp: 1150,
+    hpPerBossWave: 360,
+    baseAttack: 52,
+    attackPerBossWave: 12,
+    speed: 43,
+    title: '혹한의 대마법 군주',
+  },
+  {
+    id: 'boss_abyss_lancer',
+    name: '🔱 심연의 창기병 군주',
+    type: 'lancer',
+    spriteKey: 'enemyLancerRun',
+    tintHex: 0xfbbf24,
+    scale: 1.1,
+    skillId: 'void_barrage',
+    baseHp: 1400,
+    hpPerBossWave: 410,
+    baseAttack: 58,
+    attackPerBossWave: 14,
+    speed: 50,
+    title: '전장을 꿰뚫는 파멸창',
+  },
+  {
+    id: 'boss_crimson_archer',
+    name: '🏹 핏빛 명사수 군주',
     type: 'skeleton',
-    baseHp: 750,
-    hpPerBossWave: 220,
-    baseAttack: 55,
-    attackPerBossWave: 9,
-    speed: 42,
-    title: '망자들의 군주',
+    spriteKey: 'enemyArcherRun',
+    tintHex: 0xf87171,
+    scale: 1.12,
+    skillId: 'summon_minions',
+    baseHp: 1650,
+    hpPerBossWave: 460,
+    baseAttack: 64,
+    attackPerBossWave: 15,
+    speed: 48,
+    title: '군단을 부르는 사냥꾼',
+  },
+  {
+    id: 'boss_void_tyrant',
+    name: '☄️ 공허의 폭군',
+    type: 'goblin',
+    spriteKey: 'enemyPurpleWarriorRun',
+    tintHex: 0xa855f7,
+    scale: 1.18,
+    skillId: 'meteor_rain',
+    baseHp: 2000,
+    hpPerBossWave: 520,
+    baseAttack: 72,
+    attackPerBossWave: 17,
+    speed: 45,
+    title: '하늘을 가르는 운석 군주',
+  },
+  {
+    id: 'boss_deathlord',
+    name: '💀 종말의 대군주',
+    type: 'boss_deathlord',
+    spriteKey: 'enemyPurpleWarriorRun',
+    tintHex: 0xef4444,
+    scale: 1.25,
+    skillId: 'lightning_judgment',
+    baseHp: 2500,
+    hpPerBossWave: 620,
+    baseAttack: 82,
+    attackPerBossWave: 20,
+    speed: 47,
+    title: '심연의 최종 지배자',
   },
 ];
 

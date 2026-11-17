@@ -13,6 +13,7 @@ import {
 } from '../../../types/game';
 import { MissionDifficultyConfig, RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
+import { CampFortificationSystem } from '../../systems/CampFortificationSystem';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { FieldMonsterSystem } from '../../systems/FieldMonsterSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
@@ -92,6 +93,7 @@ export interface IWorldSystemsHost {
   territoryStructureRenderer: TerritoryStructureRenderer;
   constructedBuildingRenderer: ConstructedBuildingRenderer;
   resourceEntityRenderer: ResourceEntityRenderer;
+  wallColliders?: Phaser.Physics.Arcade.StaticGroup;
 }
 
 export interface WorldSystemsBundle {
@@ -265,12 +267,35 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       host.celebrationEffects.playClassAdvancementEffect(x, y, classId),
   });
 
+  const campFortification = new CampFortificationSystem({
+    scene: host.scene,
+    wallColliders: host.wallColliders,
+    projectileSystem,
+    getLocalPlayerPosition: host.getPlayerPosition,
+    isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
+    damageLocalPlayer: (dmg, attacker) => playerHealthSystem.damagePlayer(dmg, attacker),
+    onStructureDamaged: (territoryId) =>
+      waveSystem.aggroCampMonsters(territoryId, host.getPlayerId()),
+    onStructureHitFeedback: (x, y, isSkill) =>
+      host.combatFeedbackRenderer.playHitImpact({
+        x,
+        y,
+        damage: 0,
+        isSkill,
+        isLocalPlayerAttack: true,
+      }),
+    playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
+    shakeObject: (target) => host.effectsRenderer.shakeObject(target),
+    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+  });
+
   monsterCampSystem = new MonsterCampSystem({
     scene: host.scene,
     isHuntingMode: host.isHuntingMode,
     getDifficultyConfig: host.getDifficultyConfig,
     getIslands: host.getIslands,
     getMonsters: () => waveSystem.getMonsterVisuals(),
+    fortification: campFortification,
     addResources: host.addResources,
     addThreat: (amount) => waveSystem.addThreat(amount, true),
     gainExp: (exp) => playerProgressionSystem.gainExp(exp),

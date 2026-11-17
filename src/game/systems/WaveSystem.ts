@@ -107,6 +107,7 @@ export class WaveSystem {
     this.coreGemSystem = coreGemSystem;
 
     this.combatAI = new MonsterCombatAI({
+      scene: this.ctx.scene,
       getMonsters: () => this.monsters,
       getIslands: () => this.ctx.getIslands(),
       getConstructedBuildings: () => this.ctx.getConstructedBuildings(),

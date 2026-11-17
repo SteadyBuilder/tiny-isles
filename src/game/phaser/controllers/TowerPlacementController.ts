@@ -1,12 +1,19 @@
 import Phaser from 'phaser';
 import { ConstructableType, ConstructedBuilding, Inventory, Island } from '../../../types/game';
-import { getBlueprint, getIslandOrigin } from '../../constants';
+import {
+  TERRITORY_BUILD_SLOTS,
+  TERRITORY_PX,
+  getBlueprint,
+  getIslandOrigin,
+} from '../../constants';
 import { DEPTH } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { canBuildInTerritory } from '../../territoryAccessRules';
 import {
   getOuterPerimeterBandRects,
+  validateInnerBuildingPosition,
   validateOuterTowerPosition,
+  validateWallSlotPosition,
 } from '../../towerPlacementRules';
 
 export interface ITowerPlacementContext {
@@ -19,7 +26,8 @@ export interface ITowerPlacementContext {
   onConstructAt: (
     territoryId: number,
     type: ConstructableType,
-    pos: { x: number; y: number }
+    pos: { x: number; y: number },
+    slotIndex?: number
   ) => boolean;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
 }
@@ -28,12 +36,13 @@ interface ActivePlacement {
   territoryId: number;
   type: ConstructableType;
   selectedPos: { x: number; y: number } | null;
+  selectedSlotIndex?: number;
   isValid: boolean;
   reason?: string;
 }
 
 /**
- * 방어 타워 외곽 자유 배치 전용 선택 포인트 및 프리뷰/오버레이 컨트롤러
+ * 건물 위치 지정 배치(방어 타워 외곽, 성벽 4방향 방어선, 기본/특수 건물 내부 자유 배치) 컨트롤러
  */
 export class TowerPlacementController {
   private ctx: ITowerPlacementContext;
@@ -64,13 +73,10 @@ export class TowerPlacementController {
       this.ctx.getPlayerStandingTerritoryId()
     );
     if (!access.allowed) {
-      const reason = access.reason || '이 마을에서는 방어 타워를 배치할 수 없습니다.';
+      const reason = access.reason || '이 마을에서는 건설할 수 없습니다.';
       GameEvents.emit('game-alert', reason);
       return;
     }
-
-    const bp = getBlueprint(type);
-    if (bp.category !== 'tower') return;
 
     this.clearVisuals();
     this.active = {
@@ -96,7 +102,7 @@ export class TowerPlacementController {
       return false;
     }
 
-    const { territoryId, type, selectedPos } = this.active;
+    const { territoryId, type, selectedPos, selectedSlotIndex } = this.active;
     const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
     const access = canBuildInTerritory(
       isl,
@@ -111,7 +117,7 @@ export class TowerPlacementController {
       return false;
     }
 
-    const built = this.ctx.onConstructAt(territoryId, type, selectedPos);
+    const built = this.ctx.onConstructAt(territoryId, type, selectedPos, selectedSlotIndex);
     if (built) {
       this.active = null;
       this.clearVisuals();
@@ -201,15 +207,39 @@ export class TowerPlacementController {
     const origin = getIslandOrigin(isl.gridX, isl.gridY);
     const bp = getBlueprint(type);
 
-    // 1. 외곽 배치 가능 영역(초록 밴드) 오버레이
+    // 1. 카테고리별 배치 가능 영역 오버레이
     const zone = scene.add.graphics();
     zone.setDepth(DEPTH.TERRAIN + 2);
-    const rects = getOuterPerimeterBandRects(origin.x, origin.y);
-    zone.fillStyle(0x22c55e, 0.16);
-    zone.lineStyle(2, 0x4ade80, 0.65);
-    for (const r of rects) {
-      zone.fillRect(r.x, r.y, r.w, r.h);
-      zone.strokeRect(r.x, r.y, r.w, r.h);
+    if (bp.category === 'tower') {
+      const rects = getOuterPerimeterBandRects(origin.x, origin.y);
+      zone.fillStyle(0x22c55e, 0.16);
+      zone.lineStyle(2, 0x4ade80, 0.65);
+      for (const r of rects) {
+        zone.fillRect(r.x, r.y, r.w, r.h);
+        zone.strokeRect(r.x, r.y, r.w, r.h);
+      }
+    } else if (bp.category === 'wall') {
+      const existing = this.ctx.getConstructedBuildings();
+      for (let i = 0; i < TERRITORY_BUILD_SLOTS.length; i++) {
+        const slot = TERRITORY_BUILD_SLOTS[i];
+        if (slot.role !== 'wall') continue;
+        const occupied = existing.some((b) => b.territoryId === isl.id && b.slotIndex === i);
+        const sx = origin.x + slot.relX;
+        const sy = origin.y + slot.relY;
+        const w = i === 0 || i === 1 ? 260 : 64;
+        const h = i === 0 || i === 1 ? 64 : 260;
+        zone.fillStyle(occupied ? 0x64748b : 0x22c55e, occupied ? 0.18 : 0.24);
+        zone.lineStyle(2, occupied ? 0x94a3b8 : 0x4ade80, 0.8);
+        zone.fillRoundedRect(sx - w / 2, sy - h / 2, w, h, 10);
+        zone.strokeRoundedRect(sx - w / 2, sy - h / 2, w, h, 10);
+      }
+    } else {
+      const innerPad = 110;
+      const span = TERRITORY_PX - innerPad * 2;
+      zone.fillStyle(0x22c55e, 0.12);
+      zone.lineStyle(2, 0x4ade80, 0.6);
+      zone.fillRect(origin.x + innerPad, origin.y + innerPad, span, span);
+      zone.strokeRect(origin.x + innerPad, origin.y + innerPad, span, span);
     }
     this.zoneGraphics = zone;
 
@@ -231,10 +261,14 @@ export class TowerPlacementController {
     container.add(ringGfx);
 
     const sprite = scene.add.image(0, -20, bp.spriteKey);
-    sprite.setDisplaySize(110, 170);
+    const previewW = bp.category === 'tower' ? 110 : bp.category === 'wall' ? 110 : 120;
+    const previewH = bp.category === 'tower' ? 170 : bp.category === 'wall' ? 90 : 150;
+    sprite.setDisplaySize(previewW, previewH);
     sprite.setAlpha(0.78);
     if (type === 'magic_tower') {
       sprite.setTint(0xc084fc);
+    } else if (type === 'special_goldmine') {
+      sprite.setTint(0xfde047);
     }
     container.add(sprite);
 
@@ -252,36 +286,62 @@ export class TowerPlacementController {
     const isl = this.ctx.getIslands().find((i) => i.id === this.active!.territoryId);
     if (!isl) return;
 
-    const validation = validateOuterTowerPosition(
-      worldX,
-      worldY,
-      isl,
-      this.ctx.getConstructedBuildings()
-    );
+    const bp = getBlueprint(this.active.type);
+    const constructed = this.ctx.getConstructedBuildings();
+    let worldPosX = worldX;
+    let worldPosY = worldY;
+    let valid = false;
+    let reason: string | undefined;
 
-    this.active.selectedPos = { x: validation.worldX, y: validation.worldY };
-    this.active.isValid = validation.valid;
-    this.active.reason = validation.reason;
+    if (bp.category === 'tower') {
+      const v = validateOuterTowerPosition(worldX, worldY, isl, constructed);
+      worldPosX = v.worldX;
+      worldPosY = v.worldY;
+      valid = v.valid;
+      reason = v.reason;
+      this.active.selectedSlotIndex = undefined;
+    } else if (bp.category === 'wall') {
+      const v = validateWallSlotPosition(worldX, worldY, isl, constructed, TERRITORY_BUILD_SLOTS);
+      worldPosX = v.worldX;
+      worldPosY = v.worldY;
+      valid = v.valid;
+      reason = v.reason;
+      this.active.selectedSlotIndex = v.slotIndex;
+    } else {
+      const v = validateInnerBuildingPosition(worldX, worldY, isl, constructed);
+      worldPosX = v.worldX;
+      worldPosY = v.worldY;
+      valid = v.valid;
+      reason = v.reason;
+      this.active.selectedSlotIndex = undefined;
+    }
 
-    this.previewContainer.setPosition(validation.worldX, validation.worldY);
+    this.active.selectedPos = { x: worldPosX, y: worldPosY };
+    this.active.isValid = valid;
+    this.active.reason = reason;
+
+    this.previewContainer.setPosition(worldPosX, worldPosY);
     this.previewContainer.setVisible(true);
 
-    const color = validation.valid ? 0x4ade80 : 0xef4444;
-    this.previewSprite.setTint(
-      validation.valid ? (this.active.type === 'magic_tower' ? 0xc084fc : 0xffffff) : 0xf87171
-    );
+    const color = valid ? 0x4ade80 : 0xef4444;
+    const baseTint =
+      this.active.type === 'magic_tower'
+        ? 0xc084fc
+        : this.active.type === 'special_goldmine'
+          ? 0xfde047
+          : 0xffffff;
+    this.previewSprite.setTint(valid ? baseTint : 0xf87171);
 
     this.previewRing.clear();
     this.previewRing.lineStyle(3, color, 0.95);
     this.previewRing.fillStyle(color, 0.22);
     this.previewRing.fillCircle(0, 0, 32);
     this.previewRing.strokeCircle(0, 0, 32);
-    // 선택 포인트 조준 십자선
     this.previewRing.lineBetween(-16, 0, 16, 0);
     this.previewRing.lineBetween(0, -16, 0, 16);
 
     if (this.previewRange) {
-      this.previewRange.setVisible(validation.valid);
+      this.previewRange.setVisible(valid);
     }
 
     this.emitState();

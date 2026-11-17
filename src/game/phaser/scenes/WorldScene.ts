@@ -282,6 +282,7 @@ export class WorldScene extends Phaser.Scene {
       territoryStructureRenderer: this.territoryStructureRenderer,
       constructedBuildingRenderer: this.constructedBuildingRenderer,
       resourceEntityRenderer: this.resourceEntityRenderer,
+      wallColliders: this.wallColliders,
     });
 
     // 3. Spawn World Cores, Monster Camps & Field Monsters (Hunting Mode) & Resource Entities
@@ -373,6 +374,9 @@ export class WorldScene extends Phaser.Scene {
     );
     this.missionSystem.update(delta, this.systems.waveSystem.getWaveState(), this.islands);
     this.controllers.territoryPassive.update(delta);
+    this.constructedBuildingRenderer.updateResourceTimers(
+      this.controllers.territoryPassive.getCycleProgress()
+    );
     this.controllers.playerMovement.update(time, delta);
     this.controllers.viewportCulling.update(time);
     this.effectsRenderer.updateClouds(delta);

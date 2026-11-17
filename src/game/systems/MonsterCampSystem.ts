@@ -23,6 +23,7 @@ import { GameEvents } from '../events/gameEvents';
 import { HuntingScalingFactors } from '../../types/hunting';
 import { computeHuntingScaling } from '../utils/huntingScalingUtils';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
+import type { CampFortificationSystem } from './CampFortificationSystem';
 
 interface CampVisualNode {
   camp: MonsterCampState;
@@ -41,6 +42,7 @@ export interface IMonsterCampContext {
   getDifficultyConfig?: () => MissionDifficultyConfig;
   getIslands: () => Island[];
   getMonsters: () => Map<string, MonsterVisual>;
+  fortification?: CampFortificationSystem;
   addResources: (wood: number, stone: number, gold: number) => void;
   addThreat: (amount: number) => void;
   gainExp: (amount: number) => void;
@@ -346,10 +348,59 @@ export class MonsterCampSystem {
         idx++;
       }
     }
+
+    // 방어벽 외곽 순찰 몬스터 배치
+    const patrolCount = Math.max(2, Math.round(tpl.fortification.outerPatrolCount * countMult));
+    const patrolSpec = tpl.garrisonSpecs[0];
+    for (let p = 0; p < patrolCount; p++) {
+      const angle = (Math.PI * 2 * p) / patrolCount;
+      const dist = 285 + (p % 2) * 55;
+      const mx = cx + Math.cos(angle) * dist;
+      const my = cy + Math.sin(angle) * dist;
+      const isElite = Math.random() < eliteChance;
+      const affix = isElite ? pickRandomEliteAffix() : null;
+
+      const hp = Math.round(patrolSpec.hp * clearScale * hpMult * (affix?.hpMultiplier ?? 1));
+      const attack = Math.round(patrolSpec.attack * clearScale * atkMult * (affix?.attackMultiplier ?? 1));
+      const speed = Math.round(patrolSpec.speed * (affix?.speedMultiplier ?? 1));
+
+      const patrolMonster: Monster = {
+        id: `camppatrol_${camp.territoryId}_${Date.now()}_${p}`,
+        type: patrolSpec.type,
+        name: affix
+          ? `★ Lv.${camp.level} ${affix.label} 외곽 순찰병`
+          : `Lv.${camp.level} 부락 외곽 순찰병`,
+        isBoss: false,
+        isElite,
+        eliteAffix: affix?.id,
+        x: mx,
+        y: my,
+        hp,
+        maxHp: hp,
+        attack,
+        speed,
+        targetTerritoryId: 0,
+        spawnTerritoryId: camp.territoryId,
+        direction: p % 2 === 0 ? 'left' : 'right',
+        role: patrolSpec.role,
+        isCampMonster: true,
+        campTerritoryId: camp.territoryId,
+        campRing: camp.ring,
+        homeX: mx,
+        homeY: my,
+        patrolRadiusPx: 115,
+        expReward: Math.round(patrolSpec.expReward * clearScale * (affix?.expMultiplier ?? 1)),
+      };
+      monsters.set(patrolMonster.id, MonsterVisualManager.create(this.ctx.scene, patrolMonster));
+    }
   }
 
   public tryAttackNearestCampCore(px: number, py: number, rangePx: number, damage: number): boolean {
     if (!this.ctx.isHuntingMode()) return false;
+
+    if (this.ctx.fortification?.tryAttackNearest(px, py, rangePx, damage)) {
+      return true;
+    }
 
     for (const node of this.campNodes.values()) {
       if (node.camp.destroyed) continue;
@@ -364,7 +415,7 @@ export class MonsterCampSystem {
 
   public damageCampCoresInRadius(x: number, y: number, radiusPx: number, damage: number, isSkill = true): boolean {
     if (!this.ctx.isHuntingMode()) return false;
-    let hitAny = false;
+    let hitAny = this.ctx.fortification?.damageInRadius(x, y, radiusPx, damage) ?? false;
     for (const node of this.campNodes.values()) {
       if (node.camp.destroyed) continue;
       const d = Math.hypot(x - node.container.x, y - node.container.y);
@@ -398,6 +449,7 @@ export class MonsterCampSystem {
     camp.clearCount += 1;
     camp.firstCleared = true;
     camp.respawnRemainingSec = tpl.respawnSec;
+    this.ctx.fortification?.clearForCamp(camp.territoryId);
 
     const isl = this.ctx.getIslands().find((i) => i.id === camp.territoryId);
     if (isl) {
@@ -479,6 +531,8 @@ export class MonsterCampSystem {
   public update(deltaMs: number): void {
     if (!this.ctx.isHuntingMode() || this.campNodes.size === 0) return;
 
+    this.ctx.fortification?.update(this.ctx.scene.time.now);
+
     const now = performance.now();
     const drainStep = (1.35 * deltaMs) / 1000;
     for (const node of this.campNodes.values()) {
@@ -506,7 +560,7 @@ export class MonsterCampSystem {
       camp.respawnRemainingSec = Math.max(0, camp.respawnRemainingSec - 1);
       if (camp.respawnRemainingSec <= 0) {
         const tpl = CAMP_RING_TEMPLATES[camp.ring];
-        const { hpMult } = this.getDifficultyMultipliers();
+        const { hpMult, atkMult } = this.getDifficultyMultipliers();
         camp.destroyed = false;
         camp.respawnRemainingSec = null;
         camp.level += 2;
@@ -524,6 +578,7 @@ export class MonsterCampSystem {
           isl.coreMaxHp = camp.coreMaxHp;
         }
 
+        this.ctx.fortification?.spawnForCamp(camp, hpMult, atkMult);
         this.spawnCampGarrison(camp);
         anyChanged = true;
         GameEvents.emit(
@@ -540,6 +595,7 @@ export class MonsterCampSystem {
   }
 
   public destroy(): void {
+    this.ctx.fortification?.destroy();
     for (const node of this.campNodes.values()) {
       if (node.container.scene) node.container.destroy();
     }

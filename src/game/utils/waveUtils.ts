@@ -162,14 +162,29 @@ export function getRegularMonsterTemplates(waveNum: number): MonsterTemplate[] {
   }));
 }
 
-export function getBossMonsterTemplate(bossWaveCount: number): MonsterTemplate {
+export interface BossMonsterTemplate extends MonsterTemplate {
+  templateId: string;
+  spriteKey: string;
+  tintHex: number;
+  scale: number;
+  skillId: import('../../types/game').BossSkillId;
+}
+
+export function getBossMonsterTemplate(bossWaveCount: number): BossMonsterTemplate {
   const index = Math.max(0, bossWaveCount - 1) % BOSS_MONSTER_TEMPLATES.length;
   const tmpl = BOSS_MONSTER_TEMPLATES[index];
+  const waveTierMult = 1 + Math.max(0, bossWaveCount - 1) * 0.28;
+  const atkTierMult = 1 + Math.max(0, bossWaveCount - 1) * 0.18;
   return {
+    templateId: tmpl.id,
     type: tmpl.type,
-    name: `${tmpl.name} (60분 보스 Lv.${bossWaveCount})`,
-    hp: tmpl.baseHp + bossWaveCount * tmpl.hpPerBossWave,
-    attack: tmpl.baseAttack + bossWaveCount * tmpl.attackPerBossWave,
-    speed: tmpl.speed,
+    name: `${tmpl.name} (${bossWaveCount}차 보스)`,
+    spriteKey: tmpl.spriteKey,
+    tintHex: tmpl.tintHex,
+    scale: tmpl.scale,
+    skillId: tmpl.skillId,
+    hp: Math.round((tmpl.baseHp + bossWaveCount * tmpl.hpPerBossWave) * waveTierMult),
+    attack: Math.round((tmpl.baseAttack + bossWaveCount * tmpl.attackPerBossWave) * atkTierMult),
+    speed: tmpl.speed + Math.max(0, bossWaveCount - 1) * 2,
   };
 }
