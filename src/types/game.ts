@@ -1,3 +1,6 @@
+export * from './hunting';
+import { MonsterCombatRole, PlayerClassId } from './hunting';
+
 export type ResourceType = 'wood' | 'stone' | 'gold';
 
 export interface Inventory {
@@ -17,6 +20,8 @@ export interface Player {
   direction: 'left' | 'right';
   action: PlayerAction;
   color: PlayerColor;
+  classId?: PlayerClassId;
+  level?: number;
   lastUpdated: number;
 }
 
@@ -59,7 +64,10 @@ export type BuildingType =
   | 'blacksmith'
   | 'market'
   | 'windmill'
-  | 'stoneWall';
+  | 'stoneWall'
+  | 'blackCastle'
+  | 'blackTower'
+  | 'purpleCastle';
 
 export interface Building {
   id: string;
@@ -107,7 +115,8 @@ export type ConstructableType =
   | 'stone_works'
   | 'special_barracks'
   | 'special_sanctuary'
-  | 'special_goldmine';
+  | 'special_goldmine'
+  | 'job_hall';
 
 export interface ConstructableBlueprint {
   type: ConstructableType;
@@ -161,11 +170,22 @@ export interface Island {
   villageTier: VillageTier;
   coreHp: number;
   coreMaxHp: number;
+  isMonsterCamp?: boolean;
+  campRing?: 1 | 2 | 3 | 4;
+  campLevel?: number;
+  campDestroyed?: boolean;
+  campRespawnSec?: number | null;
 }
 
 export type Territory = Island;
 
-export type MonsterType = 'zombie' | 'skeleton' | 'goblin' | 'boss_deathlord';
+export type MonsterType =
+  | 'zombie'
+  | 'skeleton'
+  | 'goblin'
+  | 'lancer'
+  | 'archmage'
+  | 'boss_deathlord';
 
 export interface Monster {
   id: string;
@@ -181,6 +201,12 @@ export interface Monster {
   targetTerritoryId: number;
   spawnTerritoryId: number;
   direction: 'left' | 'right';
+  role?: MonsterCombatRole;
+  isCampMonster?: boolean;
+  campTerritoryId?: number;
+  homeX?: number;
+  homeY?: number;
+  expReward?: number;
 }
 
 export interface WaveState {

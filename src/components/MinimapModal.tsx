@@ -108,7 +108,9 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
               }
 
               const unlocked = isUnlocked(island.id);
-              const affordable = canAffordIsland(island);
+              const isCamp = Boolean(island.isMonsterCamp);
+              const campCleared = Boolean(island.campDestroyed);
+              const affordable = !isCamp && canAffordIsland(island);
               const isPlayerHere = playerGridPos.gridX === gx && playerGridPos.gridY === gy;
               const isSelected = selectedIsland.id === island.id;
               const tCfg = VILLAGE_TIER_CONFIGS[island.villageTier || 0];
@@ -119,6 +121,10 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                   island.id === 0
                     ? 'bg-[#dbeafe] border-[#2563eb] text-[#1e3a8a]'
                     : 'bg-[#dcfce7] border-[#15803d] text-[#14532d]';
+              } else if (isCamp) {
+                tileClass = campCleared
+                  ? 'bg-[#dcfce7] border-[#16a34a] text-[#14532d]'
+                  : 'bg-[#fee2e2] border-[#dc2626] text-[#7f1d1d]';
               } else if (affordable) {
                 tileClass = 'bg-[#fef3c7] border-[#b45309] text-[#78350f]';
               }
@@ -126,13 +132,17 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
               const iconSrc =
                 island.id === 0
                   ? '/assets/buildings/Castle.png'
-                  : unlocked
-                    ? '/assets/buildings/House1.png'
-                    : island.id === 11
-                      ? '/assets/resources/Gold_Stone_5.png'
-                      : affordable
-                        ? '/assets/ui/Icons/Icon_07.png'
-                        : '/assets/ui/Icons/Icon_06.png';
+                  : isCamp
+                    ? campCleared
+                      ? '/assets/ui/Icons/Icon_05.png'
+                      : '/assets/buildings/Black_Tower.png'
+                    : unlocked
+                      ? '/assets/buildings/House1.png'
+                      : island.id === 11
+                        ? '/assets/resources/Gold_Stone_5.png'
+                        : affordable
+                          ? '/assets/ui/Icons/Icon_07.png'
+                          : '/assets/ui/Icons/Icon_06.png';
 
               return (
                 <button
@@ -148,15 +158,15 @@ export const MinimapModal: React.FC<MinimapModalProps> = ({
                     src={iconSrc}
                     alt=""
                     className={`w-5 h-5 object-contain pixel-art ${
-                      !unlocked && !affordable && island.id !== 11 ? 'opacity-50 grayscale' : ''
+                      !unlocked && !affordable && !isCamp && island.id !== 11 ? 'opacity-50 grayscale' : ''
                     }`}
                   />
                   <span className="text-[9px] font-black leading-none mt-0.5 truncate max-w-full px-0.5">
-                    {unlocked ? tCfg.name : `#${island.id}`}
+                    {unlocked ? tCfg.name : isCamp ? `Lv.${island.campLevel || 1}` : `#${island.id}`}
                   </span>
                   {!unlocked && (
                     <span className="text-[8px] font-extrabold opacity-80 leading-none mt-0.5">
-                      {island.id === 11 ? '금광' : '미점령'}
+                      {isCamp ? (campCleared ? '토벌됨' : '부락') : island.id === 11 ? '금광' : '미점령'}
                     </span>
                   )}
 

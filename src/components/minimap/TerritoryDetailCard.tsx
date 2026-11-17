@@ -28,12 +28,17 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
   const selectedTierCfg = VILLAGE_TIER_CONFIGS[selectedIsland.villageTier || 0];
   const buildAccess = canBuildInTerritory(selectedIsland, playerId, playerStandingTerritoryId);
 
+  const isCamp = Boolean(selectedIsland.isMonsterCamp);
+  const campCleared = Boolean(selectedIsland.campDestroyed);
+
   const emblemSrc =
     selectedIsland.id === 0
       ? '/assets/buildings/Castle.png'
-      : isUnlocked
-        ? '/assets/buildings/House1.png'
-        : '/assets/ui/Icons/Icon_06.png';
+      : isCamp
+        ? '/assets/buildings/Black_Castle.png'
+        : isUnlocked
+          ? '/assets/buildings/House1.png'
+          : '/assets/ui/Icons/Icon_06.png';
 
   return (
     <div className="ts-paper-sheet p-2.5 space-y-2 shrink-0">
@@ -43,7 +48,7 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
             src={emblemSrc}
             alt=""
             className={`w-8 h-8 object-contain pixel-art shrink-0 ${
-              !isUnlocked ? 'opacity-65 grayscale' : ''
+              !isUnlocked && !isCamp ? 'opacity-65 grayscale' : ''
             }`}
           />
           <div className="min-w-0">
@@ -51,7 +56,9 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
               #{selectedIsland.id} {selectedIsland.name}
             </h3>
             <p className="text-[11px] font-bold text-[#6e4625] leading-snug">
-              {selectedIsland.resourceRichLabel || '마을 영지'}
+              {isCamp
+                ? `몬스터 부락 (Lv.${selectedIsland.campLevel || 1} · ${selectedIsland.campRing || 1}링)`
+                : selectedIsland.resourceRichLabel || '마을 영지'}
               {selectedIsland.id !== 0 && isUnlocked && selectedIsland.ownerName
                 ? ` · 점령: ${selectedIsland.ownerName}`
                 : ''}
@@ -61,18 +68,45 @@ export const TerritoryDetailCard: React.FC<TerritoryDetailCardProps> = ({
 
         <span
           className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 border ${
-            isUnlocked
-              ? 'bg-[#4f803b] text-[#fef5df] border-[#2d4d21]'
-              : canAfford
-                ? 'bg-[#d97706] text-[#fef5df] border-[#92400e]'
-                : 'bg-[#a89070] text-[#3a200f] border-[#785e42]'
+            isCamp
+              ? campCleared
+                ? 'bg-[#16a34a] text-[#fef5df] border-[#14532d]'
+                : 'bg-[#dc2626] text-[#fef5df] border-[#7f1d1d]'
+              : isUnlocked
+                ? 'bg-[#4f803b] text-[#fef5df] border-[#2d4d21]'
+                : canAfford
+                  ? 'bg-[#d97706] text-[#fef5df] border-[#92400e]'
+                  : 'bg-[#a89070] text-[#3a200f] border-[#785e42]'
           }`}
         >
-          {isUnlocked ? selectedTierCfg.name : canAfford ? '점령 가능' : '미점령'}
+          {isCamp
+            ? campCleared
+              ? '토벌 완료 (재건 대기)'
+              : `Lv.${selectedIsland.campLevel || 1} 부락`
+            : isUnlocked
+              ? selectedTierCfg.name
+              : canAfford
+                ? '점령 가능'
+                : '미점령'}
         </span>
       </div>
 
-      {isUnlocked ? (
+      {isCamp ? (
+        <div className="pt-2 border-t border-[#c7a97e] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-extrabold text-[#3a200f]">
+            <img src="/assets/ui/Icons/Icon_05.png" alt="" className="w-4 h-4 pixel-art" />
+            <span>부락 본진 내구도:</span>
+            <span className="font-black text-[#b91c1c] tabular-nums">
+              {selectedIsland.coreHp} / {selectedIsland.coreMaxHp}
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-[#78350f]">
+            {campCleared
+              ? '⏳ 3분 뒤 상위 레벨 부락으로 재건됩니다'
+              : '🎁 본진 파괴 시 개인 장비 전리품 + 경험치 획득'}
+          </span>
+        </div>
+      ) : isUnlocked ? (
         <div className="pt-2 border-t border-[#c7a97e] flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs font-extrabold text-[#3a200f]">
             <img src="/assets/ui/Icons/Icon_07.png" alt="" className="w-4 h-4 pixel-art" />

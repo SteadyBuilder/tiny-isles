@@ -150,12 +150,18 @@ export function createWorldControllersBundle(
     playPlayerAnimation: (action) => playerMovement.playAnimation(action),
     markInteractTime: (now) => playerMovement.markInteractTime(now),
     getIslands: host.getIslands,
+    getConstructedBuildings: host.getConstructedBuildings,
     getInventory: host.getInventory,
     spendInventory: host.spendResources,
     addHarvestedResource: host.addHarvestedResource,
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
     damageMonster: (id, dmg, attacker, attackerId) =>
       host.systems.waveSystem.damageMonster(id, dmg, attacker, false, attackerId),
+    getPlayerClassDef: () => host.systems.playerProgressionSystem.getClassDef(),
+    getPlayerAttackDamage: () => host.systems.playerProgressionSystem.getTotalAttack(),
+    tryAttackCampCore: (px, py, rangePx, dmg) =>
+      host.systems.monsterCampSystem.tryAttackNearestCampCore(px, py, rangePx, dmg),
+    projectileSystem: host.systems.projectileSystem,
     findGatherableEntityVisual: (x, y) =>
       host.resourceEntityRenderer.findGatherableVisual(x, y),
     updateEntityHpBar: (id) => host.resourceEntityRenderer.updateHpBar(id),
@@ -187,6 +193,7 @@ export function createWorldControllersBundle(
     scene: host.scene,
     getPlayerName: host.getPlayerName,
     getPlayerColor: host.getPlayerColor,
+    getMoveSpeed: () => host.systems.playerProgressionSystem.getTotalSpeed(),
     getInitialZoom: host.getInitialZoom,
     getBuildingColliders: () => host.territoryStructureRenderer.getBuildingColliders(),
     getWallColliders: host.getWallColliders,
@@ -216,12 +223,13 @@ export function createWorldControllersBundle(
     },
     addTestResources: () => {
       host.addResources(500, 500, 500);
+      host.systems.playerProgressionSystem.gainExp(200);
       host.refreshTerritoryDecorations();
       const { x, y } = playerMovement.getPosition();
       host.effectsRenderer.showFloatingText(
         x,
         y - 50,
-        '🎁 테스트 자원 지급! (+🪵500 +🪨500 +🪙500)',
+        '🎁 테스트 자원 & 경험치 지급! (+🪵500 +🪨500 +🪙500 +200EXP)',
         '#fde047'
       );
     },
@@ -242,6 +250,11 @@ export function createWorldControllersBundle(
     addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
     damageTerritoryCore: (id, dmg) =>
       host.systems.coreGemSystem.damageTerritoryCore(id, dmg, '마물 침공 테스트', true),
+    selectPlayerClass: (classId) => host.systems.playerProgressionSystem.selectClass(classId),
+    equipItem: (instanceId) => host.systems.playerProgressionSystem.equipItem(instanceId),
+    unequipSlot: (slot) => host.systems.playerProgressionSystem.unequipSlot(slot),
+    salvageItem: (instanceId) => host.systems.playerProgressionSystem.salvageItem(instanceId),
+    castActiveSkill: () => host.systems.playerProgressionSystem.castActiveSkill(),
     onWindowUnload: () => {},
   });
 
@@ -253,6 +266,7 @@ export function createWorldControllersBundle(
     getTerritoryBuildingVisuals: () => host.territoryStructureRenderer.getBuildingVisuals(),
     getConstructedVisuals: () => host.constructedBuildingRenderer.getVisuals(),
     getAltarCardContainers: () => host.altarRenderer.getCardContainers(),
+    getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
   });
 
   return {

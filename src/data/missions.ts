@@ -13,6 +13,23 @@ export const INSTANCE_ROOM_DEFAULTS = {
 
 export const MISSION_CATALOG: MissionDefinition[] = [
   {
+    id: 'hunting_conquest',
+    title: '🏹 사냥 & 던전 디펜스 (NEW)',
+    subtitle: '단일 본진을 수호하며 몬스터 부락을 토벌하고 전직하라!',
+    description:
+      '중앙 마을 1곳을 수호하며 주변 20개 몬스터 부락(근거리·창병·원거리·마법사)을 사냥해 레벨업·전직·장비 파밍을 진행합니다. 위협도 100% 시 출현하는 심연의 던전 게이트(100마리 대군 진격)를 막아내고 부락 본진 8곳을 초회 토벌하면 승리합니다!',
+    estimatedMinutes: '25~40분',
+    timeLimitSec: 45 * 60,
+    goal: {
+      type: 'camp_conquest',
+      targetCount: 8,
+      label: '몬스터 부락 초회 토벌',
+    },
+    baseRewardPoints: 180,
+    rewardTitleId: 'title_boss_slayer',
+    isHuntingMode: true,
+  },
+  {
     id: 'boss_slayer',
     title: '대군주 토벌전',
     subtitle: '보스 군단을 격파하고 섬을 해방하라',

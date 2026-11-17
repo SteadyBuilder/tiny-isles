@@ -1,4 +1,10 @@
-import { ConstructableType, Inventory, PlayerColor } from '../../../types/game';
+import {
+  ConstructableType,
+  EquipmentSlot,
+  Inventory,
+  PlayerClassId,
+  PlayerColor,
+} from '../../../types/game';
 import { GameEventPayloads, GameEvents } from '../../events/gameEvents';
 
 export interface IWorldEventBusContext {
@@ -25,6 +31,11 @@ export interface IWorldEventBusContext {
   summonEarlyWave: (isBossWave: boolean) => void;
   addThreat: (amount: number) => void;
   damageTerritoryCore: (territoryId: number, damage: number) => void;
+  selectPlayerClass?: (classId: PlayerClassId) => void;
+  equipItem?: (instanceId: string) => void;
+  unequipSlot?: (slot: EquipmentSlot) => void;
+  salvageItem?: (instanceId: string) => void;
+  castActiveSkill?: () => void;
   onWindowUnload: () => void;
 }
 
@@ -106,6 +117,26 @@ export class WorldEventBusController {
 
     this.register('add-test-resources', () => {
       this.ctx.addTestResources();
+    });
+
+    this.register('select-player-class', (classId) => {
+      this.ctx.selectPlayerClass?.(classId);
+    });
+
+    this.register('equip-item', (instanceId) => {
+      this.ctx.equipItem?.(instanceId);
+    });
+
+    this.register('unequip-slot', (slot) => {
+      this.ctx.unequipSlot?.(slot);
+    });
+
+    this.register('salvage-item', (instanceId) => {
+      this.ctx.salvageItem?.(instanceId);
+    });
+
+    this.register('cast-active-skill', () => {
+      this.ctx.castActiveSkill?.();
     });
 
     if (typeof window !== 'undefined') {

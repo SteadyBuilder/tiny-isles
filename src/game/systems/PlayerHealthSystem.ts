@@ -20,7 +20,7 @@ export interface IPlayerHealthContext {
 export class PlayerHealthSystem {
   private ctx: IPlayerHealthContext;
   private hp: number = PLAYER_COMBAT_CONFIG.maxHp;
-  private readonly maxHp: number = PLAYER_COMBAT_CONFIG.maxHp;
+  private maxHp: number = PLAYER_COMBAT_CONFIG.maxHp;
   private fainted = false;
   private invincibleUntil = 0;
   private respawnTimer: Phaser.Time.TimerEvent | null = null;
@@ -35,6 +35,24 @@ export class PlayerHealthSystem {
       maxHp: this.maxHp,
       isFainted: this.fainted,
     };
+  }
+
+  public setMaxHp(newMaxHp: number, healDelta = 0): void {
+    this.maxHp = Math.max(50, newMaxHp);
+    this.hp = Math.min(this.maxHp, Math.max(1, this.hp + healDelta));
+    this.emitState();
+  }
+
+  public healPlayer(amount: number): void {
+    if (amount <= 0 || this.fainted) return;
+    const prev = this.hp;
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+    const gained = this.hp - prev;
+    if (gained > 0) {
+      const { x, y } = this.ctx.getPlayerPosition();
+      this.ctx.showFloatingText(x, y - 40, `💚 +${gained} HP`, '#4ade80');
+      this.emitState();
+    }
   }
 
   public isFainted(): boolean {

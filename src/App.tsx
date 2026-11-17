@@ -7,6 +7,9 @@ import { VillageBuildModal } from './components/VillageBuildModal';
 import { TowerPlacementBanner } from './components/TowerPlacementBanner';
 import { MissionHudBanner } from './components/MissionHudBanner';
 import { MissionResultModal } from './components/MissionResultModal';
+import { PlayerProgressionHud } from './components/PlayerProgressionHud';
+import { InventoryModal } from './components/InventoryModal';
+import { JobAdvancementModal } from './components/JobAdvancementModal';
 import { HudSettingsModal } from './components/HudSettingsModal';
 import { HudHelpModal } from './components/HudHelpModal';
 import { SoundModal } from './components/SoundModal';
@@ -39,6 +42,11 @@ export function App() {
     setWaveState,
     showVillageModal,
     setShowVillageModal,
+    showInventoryModal,
+    setShowInventoryModal,
+    showJobHallModal,
+    setShowJobHallModal,
+    playerProgression,
     alertMessage,
     zoom,
     nearIsland,
@@ -251,6 +259,25 @@ export function App() {
       />
 
       <TowerPlacementBanner />
+
+      <PlayerProgressionHud
+        progression={playerProgression}
+        onOpenInventory={() => setShowInventoryModal(true)}
+        onOpenJobHall={() => setShowJobHallModal(true)}
+      />
+
+      <InventoryModal
+        isOpen={showInventoryModal}
+        onClose={() => setShowInventoryModal(false)}
+        progression={playerProgression}
+      />
+
+      <JobAdvancementModal
+        isOpen={showJobHallModal}
+        onClose={() => setShowJobHallModal(false)}
+        progression={playerProgression}
+        hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall')}
+      />
 
       {sessionStatus === 'paused' && (
         <WoodModalFrame

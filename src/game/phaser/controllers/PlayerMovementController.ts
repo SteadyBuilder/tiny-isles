@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
-import { Island, PlayerAction, PlayerColor } from '../../../types/game';
+import { Island, PlayerAction, PlayerClassId, PlayerColor, PlayerHpState } from '../../../types/game';
 import {
   TERRITORY_CENTER_X,
   TERRITORY_CENTER_Y,
@@ -32,6 +32,7 @@ export interface IPlayerMovementContext {
   getEntityInteractionPoint: (visual: EntityVisual) => { x: number; y: number };
   onInteract: () => void;
   isPlacementActive?: () => boolean;
+  getMoveSpeed?: () => number;
 }
 
 /**
@@ -46,6 +47,7 @@ export class PlayerMovementController {
   private playerHpBar!: Phaser.GameObjects.Graphics;
   private currentAction: PlayerAction = 'idle';
   private currentDirection: 'left' | 'right' = 'right';
+  private currentClassId: PlayerClassId = 'pawn';
   private isFainted = false;
   private currentHp: number = PLAYER_COMBAT_CONFIG.maxHp;
   private currentMaxHp: number = PLAYER_COMBAT_CONFIG.maxHp;
@@ -54,6 +56,8 @@ export class PlayerMovementController {
   private wasdKeys!: { [key: string]: Phaser.Input.Keyboard.Key };
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private eKey!: Phaser.Input.Keyboard.Key;
+  private qKey!: Phaser.Input.Keyboard.Key;
+  private iKey!: Phaser.Input.Keyboard.Key;
   private joystickVector = { x: 0, y: 0 };
   private isActionHolding = false;
 
@@ -121,11 +125,28 @@ export class PlayerMovementController {
     this.playAnimation(this.currentAction);
   }
 
+  public setPlayerClassVisual(classId: PlayerClassId): void {
+    this.currentClassId = classId;
+    if (!this.playerSprite) return;
+    if (classId === 'lancer') {
+      this.playerSprite.setDisplaySize(172, 172);
+    } else {
+      this.playerSprite.setDisplaySize(128, 128);
+    }
+    this.playAnimation(this.currentAction);
+  }
+
   public playAnimation(action: PlayerAction): void {
     this.currentAction = action;
-    const animKey = `${this.ctx.getPlayerColor()}_${action}`;
-    if (this.ctx.scene.anims.exists(animKey)) {
-      this.playerSprite.play(animKey, true);
+    const color = this.ctx.getPlayerColor();
+    const classAnimKey =
+      this.currentClassId !== 'pawn'
+        ? `${color}_${this.currentClassId}_${action}`
+        : `${color}_${action}`;
+    const fallbackKey = `${color}_${action}`;
+    const targetKey = this.ctx.scene.anims.exists(classAnimKey) ? classAnimKey : fallbackKey;
+    if (this.ctx.scene.anims.exists(targetKey)) {
+      this.playerSprite.play(targetKey, true);
     }
   }
 
@@ -292,9 +313,13 @@ export class PlayerMovementController {
       };
       this.spaceKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.eKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+      this.qKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+      this.iKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
 
       this.spaceKey.on('down', () => this.ctx.onInteract());
       this.eKey.on('down', () => this.ctx.onInteract());
+      this.qKey.on('down', () => GameEvents.emit('cast-active-skill'));
+      this.iKey.on('down', () => GameEvents.emit('open-inventory-modal'));
     }
 
     const handleActionStart = () => {
@@ -303,13 +328,18 @@ export class PlayerMovementController {
     const handleActionStop = () => {
       this.isActionHolding = false;
     };
+    const handleHpUpdated = (hpState: PlayerHpState) => {
+      this.updateHpBar(hpState.hp, hpState.maxHp);
+    };
 
     GameEvents.on('player-action-start', handleActionStart);
     GameEvents.on('player-action-stop', handleActionStop);
+    GameEvents.on('player-hp-updated', handleHpUpdated);
 
     this.unbindInputs.push(() => {
       GameEvents.off('player-action-start', handleActionStart);
       GameEvents.off('player-action-stop', handleActionStop);
+      GameEvents.off('player-hp-updated', handleHpUpdated);
     });
   }
 
@@ -320,7 +350,7 @@ export class PlayerMovementController {
       return;
     }
 
-    const speed = 250;
+    const speed = this.ctx.getMoveSpeed?.() ?? 250;
     let vx = 0;
     let vy = 0;
 

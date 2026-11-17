@@ -1,16 +1,22 @@
 import Phaser from 'phaser';
+import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import {
   ConstructedBuilding,
+  Inventory,
   Island,
   PlayerAction,
+  PlayerClassId,
   PlayerColor,
 } from '../../../types/game';
 import { RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
+import { MonsterCampSystem } from '../../systems/MonsterCampSystem';
 import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
+import { PlayerProgressionSystem } from '../../systems/PlayerProgressionSystem';
+import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
@@ -22,6 +28,7 @@ import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 export interface IWorldSystemsHost {
   scene: Phaser.Scene;
   isSceneAlive: () => boolean;
+  isHuntingMode: () => boolean;
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
@@ -32,6 +39,7 @@ export interface IWorldSystemsHost {
   respawnPlayerAt: (x: number, y: number) => void;
   onPlayerFaintedVisual: (fainted: boolean) => void;
   onPlayerHitVisual: () => void;
+  onPlayerClassVisualChanged?: (classId: PlayerClassId) => void;
   getLocalPlayerState: () => {
     x: number;
     y: number;
@@ -41,6 +49,8 @@ export interface IWorldSystemsHost {
   getCurrentTerritoryId: () => number;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
+  getInventory: () => Inventory;
+  spendResources: (wood: number, stone: number, gold: number) => void;
   applySyncedWorldState: (
     updatedIslands: Island[],
     updatedBuildings: ConstructedBuilding[]
@@ -70,6 +80,9 @@ export interface IWorldSystemsHost {
 export interface WorldSystemsBundle {
   coreGemSystem: CoreGemSystem;
   playerHealthSystem: PlayerHealthSystem;
+  projectileSystem: ProjectileSystem;
+  playerProgressionSystem: PlayerProgressionSystem;
+  monsterCampSystem: MonsterCampSystem;
   waveSystem: WaveSystem;
   towerDefenseSystem: TowerDefenseSystem;
   garrisonSystem: GarrisonSystem;
@@ -77,10 +90,14 @@ export interface WorldSystemsBundle {
 }
 
 /**
- * CoreGem, PlayerHealth, Wave, TowerDefense, Garrison, MultiplayerSync 인스턴스를 생성/배선하는 팩토리
+ * CoreGem, PlayerHealth, Projectile, PlayerProgression, MonsterCamp, Wave, TowerDefense, Garrison, MultiplayerSync 팩토리
  */
 export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsBundle {
   let multiplayerSync!: MultiplayerSyncController;
+  let monsterCampSystem!: MonsterCampSystem;
+  let playerProgressionSystem!: PlayerProgressionSystem;
+
+  const projectileSystem = new ProjectileSystem(host.scene);
 
   const playerHealthSystem = new PlayerHealthSystem({
     scene: host.scene,
@@ -116,6 +133,14 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
   const waveSystem = new WaveSystem(
     {
       scene: host.scene,
+      isHuntingMode: host.isHuntingMode,
+      projectileSystem,
+      healCampCore: (territoryId, amount) => monsterCampSystem?.healCampCore(territoryId, amount),
+      onMonsterKilledReward: (x, y, _isBoss, expReward) => {
+        playerProgressionSystem?.gainExp(expReward);
+        waveSystem.addThreat(THREAT_WAVE_CONFIG.huntThreatGain, true);
+        host.effectsRenderer.emitThreatOrbFromWorld(x, y, THREAT_WAVE_CONFIG.huntThreatGain);
+      },
       getIslands: host.getIslands,
       getConstructedBuildings: host.getConstructedBuildings,
       destroyConstructedBuilding: host.destroyConstructedBuilding,
@@ -152,6 +177,47 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     coreGemSystem
   );
 
+  playerProgressionSystem = new PlayerProgressionSystem({
+    scene: host.scene,
+    getPlayerId: host.getPlayerId,
+    getPlayerName: host.getPlayerName,
+    getPlayerPosition: host.getPlayerPosition,
+    getGold: () => host.getInventory().gold,
+    spendGold: (amount) => host.spendResources(0, 0, amount),
+    addGold: (amount) => host.addResources(0, 0, amount),
+    onMaxHpChanged: (newMaxHp, healDelta) => playerHealthSystem.setMaxHp(newMaxHp, healDelta),
+    healPlayer: (amount) => playerHealthSystem.healPlayer(amount),
+    onClassChangedVisual: (classId) => host.onPlayerClassVisualChanged?.(classId),
+    getMonsterVisuals: () => waveSystem.getMonsterVisuals(),
+    damageMonster: (id, dmg, attacker, attackerId) =>
+      waveSystem.damageMonster(id, dmg, attacker, false, attackerId),
+    tryDamageCampCoreInRadius: (x, y, r, dmg) =>
+      monsterCampSystem?.damageCampCoresInRadius(x, y, r, dmg),
+    projectileSystem,
+    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+    playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
+  });
+
+  monsterCampSystem = new MonsterCampSystem({
+    scene: host.scene,
+    isHuntingMode: host.isHuntingMode,
+    getIslands: host.getIslands,
+    getMonsters: () => waveSystem.getMonsterVisuals(),
+    addResources: host.addResources,
+    addThreat: (amount) => waveSystem.addThreat(amount, true),
+    gainExp: (exp) => playerProgressionSystem.gainExp(exp),
+    grantRewardItem: (item) => playerProgressionSystem.grantRewardItem(item),
+    playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
+    shakeObject: (target) => host.effectsRenderer.shakeObject(target),
+    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+    emitTerritoriesUpdated: () => {
+      host.refreshTerritoryDecorations();
+      host.emitWorldStateToReact(true);
+    },
+    spawnGoldMineClusterAndAnnounce: () =>
+      host.resourceEntityRenderer.spawnGoldMineClusterAndAnnounce(),
+  });
+
   const towerDefenseSystem = new TowerDefenseSystem(
     {
       scene: host.scene,
@@ -159,6 +225,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       getConstructedVisuals: () => host.constructedBuildingRenderer.getVisuals(),
       showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
       playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
+      projectileSystem,
     },
     waveSystem
   );
@@ -234,6 +301,9 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
   return {
     coreGemSystem,
     playerHealthSystem,
+    projectileSystem,
+    playerProgressionSystem,
+    monsterCampSystem,
     waveSystem,
     towerDefenseSystem,
     garrisonSystem,

@@ -191,6 +191,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems = createWorldSystemsBundle({
       scene: this,
       isSceneAlive: () => this.isSceneAlive(),
+      isHuntingMode: () => this.missionSystem.isHuntingMode(),
       getPlayerId: () => this.playerId,
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
@@ -201,10 +202,14 @@ export class WorldScene extends Phaser.Scene {
       respawnPlayerAt: (x, y) => this.controllers?.playerMovement.respawnAt(x, y),
       onPlayerFaintedVisual: (fainted) => this.controllers?.playerMovement.setFaintedVisual(fainted),
       onPlayerHitVisual: () => this.controllers?.playerMovement.playHitVisual(),
+      onPlayerClassVisualChanged: (classId) =>
+        this.controllers?.playerMovement.setPlayerClassVisual(classId),
       getLocalPlayerState: () => this.controllers.playerMovement.getState(),
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,
       getConstructedBuildings: () => this.constructedBuildings,
+      getInventory: () => this.inventory,
+      spendResources: (wood, stone, gold) => this.spendResources(wood, stone, gold),
       applySyncedWorldState: (updatedIslands, updatedBuildings) => {
         if (!this.isSceneAlive()) return;
         this.islands = updatedIslands;
@@ -258,7 +263,8 @@ export class WorldScene extends Phaser.Scene {
       resourceEntityRenderer: this.resourceEntityRenderer,
     });
 
-    // 3. Spawn World Cores & Resource Entities
+    // 3. Spawn World Cores, Monster Camps (Hunting Mode) & Resource Entities
+    this.systems.monsterCampSystem.initializeCamps();
     this.territoryStructureRenderer.spawnAllTerritoryCores(
       this.islands,
       this.systems.coreGemSystem
@@ -326,6 +332,7 @@ export class WorldScene extends Phaser.Scene {
     GameEvents.emit('scene-ready', this);
     GameEvents.emit('inventory-updated', this.inventory);
     GameEvents.emit('mission-progress-updated', this.missionSystem.getProgressState());
+    this.systems.playerProgressionSystem.emitState();
     this.persistence.emitWorldStateToReact(true);
     this.systems.waveSystem.emitWaveState();
   }
@@ -333,8 +340,14 @@ export class WorldScene extends Phaser.Scene {
   public update(time: number, delta: number): void {
     if (this.isPaused) return;
     this.systems.waveSystem.update(time, delta);
+    this.systems.projectileSystem.update(time, delta);
+    this.systems.playerProgressionSystem.update(delta);
+    this.systems.monsterCampSystem.update(delta);
     this.systems.towerDefenseSystem.update(time, delta);
     this.systems.garrisonSystem.update(time, delta);
+    this.missionSystem.setCampConqueredCount(
+      this.systems.monsterCampSystem.getFirstClearedCampCount()
+    );
     this.missionSystem.update(delta, this.systems.waveSystem.getWaveState(), this.islands);
     this.controllers.territoryPassive.update(delta);
     this.controllers.playerMovement.update(time, delta);
@@ -393,6 +406,8 @@ export class WorldScene extends Phaser.Scene {
     this.controllers?.playerMovement?.destroy();
     this.controllers?.towerPlacement?.destroy();
     this.systems?.playerHealthSystem?.destroy();
+    this.systems?.projectileSystem?.destroy();
+    this.systems?.monsterCampSystem?.destroy();
     this.systems?.waveSystem?.destroy();
     this.systems?.coreGemSystem?.clearAllVisuals();
     this.territoryStructureRenderer?.destroy();

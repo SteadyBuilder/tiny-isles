@@ -76,6 +76,16 @@ export class TerritoryOverlayRenderer {
             g.strokeCircle(sx, sy, 16);
           }
         }
+      } else if (isl.isMonsterCamp) {
+        // 사냥 특화 모드: 몬스터 부락 영역 표시
+        g.fillStyle(isl.campDestroyed ? 0x0f172a : 0x450a0a, isl.campDestroyed ? 0.2 : 0.28);
+        g.fillCircle(corePos.x, corePos.y, 145);
+        g.lineStyle(
+          2,
+          isl.campDestroyed ? 0x64748b : (isl.campRing ?? 1) >= 3 ? 0xc084fc : 0xf87171,
+          0.55
+        );
+        g.strokeRect(origin.x + 8, origin.y + 8, TERRITORY_PX - 16, TERRITORY_PX - 16);
       } else {
         // Unoccupied build plot marker (reserved for constructing new villages)
         g.fillStyle(0x0f172a, 0.44);
@@ -92,7 +102,9 @@ export class TerritoryOverlayRenderer {
     }
 
     // Gold Mine biome seal/unlocked perimeter overlay
-    const gmUnlocked = islands.some((i) => i.id === gmZone.unlockTerritoryId && i.unlocked);
+    const gmUnlocked = islands.some(
+      (i) => i.id === gmZone.unlockTerritoryId && (i.unlocked || i.campDestroyed)
+    );
     const radius = gmZone.radiusPx - 18;
     if (gmUnlocked) {
       g.lineStyle(2.5, 0xfde047, 0.45);

@@ -254,6 +254,21 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     shortEffect: '30초마다 금화 +2 자동 채집',
     description: '주기적으로 금화(🪙+2)를 자동 채집하는 특수 경제 건물입니다.',
   },
+  {
+    type: 'job_hall',
+    category: 'special',
+    categoryLabel: '특수건물',
+    name: '왕국 전직소',
+    icon: '🏛️',
+    spriteKey: 'archery',
+    costWood: 20,
+    costStone: 18,
+    costGold: 6,
+    maxHp: 380,
+    shortEffect: '4대 클래스(전사·창병·궁수·마법사) 전직 해금 · 건물 접근 시 [E] 전직',
+    description:
+      '사냥으로 성장한 모험가가 상위 4대 클래스(가디언, 드래곤 랜서, 레인저, 아크메이지)로 전직할 수 있는 성전입니다.',
+  },
 ];
 
 export function getBlueprint(type: ConstructableType): ConstructableBlueprint {

@@ -9,13 +9,16 @@ import {
   getTerritoryMainBuilding,
 } from '../constants';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import { MonsterSpatialGrid } from '../utils/spatialGrid';
 import { findNextInwardTargetTerritory } from '../utils/waveUtils';
 import {
   getMonsterWallCollisionBox,
   nearestPointOnCollisionBox,
   resolveMonsterWallClamping,
 } from '../wallCollisionGeometry';
+import { MonsterRangedMageAI } from './MonsterRangedMageAI';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
+import { ProjectileSystem } from './ProjectileSystem';
 
 export interface IMonsterCombatContext {
   getMonsters: () => Map<string, MonsterVisual>;
@@ -31,8 +34,10 @@ export interface IMonsterCombatContext {
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
   damageLocalPlayer: (damage: number, attackerName: string) => void;
+  healCampCore?: (territoryId: number, amount: number) => void;
+  projectileSystem?: ProjectileSystem;
   onMonsterDamaged?: () => void;
-  onMonsterKilled?: (x: number, y: number, isBoss: boolean) => void;
+  onMonsterKilled?: (x: number, y: number, isBoss: boolean, expReward: number) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   playExplosionAt: (x: number, y: number) => void;
@@ -53,41 +58,67 @@ interface MonsterAggroTarget {
 }
 
 /**
- * 마물 웨이브 유닛의 목표 영지 추적, 플레이어 반격 어그로, 성벽 충돌 클램핑, 방책/건물/본진 공격 AI 전담 모듈
+ * 마물 웨이브 유닛의 목표 영지 추적, 플레이어 반격 어그로, 부락 수비병 AI,
+ * 100마리 군집 분리(SpatialGrid Separation) 및 성벽/건물/본진 공격 AI 전담 모듈
  */
 export class MonsterCombatAI {
   private ctx: IMonsterCombatContext;
   private blockerCache = new Map<string, CachedBlockerTarget>();
   private aggroTargets = new Map<string, MonsterAggroTarget>();
+  private spatialGrid = new MonsterSpatialGrid();
+  private rangedMageAI: MonsterRangedMageAI;
 
   constructor(ctx: IMonsterCombatContext) {
     this.ctx = ctx;
+    this.rangedMageAI = new MonsterRangedMageAI({
+      getMonsters: ctx.getMonsters,
+      getLocalPlayerPosition: ctx.getLocalPlayerPosition,
+      isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      damageLocalPlayer: ctx.damageLocalPlayer,
+      healCampCore: ctx.healCampCore,
+      projectileSystem: ctx.projectileSystem,
+      playExplosionAt: ctx.playExplosionAt,
+      showFloatingText: ctx.showFloatingText,
+    });
+  }
+
+  public getSpatialGrid(): MonsterSpatialGrid {
+    return this.spatialGrid;
   }
 
   public updateMonsters(time: number, delta: number): void {
     const dt = delta / 1000;
+    const monstersMap = this.ctx.getMonsters();
+    if (monstersMap.size === 0) return;
+
+    this.spatialGrid.rebuild(monstersMap);
+
     const islands = this.ctx.getIslands();
     const constructedBuildings = this.ctx.getConstructedBuildings();
     const aliveWalls = constructedBuildings.filter(
       (cb) => cb.category === 'wall' && cb.hp > 0
     );
 
-    for (const mv of this.ctx.getMonsters().values()) {
+    for (const mv of monstersMap.values()) {
       const m = mv.monster;
+      const sep = this.spatialGrid.computeSeparation(m.id, m.x, m.y);
 
-      // 0순위: 플레이어에게 피격당한 몬스터의 반격 어그로 처리
-      if (this.tryUpdatePlayerAggro(mv, time, dt, aliveWalls)) {
+      // 0-A순위: 몬스터 부락 주둔 수비병(근거리/창병/원거리/마법사) AI
+      if (this.rangedMageAI.tryUpdateCampMonster(mv, time, dt, aliveWalls, sep.pushX, sep.pushY)) {
         continue;
       }
 
-      // 타겟 영지가 이미 상실된 경우 다음 안쪽 영지(중심 마을 방향)로 재설정
+      // 0-B순위: 플레이어에게 피격당한 웨이브 몬스터의 반격 어그로 처리
+      if (this.tryUpdatePlayerAggro(mv, time, dt, aliveWalls, sep.pushX, sep.pushY)) {
+        continue;
+      }
+
       let targetIsl = islands.find((i) => i.id === m.targetTerritoryId && i.unlocked);
       if (!targetIsl) {
         m.targetTerritoryId = findNextInwardTargetTerritory(m.x, m.y, islands);
         targetIsl = islands.find((i) => i.id === m.targetTerritoryId) || islands[0];
       }
 
-      // 2순위 목표: 영지 본진 건물 피격 범위 콜라이더(스프라이트 크기별)의 가장 가까운 외곽점
       const mainBld = getTerritoryMainBuilding(
         targetIsl.id,
         targetIsl.gridX,
@@ -97,7 +128,6 @@ export class MonsterCombatAI {
       const mainHitBox = getBuildingCollisionBox(mainBld);
       const mainHit = nearestPointOnCollisionBox(m.x, m.y, mainHitBox);
 
-      // 1순위: 전 영지 성벽 및 목표 영지 내 방해 건물 탐색 (150ms 주기 캐싱으로 O(M*B) 프레임 부하 절감)
       let blockingBuilding: ConstructedBuilding | null = null;
       let blockingTargetX = mainHit.x;
       let blockingTargetY = mainHit.y;
@@ -157,22 +187,22 @@ export class MonsterCombatAI {
 
       let targetX = blockingBuilding ? blockingTargetX : mainHit.x;
       let targetY = blockingBuilding ? blockingTargetY : mainHit.y;
-      const distToTarget = Math.hypot(targetX - m.x, targetY - m.y);
-      const attackRange = blockingBuilding
+      const distToTarget = Math.max(1, Math.hypot(targetX - m.x, targetY - m.y));
+      const baseAttackRange = blockingBuilding
         ? blockingBuilding.category === 'wall'
           ? 36
           : 52
         : 36;
+      const attackRange = this.rangedMageAI.getWaveRoleAttackRange(mv, baseAttackRange);
 
       let canAttackNow = distToTarget <= attackRange;
 
       if (!canAttackNow) {
-        const vx = ((targetX - m.x) / distToTarget) * m.speed;
-        const vy = ((targetY - m.y) / distToTarget) * m.speed;
+        const vx = ((targetX - m.x) / distToTarget) * m.speed + sep.pushX;
+        const vy = ((targetY - m.y) / distToTarget) * m.speed + sep.pushY;
         const nextX = m.x + vx * dt;
         const nextY = m.y + vy * dt;
 
-        // 성벽 관통 방지 클램핑 (전 영지 살아있는 성벽 대상)
         const clamp = resolveMonsterWallClamping(m.x, m.y, nextX, nextY, 16, aliveWalls);
         m.x = clamp.x;
         m.y = clamp.y;
@@ -203,9 +233,23 @@ export class MonsterCombatAI {
         }
       }
 
-      if (canAttackNow && time - mv.lastAttackTime >= 1100) {
+      if (canAttackNow && time - mv.lastAttackTime >= 1150) {
         mv.lastAttackTime = time;
         if (!this.ctx.isHost()) continue;
+
+        if ((m.role === 'ranged' || m.role === 'mage') && this.ctx.projectileSystem) {
+          this.ctx.projectileSystem.fireProjectile({
+            startX: m.x,
+            startY: m.y - 16,
+            targetX,
+            targetY,
+            durationMs: 210,
+            tint: m.role === 'mage' ? 0xc084fc : 0xf87171,
+            size: 30,
+            isMagic: m.role === 'mage',
+            onArrive: () => {},
+          });
+        }
 
         if (blockingBuilding) {
           blockingBuilding.hp = Math.max(0, blockingBuilding.hp - m.attack);
@@ -226,7 +270,6 @@ export class MonsterCombatAI {
             );
           }
         } else {
-          // 2순위: 점령 영지의 코어 보석 직접 공격
           this.ctx.damageTerritoryCore(targetIsl.id, m.attack, m.name);
         }
       }
@@ -253,7 +296,6 @@ export class MonsterCombatAI {
       });
     }
 
-    // 게스트는 호스트에게 피격 이벤트를 전송하되, 즉각적인 타격감을 위해 로컬 HP 바를 낙관적으로 반영
     if (!params.isHost && !params.fromRemote) {
       mv.monster.hp = Math.max(1, mv.monster.hp - params.damage);
       MonsterVisualManager.updateHpBar(mv);
@@ -294,14 +336,15 @@ export class MonsterCombatAI {
     const rewardWood = Math.round(rewardTier.wood * params.bonusMultiplier);
     const rewardStone = Math.round(rewardTier.stone * params.bonusMultiplier);
     const rewardGold = Math.round(rewardTier.gold * params.bonusMultiplier);
+    const expReward = deadM.expReward ?? (deadM.isBoss ? 120 : 16);
 
     this.ctx.addRewardResources(rewardWood, rewardStone, rewardGold);
     sound.playUnlock();
     const rewardText = deadM.isBoss
-      ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold})`
-      : `⚔️ 마물 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold})`;
+      ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} +✨${expReward}EXP)`
+      : `⚔️ +🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} (+${expReward}EXP)`;
     this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
-    this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss);
+    this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss, expReward);
     return true;
   }
 
@@ -335,15 +378,13 @@ export class MonsterCombatAI {
     mv: MonsterVisual,
     time: number,
     dt: number,
-    aliveWalls: ConstructedBuilding[]
+    aliveWalls: ConstructedBuilding[],
+    sepX: number,
+    sepY: number
   ): boolean {
     const m = mv.monster;
     const aggro = this.aggroTargets.get(m.id);
-    if (!aggro) return false;
-
-    if (aggro.playerId !== this.ctx.getLocalPlayerId()) {
-      return false;
-    }
+    if (!aggro || aggro.playerId !== this.ctx.getLocalPlayerId()) return false;
 
     if (this.ctx.isLocalPlayerFainted() || performance.now() > aggro.expiresAt) {
       this.aggroTargets.delete(m.id);
@@ -357,13 +398,14 @@ export class MonsterCombatAI {
       return false;
     }
 
-    const attackRange = m.isBoss
+    const baseRange = m.isBoss
       ? PLAYER_COMBAT_CONFIG.monsterBossPlayerAttackRange
       : PLAYER_COMBAT_CONFIG.monsterPlayerAttackRange;
+    const attackRange = this.rangedMageAI.getWaveRoleAttackRange(mv, baseRange);
 
     if (dist > attackRange) {
-      const vx = ((playerPos.x - m.x) / dist) * m.speed;
-      const vy = ((playerPos.y - m.y) / dist) * m.speed;
+      const vx = ((playerPos.x - m.x) / dist) * m.speed + sepX;
+      const vy = ((playerPos.y - m.y) / dist) * m.speed + sepY;
       const clamp = resolveMonsterWallClamping(
         m.x,
         m.y,
@@ -383,7 +425,7 @@ export class MonsterCombatAI {
 
     if (time - mv.lastAttackTime >= PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs) {
       mv.lastAttackTime = time;
-      this.ctx.damageLocalPlayer(m.attack, m.name);
+      this.rangedMageAI.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y);
     }
     return true;
   }

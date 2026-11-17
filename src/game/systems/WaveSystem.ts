@@ -9,14 +9,20 @@ import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
+import { DungeonInvasionSpawner } from './DungeonInvasionSpawner';
 import { MonsterCombatAI } from './MonsterCombatAI';
 import { MonsterVisual } from './MonsterVisualManager';
+import { ProjectileSystem } from './ProjectileSystem';
 import { WaveSpawner } from './WaveSpawner';
 
 export type { MonsterVisual };
 
 export interface IWaveSystemContext {
   scene: Phaser.Scene;
+  isHuntingMode?: () => boolean;
+  projectileSystem?: ProjectileSystem;
+  healCampCore?: (territoryId: number, amount: number) => void;
+  onMonsterKilledReward?: (x: number, y: number, isBoss: boolean, expReward: number) => void;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
   destroyConstructedBuilding: (buildingId: string) => void;
@@ -48,13 +54,14 @@ function computeWavesUntilBoss(waveCount: number): number {
 
 /**
  * 활동 기반 마물 위협도(Threat %) + 난입형(Drop-in/Out) 오픈월드 웨이브 오케스트레이션 시스템
- * - 시간 경과/오프라인 상태에서는 절대 웨이브가 발생하지 않습니다.
+ * - 사냥 특화 모드에서는 위협도 100% 도달 시 '심연의 던전 게이트'가 열리며 100마리의 마물 대군이 진격합니다.
  */
 export class WaveSystem {
   private ctx: IWaveSystemContext;
   private coreGemSystem: CoreGemSystem;
   private combatAI: MonsterCombatAI;
   private spawner: WaveSpawner;
+  private dungeonSpawner: DungeonInvasionSpawner;
   private monsters = new Map<string, MonsterVisual>();
   private isHost = true;
   private onlineCount = 1;
@@ -103,6 +110,8 @@ export class WaveSystem {
       getLocalPlayerPosition: () => this.ctx.getLocalPlayerPosition(),
       isLocalPlayerFainted: () => this.ctx.isLocalPlayerFainted(),
       damageLocalPlayer: (dmg, attacker) => this.ctx.damageLocalPlayer(dmg, attacker),
+      healCampCore: (territoryId, amount) => this.ctx.healCampCore?.(territoryId, amount),
+      projectileSystem: this.ctx.projectileSystem,
       onMonsterDamaged: () => {
         if (this.isHost) {
           this.ctx.broadcastMonstersSync?.(
@@ -111,6 +120,9 @@ export class WaveSystem {
             this.waveState.bossWaveCount
           );
         }
+      },
+      onMonsterKilled: (x, y, isBoss, expReward) => {
+        this.ctx.onMonsterKilledReward?.(x, y, isBoss, expReward);
       },
       showFloatingText: (x, y, text, color) => this.ctx.showFloatingText(x, y, text, color),
       shakeObject: (target) => this.ctx.shakeObject(target),
@@ -125,6 +137,23 @@ export class WaveSystem {
       getIslands: () => this.ctx.getIslands(),
       playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
       shakeObject: (target) => this.ctx.shakeObject(target),
+    });
+
+    this.dungeonSpawner = new DungeonInvasionSpawner({
+      scene: ctx.scene,
+      getMonsters: () => this.monsters,
+      getIslands: () => this.ctx.getIslands(),
+      playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
+      onPulseSpawned: () => {
+        this.emitWaveState();
+        if (this.isHost) {
+          this.ctx.broadcastMonstersSync?.(
+            this.getMonsters(),
+            this.waveState.waveCount,
+            this.waveState.bossWaveCount
+          );
+        }
+      },
     });
 
     GameEvents.on('territory-lost', this.onTerritoryLost);
@@ -324,7 +353,11 @@ export class WaveSystem {
   }
 
   public emitWaveState(): void {
-    this.waveState.activeMonstersCount = this.monsters.size;
+    let activeInvaders = 0;
+    for (const mv of this.monsters.values()) {
+      if (!mv.monster.isCampMonster) activeInvaders++;
+    }
+    this.waveState.activeMonstersCount = activeInvaders;
     let bossInfo = null;
     const islands = this.ctx.getIslands();
 
@@ -378,7 +411,7 @@ export class WaveSystem {
       }
     }
 
-    const hasMonsters = this.monsters.size > 0;
+    const hasMonsters = this.waveState.activeMonstersCount > 0;
     if (hasMonsters) {
       this.monsterSyncAccumMs += delta;
       if (this.monsterSyncAccumMs >= WORLD_CLOCK_CONFIG.monsterSyncIntervalMs) {
@@ -415,6 +448,29 @@ export class WaveSystem {
     }
     this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
 
+    const bonusSuffix = isEarlySummon ? ' (조기 소환 보상 +35%)' : '';
+
+    // 사냥 특화 모드: 위협도 100% 도달 시 심연의 던전 게이트 출현 -> 마물 100마리 중앙 마을 진격!
+    if (this.ctx.isHuntingMode?.()) {
+      const dng = this.dungeonSpawner.startDungeonInvasion({
+        onlineCount: this.onlineCount,
+        waveCount: this.waveState.waveCount,
+        bossWaveCount: this.waveState.bossWaveCount,
+      });
+      if (!dng) return;
+
+      const dngMsg = `🌀 [${dng.scalingLabel}] ${dng.directionLabel}에 심연의 던전 게이트가 열렸습니다! 마물 100마리와 수문장이 중앙 마을로 총진격합니다!${bonusSuffix}`;
+      this.waveState.lastWaveMessage = dngMsg;
+      sound.playBreak();
+      GameEvents.emit('game-alert', dngMsg);
+      this.emitWaveState();
+      if (isLocalTrigger && this.ctx.broadcastWaveSpawn) {
+        this.ctx.broadcastWaveSpawn(true);
+      }
+      this.ctx.onMonstersChanged?.();
+      return;
+    }
+
     const result = this.spawner.spawnWave({
       isBossWave,
       onlineCount: this.onlineCount,
@@ -423,7 +479,6 @@ export class WaveSystem {
     });
     if (!result) return;
 
-    const bonusSuffix = isEarlySummon ? ' (조기 소환 보상 +35%)' : '';
     const bossOrigin = result.bossDirectionLabel || '지도 외곽';
     const alertMsg = isBossWave
       ? `👹 [${result.scalingLabel}] ${bossOrigin}에서 보스 '${result.spawnedBossName}' 군단이 동·서·남·북으로 침공합니다!${bonusSuffix}`

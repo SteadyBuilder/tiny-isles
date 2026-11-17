@@ -20,11 +20,20 @@ export class MissionSystem {
   private lastEmittedSec = -1;
   private ended = false;
   private currentCount = 0;
+  private campConqueredCount = 0;
 
   constructor(roomConfig: RoomConfig) {
     this.roomConfig = roomConfig;
     this.mission = getMissionById(roomConfig.missionId);
     this.difficulty = getDifficultyConfig(roomConfig.difficulty);
+  }
+
+  public isHuntingMode(): boolean {
+    return Boolean(this.mission.isHuntingMode);
+  }
+
+  public setCampConqueredCount(count: number): void {
+    this.campConqueredCount = count;
   }
 
   public getMission(): MissionDefinition {
@@ -88,7 +97,6 @@ export class MissionSystem {
     const goal = this.mission.goal;
     switch (goal.type) {
       case 'boss_slay': {
-        // 보스 웨이브가 시작된 횟수 중 현재 활성 보스가 없으면 격파 완료로 간주
         const activeBossAlive = waveState.activeBoss !== null;
         const completedBosses = activeBossAlive
           ? Math.max(0, waveState.bossWaveCount - 1)
@@ -103,12 +111,14 @@ export class MissionSystem {
         return Math.min(goal.targetCount, qualified);
       }
       case 'survive_waves': {
-        // 웨이브가 스폰된 뒤 활성 몬스터가 0이 되면 해당 웨이브 방어 완료
         const completedWaves =
           waveState.activeMonstersCount > 0
             ? Math.max(0, waveState.waveCount - 1)
             : waveState.waveCount;
         return Math.min(goal.targetCount, completedWaves);
+      }
+      case 'camp_conquest': {
+        return Math.min(goal.targetCount, this.campConqueredCount);
       }
       default:
         return 0;

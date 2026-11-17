@@ -3,10 +3,10 @@ import { PERFORMANCE_CONFIG } from '../../../data/performanceConfig';
 import {
   expandViewportRect,
   isPointInViewport,
-  isRectInViewport,
   ViewportRect,
 } from '../../utils/viewportCullingUtils';
 import { ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
+import { MonsterVisual } from '../../systems/MonsterVisualManager';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
 
 export interface IViewportCullingContext {
@@ -16,11 +16,12 @@ export interface IViewportCullingContext {
   getTerritoryBuildingVisuals: () => ReadonlyArray<Phaser.GameObjects.Container>;
   getConstructedVisuals: () => Map<string, ConstructedVisualRef>;
   getAltarCardContainers: () => Phaser.GameObjects.Container[];
+  getMonsterVisuals?: () => ReadonlyMap<string, MonsterVisual>;
 }
 
 /**
  * 카메라 뷰포트(worldView) 바깥의 지형 청크 온디맨드 스트리밍(LRU) 및
- * 자원 엔티티, 건물, 개척 제단 카드의 가시성·애니메이션을 주기적으로 컬링하는 컨트롤러
+ * 자원 엔티티, 건물, 개척 제단 카드, 마물 대군(100+마리)의 가시성·애니메이션을 주기적으로 컬링하는 컨트롤러
  */
 export class ViewportCullingController {
   private ctx: IViewportCullingContext;
@@ -88,9 +89,30 @@ export class ViewportCullingController {
     const maxNewBakes = forceAllChunks ? Infinity : PERFORMANCE_CONFIG.maxChunksBakedPerFrame;
     this.hasPendingTerrainBakes = this.ctx.syncTerrainChunks(viewport, maxNewBakes);
     this.cullResourceEntities(viewport);
+    this.cullMonsters(viewport);
     this.cullContainers(this.ctx.getTerritoryBuildingVisuals(), viewport, 260);
     this.cullConstructedBuildings(viewport);
     this.cullContainers(this.ctx.getAltarCardContainers(), viewport, 120);
+  }
+
+  private cullMonsters(viewport: ViewportRect): void {
+    const monsters = this.ctx.getMonsterVisuals?.();
+    if (!monsters || monsters.size === 0) return;
+
+    for (const mv of monsters.values()) {
+      if (!mv.container.scene) continue;
+      const inView = isPointInViewport(mv.container.x, mv.container.y, viewport, 150);
+      if (mv.container.visible !== inView) {
+        mv.container.setVisible(inView);
+      }
+      if (mv.sprite?.anims) {
+        if (!inView && mv.sprite.anims.isPlaying && !mv.sprite.anims.isPaused) {
+          mv.sprite.anims.pause();
+        } else if (inView && mv.sprite.anims.isPaused) {
+          mv.sprite.anims.resume();
+        }
+      }
+    }
   }
 
   private cullResourceEntities(viewport: ViewportRect): void {

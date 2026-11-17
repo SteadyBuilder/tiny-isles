@@ -1,11 +1,15 @@
 import {
   ConstructableType,
   ConstructedBuilding,
+  DungeonPortalState,
+  EquipmentSlot,
   GarrisonUnit,
   Inventory,
   Island,
+  PlayerClassId,
   PlayerColor,
   PlayerHpState,
+  PlayerProgressionState,
   ThreatOrbFxPayload,
   VillageTier,
   WaveState,
@@ -72,6 +76,18 @@ export interface GameEventPayloads {
   'wave-state-updated': WaveState;
   'wave-spawned': { isBossWave: boolean; waveNumber: number };
   'monster-killed': { monsterId: string; monsterType: string; killer: string };
+
+  // 사냥 특화 모드: 개인 성장, 전직, 장비 인벤토리, 몬스터 부락, 던전 게이트
+  'player-progression-updated': PlayerProgressionState;
+  'open-job-hall-modal': void;
+  'open-inventory-modal': void;
+  'select-player-class': PlayerClassId;
+  'equip-item': string; // instanceId
+  'unequip-slot': EquipmentSlot;
+  'salvage-item': string; // instanceId
+  'cast-active-skill': void;
+  'camp-conquered': { territoryId: number; campName: string; firstClearedCount: number };
+  'dungeon-portal-updated': DungeonPortalState | null;
 
   // 리빙 아일즈: 글로벌 동기화, 수비대
   'garrisons-updated': GarrisonUnit[];

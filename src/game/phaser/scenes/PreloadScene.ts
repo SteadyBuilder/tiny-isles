@@ -1,5 +1,9 @@
 import Phaser from 'phaser';
 import { GameEvents } from '../../events/gameEvents';
+import {
+  preloadHuntingModeAssets,
+  registerHuntingModeAnimations,
+} from './PreloadHuntingAssets';
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -154,10 +158,12 @@ export class PreloadScene extends Phaser.Scene {
 
     // UI Elements
     this.load.image('cursorTarget', '/assets/ui/Cursors/Cursor_04.png');
+    preloadHuntingModeAssets(this);
   }
 
   create() {
     this.createAnimations();
+    registerHuntingModeAnimations(this);
     this.scene.start('WorldScene');
   }
 

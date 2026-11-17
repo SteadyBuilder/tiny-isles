@@ -38,7 +38,7 @@ export class ExpansionAltarRenderer {
   }
 
   public render(islands: ReadonlyArray<Island>, inventory: Inventory): void {
-    const locked = islands.filter((isl) => !isl.unlocked);
+    const locked = islands.filter((isl) => !isl.unlocked && !isl.isMonsterCamp);
     const structureKey = locked.map((isl) => isl.id).join(',');
 
     if (structureKey !== this.lastStructureKey) {

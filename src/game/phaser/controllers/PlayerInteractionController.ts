@@ -1,7 +1,14 @@
 import Phaser from 'phaser';
 import { PLAYER_COMBAT_CONFIG, THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
-import { Entity, Inventory, Island, PlayerAction } from '../../../types/game';
+import {
+  ConstructedBuilding,
+  Entity,
+  Inventory,
+  Island,
+  PlayerAction,
+  PlayerClassDefinition,
+} from '../../../types/game';
 import {
   TERRITORY_CENTER_X,
   TERRITORY_CENTER_Y,
@@ -13,6 +20,7 @@ import {
 import { GameEvents } from '../../events/gameEvents';
 import { canClaimTerritory } from '../../territoryAccessRules';
 import { nearestPointOnCollisionBox } from '../../wallCollisionGeometry';
+import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
 
@@ -26,6 +34,7 @@ export interface IPlayerInteractionContext {
   playPlayerAnimation: (action: PlayerAction) => void;
   markInteractTime: (now: number) => void;
   getIslands: () => Island[];
+  getConstructedBuildings?: () => ConstructedBuilding[];
   getInventory: () => Inventory;
   spendInventory: (wood: number, stone: number, gold: number) => void;
   addHarvestedResource: (resKey: keyof Inventory, amount: number) => void;
@@ -36,6 +45,10 @@ export interface IPlayerInteractionContext {
     attackerName: string,
     attackerId: string
   ) => void;
+  getPlayerClassDef?: () => PlayerClassDefinition;
+  getPlayerAttackDamage?: () => number;
+  tryAttackCampCore?: (px: number, py: number, rangePx: number, damage: number) => boolean;
+  projectileSystem?: ProjectileSystem;
   findGatherableEntityVisual: (x: number, y: number) => EntityVisual | null;
   updateEntityHpBar: (entityId: string) => void;
   removeAndRespawnEntity: (ent: Entity) => void;
@@ -51,7 +64,7 @@ export interface IPlayerInteractionContext {
 }
 
 /**
- * 플레이어 상호작용(마물 타격, 영지 개척 제단, 자원 채집, 코어 보석 관리) 전담 컨트롤러
+ * 플레이어 상호작용(전직별 평타/원거리·광역 공격, 몬스터 부락 본진 타격, 전직소 이용, 자원 채집, 건설) 전담 컨트롤러
  */
 export class PlayerInteractionController {
   private ctx: IPlayerInteractionContext;
@@ -67,42 +80,112 @@ export class PlayerInteractionController {
     this.ctx.markInteractTime(scene.time.now);
     const { x: px, y: py } = this.ctx.getPlayerPosition();
 
-    // 1. 마물 직접 타격 (전투 최우선!)
-    let nearestMonster: MonsterVisual | null = null;
-    let minMonDist = Number.POSITIVE_INFINITY;
+    const classDef = this.ctx.getPlayerClassDef?.();
+    const baseRange = classDef?.attackRange ?? PLAYER_COMBAT_CONFIG.meleeRangeRegular;
+    const attackDamage = this.ctx.getPlayerAttackDamage?.() ?? PLAYER_COMBAT_CONFIG.meleeDamage;
+
+    // 1. 마물 타격 (전직 클래스별 사거리·원거리·광역·관통 특성 반영)
+    const targetsInRange: Array<{ mv: MonsterVisual; dist: number }> = [];
     for (const mv of this.ctx.getMonsterVisuals().values()) {
-      const range = mv.monster.isBoss
-        ? PLAYER_COMBAT_CONFIG.meleeRangeBoss
-        : PLAYER_COMBAT_CONFIG.meleeRangeRegular;
+      const range = mv.monster.isBoss ? Math.max(baseRange, 165) : baseRange;
       const d = Math.hypot(px - mv.monster.x, py - mv.monster.y);
-      if (d < range && d < minMonDist) {
-        minMonDist = d;
-        nearestMonster = mv;
+      if (d <= range) {
+        targetsInRange.push({ mv, dist: d });
       }
     }
+    targetsInRange.sort((a, b) => a.dist - b.dist);
 
-    if (nearestMonster) {
+    if (targetsInRange.length > 0) {
       this.ctx.playPlayerAnimation('axe');
-      scene.time.delayedCall(260, () => {
+      scene.time.delayedCall(250, () => {
+        if (this.ctx.getCurrentAction() === 'axe') {
+          this.ctx.playPlayerAnimation('idle');
+        }
+      });
+
+      const primary = targetsInRange[0].mv;
+      if (classDef?.isRanged && this.ctx.projectileSystem) {
+        sound.playTowerShoot();
+        const targetId = primary.monster.id;
+        const hitX = primary.monster.x;
+        const hitY = primary.monster.y;
+        const isMage = classDef.id === 'archmage';
+
+        this.ctx.projectileSystem.fireProjectile({
+          startX: px,
+          startY: py - 20,
+          targetX: hitX,
+          targetY: hitY,
+          durationMs: 165,
+          tint: isMage ? 0xc084fc : 0x38bdf8,
+          size: isMage ? 38 : 34,
+          isMagic: isMage,
+          onArrive: () => {
+            if (isMage) {
+              for (const mv of this.ctx.getMonsterVisuals().values()) {
+                if (Math.hypot(mv.monster.x - hitX, mv.monster.y - hitY) <= 95) {
+                  this.ctx.damageMonster(
+                    mv.monster.id,
+                    attackDamage,
+                    this.ctx.getPlayerName(),
+                    this.ctx.getPlayerId()
+                  );
+                }
+              }
+            } else {
+              this.ctx.damageMonster(
+                targetId,
+                attackDamage,
+                this.ctx.getPlayerName(),
+                this.ctx.getPlayerId()
+              );
+            }
+          },
+        });
+      } else {
+        sound.playChop();
+        const maxTargets = classDef?.isSplash || classDef?.isPiercing ? 4 : 1;
+        for (let i = 0; i < Math.min(maxTargets, targetsInRange.length); i++) {
+          this.ctx.damageMonster(
+            targetsInRange[i].mv.monster.id,
+            attackDamage,
+            this.ctx.getPlayerName(),
+            this.ctx.getPlayerId()
+          );
+        }
+      }
+      return;
+    }
+
+    // 1-B. 사냥 특화 모드: 몬스터 부락 본진 건물 직접 타격
+    if (this.ctx.tryAttackCampCore?.(px, py, baseRange, attackDamage)) {
+      this.ctx.playPlayerAnimation('axe');
+      scene.time.delayedCall(250, () => {
         if (this.ctx.getCurrentAction() === 'axe') {
           this.ctx.playPlayerAnimation('idle');
         }
       });
       sound.playChop();
-      this.ctx.damageMonster(
-        nearestMonster.monster.id,
-        PLAYER_COMBAT_CONFIG.meleeDamage,
-        this.ctx.getPlayerName(),
-        this.ctx.getPlayerId()
-      );
       return;
     }
 
-    // 2. 미점령 영지 개척 제단 확인
+    // 2. 건설된 '왕국 전직소(job_hall)' 앞에서 상호작용 시 전직 창 열기
+    const buildings = this.ctx.getConstructedBuildings?.() ?? [];
+    for (const cb of buildings) {
+      if (cb.type === 'job_hall' && cb.hp > 0) {
+        if (Math.hypot(px - cb.x, py - cb.y) < 120) {
+          sound.playUnlock();
+          GameEvents.emit('open-job-hall-modal');
+          return;
+        }
+      }
+    }
+
+    // 3. 미점령 영지 개척 제단 확인 (몬스터 부락은 제외)
     const islands = this.ctx.getIslands();
     const inventory = this.ctx.getInventory();
     for (const isl of islands) {
-      if (!isl.unlocked) {
+      if (!isl.unlocked && !isl.isMonsterCamp) {
         const origin = getIslandOrigin(isl.gridX, isl.gridY);
         const signX = origin.x + TERRITORY_CENTER_X;
         const signY = origin.y + TERRITORY_CENTER_Y;
@@ -138,7 +221,7 @@ export class PlayerInteractionController {
       }
     }
 
-    // 3. 자원 엔티티 채집
+    // 4. 자원 엔티티 채집
     const nearestVisual = this.ctx.findGatherableEntityVisual(px, py);
     if (nearestVisual) {
       const ent = nearestVisual.entity;
@@ -191,7 +274,7 @@ export class PlayerInteractionController {
       return;
     }
 
-    // 4. 점령한 땅의 본진 건물 근처에서 상호작용 시 내구도 회복 및 마을/건설 창 열기
+    // 5. 점령한 땅의 본진 건물 근처에서 상호작용 시 내구도 회복 및 마을/건설 창 열기
     for (const isl of islands) {
       if (!isl.unlocked) continue;
       const cPos = getTerritoryCorePos(isl.gridX, isl.gridY);

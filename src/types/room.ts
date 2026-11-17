@@ -7,7 +7,8 @@ export type RoomDifficultyId = 'normal' | 'hard' | 'nightmare';
 export type MissionGoalType =
   | 'boss_slay'
   | 'territory_unlock'
-  | 'survive_waves';
+  | 'survive_waves'
+  | 'camp_conquest';
 
 export interface MissionGoalSpec {
   type: MissionGoalType;
@@ -30,6 +31,8 @@ export interface MissionDefinition {
   baseRewardPoints: number;
   /** 클리어 시 해금되는 칭호 ID (선택) */
   rewardTitleId?: string;
+  /** 사냥/던전 디펜스 특화 모드 여부 (단일 마을 수호 + 20개 몬스터 부락 + 전직/인벤토리/100마리 던전 침공) */
+  isHuntingMode?: boolean;
 }
 
 export interface MissionDifficultyConfig {
