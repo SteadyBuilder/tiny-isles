@@ -2,6 +2,7 @@ import { FIELD_MONSTER_CONFIG } from '../../data/fieldMonsters';
 import { DUNGEON_INVASION_CONFIG } from '../../data/monsterCamps';
 import { ConstructedBuilding } from '../../types/game';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import { isInsideCenterVillageSafeZone } from '../utils/fieldSpawnUtils';
 import { resolveMonsterWallClamping } from '../wallCollisionGeometry';
 import { MonsterVisual } from './MonsterVisualManager';
 
@@ -62,18 +63,25 @@ export class FieldMonsterAI {
     const distToPlayer = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
     const distFromHome = Math.hypot(m.x - homeX, m.y - homeY);
 
-    if (distFromHome > FIELD_MONSTER_CONFIG.fieldLeashRadiusPx) {
+    const enteredCenterSafeZone = isInsideCenterVillageSafeZone(
+      m.x,
+      m.y,
+      FIELD_MONSTER_CONFIG.centerReturnTriggerMarginPx,
+      FIELD_MONSTER_CONFIG.centerSafeRadiusPx - 60
+    );
+
+    if (distFromHome > FIELD_MONSTER_CONFIG.fieldLeashRadiusPx || enteredCenterSafeZone) {
       this.returningHome.add(m.id);
       this.ctx.clearMonsterAggro?.(m.id);
     }
 
     if (this.returningHome.has(m.id)) {
-      if (distFromHome <= FIELD_MONSTER_CONFIG.fieldReturnArrivalRadiusPx) {
+      if (distFromHome <= FIELD_MONSTER_CONFIG.fieldReturnArrivalRadiusPx && !enteredCenterSafeZone) {
         this.returningHome.delete(m.id);
       } else {
         const returnSpeed = m.speed * FIELD_MONSTER_CONFIG.fieldReturnSpeedMultiplier;
-        const vx = ((homeX - m.x) / distFromHome) * returnSpeed;
-        const vy = ((homeY - m.y) / distFromHome) * returnSpeed;
+        const vx = ((homeX - m.x) / Math.max(1, distFromHome)) * returnSpeed;
+        const vy = ((homeY - m.y) / Math.max(1, distFromHome)) * returnSpeed;
         this.moveMonster(mv, vx, vy, dt, aliveWalls);
         return true;
       }

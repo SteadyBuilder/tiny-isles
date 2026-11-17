@@ -33,7 +33,12 @@ export interface IWaveSystemContext {
     isBoss: boolean,
     expReward: number,
     isCampMonster: boolean,
-    meta?: { isElite: boolean; isFieldMonster?: boolean; campRing?: 1 | 2 | 3 | 4 }
+    meta?: {
+      isElite: boolean;
+      isFieldMonster?: boolean;
+      campRing?: 1 | 2 | 3 | 4;
+      eliteTier?: import('../../types/hunting').FieldEliteTier;
+    }
   ) => void;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];

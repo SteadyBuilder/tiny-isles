@@ -107,6 +107,10 @@ export interface DungeonPortalState {
   totalSpawns: number;
 }
 
+export type FieldSpawnZone = 'near_village' | 'mid_field' | 'near_camp';
+
+export type FieldEliteTier = 'none' | 'weakened' | 'standard' | 'empowered';
+
 export interface FieldMonsterUnitSpec {
   type: import('./game').MonsterType;
   role: MonsterCombatRole;
@@ -122,8 +126,10 @@ export interface FieldMonsterUnitSpec {
 export interface FieldMonsterPackTemplate {
   id: string;
   ring: 1 | 2 | 3 | 4;
+  zone?: FieldSpawnZone;
   label: string;
   guaranteedElite: boolean;
+  eliteTier?: FieldEliteTier;
   units: FieldMonsterUnitSpec[];
 }
 

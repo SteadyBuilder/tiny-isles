@@ -270,14 +270,21 @@ export function rollMonsterDropItem(params: {
   isElite: boolean;
   isBoss: boolean;
   difficultyId: 'normal' | 'hard' | 'nightmare';
+  eliteTier?: import('../types/hunting').FieldEliteTier;
 }): EquipmentItem | null {
   const diffBonus =
     params.difficultyId === 'nightmare' ? 0.2 : params.difficultyId === 'hard' ? 0.1 : 0;
+  const eliteBaseChance =
+    params.eliteTier === 'weakened'
+      ? 0.38
+      : params.eliteTier === 'empowered'
+      ? 0.62
+      : 0.45;
   const dropChance = params.isBoss
     ? 1.0
     : params.isElite
-    ? 0.45 + diffBonus
-    : 0.04 + diffBonus * 0.15;
+    ? eliteBaseChance + diffBonus
+    : 0.12 + diffBonus * 0.25;
 
   if (Math.random() > dropChance) return null;
 

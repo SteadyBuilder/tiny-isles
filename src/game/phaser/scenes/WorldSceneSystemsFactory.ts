@@ -181,6 +181,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
             isElite: Boolean(meta?.isElite),
             isBoss,
             difficultyId,
+            eliteTier: meta?.eliteTier,
           });
           if (dropItem) {
             host.lootChestRenderer.playDropAnimation({

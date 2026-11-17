@@ -50,7 +50,12 @@ export interface IMonsterCombatContext {
     isBoss: boolean,
     expReward: number,
     isCampMonster: boolean,
-    meta?: { isElite: boolean; isFieldMonster?: boolean; campRing?: 1 | 2 | 3 | 4 }
+    meta?: {
+      isElite: boolean;
+      isFieldMonster?: boolean;
+      campRing?: 1 | 2 | 3 | 4;
+      eliteTier?: import('../../types/hunting').FieldEliteTier;
+    }
   ) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
@@ -502,6 +507,7 @@ export class MonsterCombatAI {
       isElite: Boolean(deadM.isElite),
       isFieldMonster: Boolean(deadM.isFieldMonster),
       campRing: deadM.campRing,
+      eliteTier: deadM.eliteTier,
     });
     return true;
   }

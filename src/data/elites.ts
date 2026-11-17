@@ -1,4 +1,4 @@
-import { EliteAffixId } from '../types/hunting';
+import { EliteAffixId, FieldEliteTier } from '../types/hunting';
 import { RoomDifficultyId } from '../types/room';
 
 export interface EliteAffixDefinition {
@@ -11,6 +11,50 @@ export interface EliteAffixDefinition {
   speedMultiplier: number;
   expMultiplier: number;
 }
+
+export interface FieldEliteTierProfile {
+  tier: FieldEliteTier;
+  badgePrefix: string;
+  hpScale: number;
+  attackScale: number;
+  speedScale: number;
+  expScale: number;
+}
+
+export const FIELD_ELITE_TIER_PROFILES: Record<FieldEliteTier, FieldEliteTierProfile> = {
+  none: {
+    tier: 'none',
+    badgePrefix: '',
+    hpScale: 1,
+    attackScale: 1,
+    speedScale: 1,
+    expScale: 1,
+  },
+  weakened: {
+    tier: 'weakened',
+    badgePrefix: '☆ 약화 정예',
+    hpScale: 0.72,
+    attackScale: 0.72,
+    speedScale: 0.94,
+    expScale: 0.85,
+  },
+  standard: {
+    tier: 'standard',
+    badgePrefix: '★ 야생 정예',
+    hpScale: 1.0,
+    attackScale: 1.0,
+    speedScale: 1.0,
+    expScale: 1.0,
+  },
+  empowered: {
+    tier: 'empowered',
+    badgePrefix: '👑 강화 필드 정예',
+    hpScale: 1.28,
+    attackScale: 1.22,
+    speedScale: 1.06,
+    expScale: 1.35,
+  },
+};
 
 export const ELITE_AFFIXES: Record<EliteAffixId, EliteAffixDefinition> = {
   berserker: {

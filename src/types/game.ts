@@ -208,6 +208,7 @@ export interface Monster {
   bossScale?: number;
   isElite?: boolean;
   eliteAffix?: import('./hunting').EliteAffixId;
+  eliteTier?: import('./hunting').FieldEliteTier;
   x: number;
   y: number;
   hp: number;

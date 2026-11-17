@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
-import { pickRandomEliteAffix } from '../../data/elites';
+import { FIELD_ELITE_TIER_PROFILES, pickRandomEliteAffix } from '../../data/elites';
 import { FIELD_MONSTER_CONFIG } from '../../data/fieldMonsters';
 import { Island, Monster } from '../../types/game';
+import { FieldEliteTier, FieldSpawnZone } from '../../types/hunting';
 import { MissionDifficultyConfig } from '../../types/room';
 import {
-  pickFieldPackTemplate,
-  pickWildernessFieldSpawnSpots,
+  pickFieldPackTemplateForZone,
+  pickZoneFieldSpawnSpots,
 } from '../utils/fieldSpawnUtils';
 import { computeHuntingScaling } from '../utils/huntingScalingUtils';
 import { WorldTerrainMap } from '../world/MapTerrainGenerator';
@@ -27,9 +28,12 @@ interface ActiveFieldPack {
   x: number;
   y: number;
   ring: 1 | 2 | 3 | 4;
+  zone: FieldSpawnZone;
   memberIds: string[];
   respawnTimerMs: number | null;
 }
+
+const SPAWN_ZONES: FieldSpawnZone[] = ['near_village', 'mid_field', 'near_camp'];
 
 /**
  * 사냥 특화 모드 야생 필드 몬스터 & 필드 엘리트 무리 스폰/리스폰/인원 스케일링 전담 시스템
@@ -47,9 +51,15 @@ export class FieldMonsterSystem {
     this.ctx = ctx;
   }
 
-  private getTargetPackCount(): number {
+  private getTargetPackCountForZone(zone: FieldSpawnZone): number {
     const coOpPackBonus = 1 + Math.min(0.6, Math.max(0, this.onlineCount - 1) * 0.2);
-    return Math.round(FIELD_MONSTER_CONFIG.baseActivePackCount * coOpPackBonus);
+    const base =
+      zone === 'near_village'
+        ? FIELD_MONSTER_CONFIG.nearVillagePackCount
+        : zone === 'near_camp'
+        ? FIELD_MONSTER_CONFIG.nearCampPackCount
+        : FIELD_MONSTER_CONFIG.midFieldPackCount;
+    return Math.round(base * coOpPackBonus);
   }
 
   public initializeFieldMonsters(): void {
@@ -59,16 +69,19 @@ export class FieldMonsterSystem {
     this.appliedHpMult = scaling.hpMult;
     this.appliedAtkMult = scaling.atkMult;
 
-    const spots = pickWildernessFieldSpawnSpots({
-      desiredCount: this.getTargetPackCount(),
-      existingSpots: [],
-      terrain: this.ctx.getTerrainMap(),
-      islands: this.ctx.getIslands(),
-      bounds: WORLD_BOUNDS,
-    });
+    for (const zone of SPAWN_ZONES) {
+      const spots = pickZoneFieldSpawnSpots({
+        zone,
+        desiredCount: this.getTargetPackCountForZone(zone),
+        existingSpots: this.packs.map((p) => ({ x: p.x, y: p.y })),
+        terrain: this.ctx.getTerrainMap(),
+        islands: this.ctx.getIslands(),
+        bounds: WORLD_BOUNDS,
+      });
 
-    for (const spot of spots) {
-      this.spawnPackAt(spot.x, spot.y, spot.ring);
+      for (const spot of spots) {
+        this.spawnPackAt(spot.x, spot.y, spot.ring, zone);
+      }
     }
   }
 
@@ -100,9 +113,13 @@ export class FieldMonsterSystem {
       }
     }
 
-    const deficit = this.getTargetPackCount() - this.packs.length;
-    if (deficit > 0) {
-      const extraSpots = pickWildernessFieldSpawnSpots({
+    for (const zone of SPAWN_ZONES) {
+      const currentZoneCount = this.packs.filter((p) => p.zone === zone).length;
+      const deficit = this.getTargetPackCountForZone(zone) - currentZoneCount;
+      if (deficit <= 0) continue;
+
+      const extraSpots = pickZoneFieldSpawnSpots({
+        zone,
         desiredCount: deficit,
         existingSpots: this.packs.map((p) => ({ x: p.x, y: p.y })),
         terrain: this.ctx.getTerrainMap(),
@@ -110,7 +127,7 @@ export class FieldMonsterSystem {
         bounds: WORLD_BOUNDS,
       });
       for (const spot of extraSpots) {
-        this.spawnPackAt(spot.x, spot.y, spot.ring);
+        this.spawnPackAt(spot.x, spot.y, spot.ring, zone);
       }
     }
   }
@@ -128,7 +145,10 @@ export class FieldMonsterSystem {
       if (pack.respawnTimerMs === null) {
         pack.memberIds = pack.memberIds.filter((id) => monsters.has(id));
         if (pack.memberIds.length === 0) {
-          pack.respawnTimerMs = FIELD_MONSTER_CONFIG.packRespawnDelayMs;
+          pack.respawnTimerMs =
+            pack.zone === 'near_village'
+              ? FIELD_MONSTER_CONFIG.nearVillageRespawnDelayMs
+              : FIELD_MONSTER_CONFIG.packRespawnDelayMs;
         }
         continue;
       }
@@ -144,7 +164,8 @@ export class FieldMonsterSystem {
     const otherSpots = this.packs
       .filter((p) => p.packId !== pack.packId)
       .map((p) => ({ x: p.x, y: p.y }));
-    const [newSpot] = pickWildernessFieldSpawnSpots({
+    const [newSpot] = pickZoneFieldSpawnSpots({
+      zone: pack.zone,
       desiredCount: 1,
       existingSpots: otherSpots,
       terrain: this.ctx.getTerrainMap(),
@@ -160,17 +181,18 @@ export class FieldMonsterSystem {
     pack.y = sy;
     pack.ring = ring;
     pack.respawnTimerMs = null;
-    pack.memberIds = this.createPackMonsters(pack.packId, sx, sy, ring);
+    pack.memberIds = this.createPackMonsters(pack.packId, sx, sy, ring, pack.zone);
   }
 
-  private spawnPackAt(x: number, y: number, ring: 1 | 2 | 3 | 4): void {
+  private spawnPackAt(x: number, y: number, ring: 1 | 2 | 3 | 4, zone: FieldSpawnZone): void {
     const packId = `fpack_${++this.packSeq}`;
-    const memberIds = this.createPackMonsters(packId, x, y, ring);
+    const memberIds = this.createPackMonsters(packId, x, y, ring, zone);
     this.packs.push({
       packId,
       x,
       y,
       ring,
+      zone,
       memberIds,
       respawnTimerMs: null,
     });
@@ -180,21 +202,24 @@ export class FieldMonsterSystem {
     packId: string,
     centerX: number,
     centerY: number,
-    ring: 1 | 2 | 3 | 4
+    ring: 1 | 2 | 3 | 4,
+    zone: FieldSpawnZone
   ): string[] {
-    const tpl = pickFieldPackTemplate(ring);
+    const tpl = pickFieldPackTemplateForZone(zone, ring);
     const scaling = computeHuntingScaling(this.ctx.getDifficultyConfig?.(), this.onlineCount);
     const monsters = this.ctx.getMonsters();
     const spawnedIds: string[] = [];
 
     const totalUnits = tpl.units.reduce((sum, u) => sum + u.count, 0);
+    const templateTier: FieldEliteTier =
+      tpl.eliteTier && tpl.eliteTier !== 'none' ? tpl.eliteTier : 'standard';
     let eliteSpawned = false;
     let idx = 0;
 
     for (const unit of tpl.units) {
       for (let i = 0; i < unit.count; i++) {
         const angle = (Math.PI * 2 * idx) / Math.max(1, totalUnits) + (Math.random() - 0.5) * 0.4;
-        const dist = 36 + (idx % 2) * 32;
+        const dist = totalUnits === 1 ? 0 : 34 + (idx % 2) * 30;
         const mx = centerX + Math.cos(angle) * dist;
         const my = centerY + Math.sin(angle) * dist;
 
@@ -204,18 +229,28 @@ export class FieldMonsterSystem {
         const affix = isElite ? pickRandomEliteAffix() : null;
         if (isElite) eliteSpawned = true;
 
-        const hp = Math.round(unit.hp * scaling.hpMult * (affix?.hpMultiplier ?? 1));
-        const attack = Math.round(unit.attack * scaling.atkMult * (affix?.attackMultiplier ?? 1));
-        const speed = Math.round(unit.speed * (affix?.speedMultiplier ?? 1));
+        const effectiveTier: FieldEliteTier = isElite ? templateTier : 'none';
+        const tierProfile = FIELD_ELITE_TIER_PROFILES[effectiveTier];
+
+        const hp = Math.round(
+          unit.hp * scaling.hpMult * (affix?.hpMultiplier ?? 1) * tierProfile.hpScale
+        );
+        const attack = Math.round(
+          unit.attack * scaling.atkMult * (affix?.attackMultiplier ?? 1) * tierProfile.attackScale
+        );
+        const speed = Math.round(
+          unit.speed * (affix?.speedMultiplier ?? 1) * tierProfile.speedScale
+        );
         const id = `fld_${packId}_${Date.now()}_${idx}`;
 
         const monster: Monster = {
           id,
           type: unit.type,
-          name: affix ? `★ 야생 정예 ${affix.label} ${unit.name}` : unit.name,
+          name: affix ? `${tierProfile.badgePrefix} ${affix.label} ${unit.name}` : unit.name,
           isBoss: false,
           isElite,
           eliteAffix: affix?.id,
+          eliteTier: isElite ? effectiveTier : undefined,
           x: mx,
           y: my,
           hp,
@@ -232,7 +267,9 @@ export class FieldMonsterSystem {
           homeX: centerX,
           homeY: centerY,
           patrolRadiusPx: FIELD_MONSTER_CONFIG.patrolRadiusPx,
-          expReward: Math.round(unit.expReward * (affix?.expMultiplier ?? 1)),
+          expReward: Math.round(
+            unit.expReward * (affix?.expMultiplier ?? 1) * tierProfile.expScale
+          ),
         };
 
         monsters.set(id, MonsterVisualManager.create(this.ctx.scene, monster));
