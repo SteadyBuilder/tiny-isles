@@ -29,10 +29,24 @@ class SoundSystem {
       if (saved) Object.assign(this.settings, JSON.parse(saved));
     } catch {}
     if (typeof window !== 'undefined') {
+      let sfxPreloaded = false;
+      const preloadSfx = () => {
+        if (sfxPreloaded) return;
+        sfxPreloaded = true;
+        ['chop', 'mine', 'step', 'pop', 'break', 'unlock', 'click'].forEach((name) => {
+          fetch(`/assets/audio/sfx/${name}.mp3`)
+            .then((r) => (r.ok ? r.arrayBuffer() : null))
+            .then((buf) => {
+              if (buf) this.initCtx()?.decodeAudioData(buf, (d) => this.sfxBuffers.set(name, d), () => {});
+            })
+            .catch(() => {});
+        });
+      };
       const unlock = () => {
         if (!this.hasInteracted) {
           this.hasInteracted = true;
           this.initCtx();
+          preloadSfx();
           if (this.settings.bgmEnabled && !this.settings.muted) this.playBgm();
         }
         window.removeEventListener('pointerdown', unlock);
@@ -40,11 +54,6 @@ class SoundSystem {
       };
       window.addEventListener('pointerdown', unlock, { passive: true });
       window.addEventListener('keydown', unlock, { passive: true });
-      ['chop', 'mine', 'step', 'pop', 'break', 'unlock', 'click'].forEach((name) => {
-        fetch(`/assets/audio/sfx/${name}.mp3`).then((r) => r.ok ? r.arrayBuffer() : null).then((buf) => {
-          if (buf) this.initCtx()?.decodeAudioData(buf, (d) => this.sfxBuffers.set(name, d), () => {});
-        }).catch(() => {});
-      });
     }
   }
 

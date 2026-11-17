@@ -164,53 +164,48 @@ export class LobbyDioramaScene extends Phaser.Scene {
     this.baseCenterY = worldH / 2;
 
     if (this.textures.exists(TEX_KEY)) this.textures.remove(TEX_KEY);
-    const canvasTex = this.textures.createCanvas(TEX_KEY, worldW, worldH);
-    if (canvasTex) {
-      const ctx = canvasTex.getContext();
+    const tileTex = this.textures.createCanvas(TEX_KEY, tileSize, tileSize);
+    if (tileTex) {
+      const ctx = tileTex.getContext();
       const sheet = this.textures.get('d_tilemap1').getSourceImage() as CanvasImageSource;
-      const cols = Math.ceil(worldW / tileSize);
-      const rows = Math.ceil(worldH / tileSize);
-
       // Continuous plains interior tile (col=1, row=1) matching TerrainChunkPainter
-      for (let ry = 0; ry < rows; ry++) {
-        for (let rx = 0; rx < cols; rx++) {
-          ctx.drawImage(sheet, 64, 64, 64, 64, rx * tileSize, ry * tileSize, tileSize, tileSize);
-        }
-      }
-
-      // Subtle gameplay-style dirt roads leading through the 4 gates and central plaza
-      this.drawRoadStrip(ctx, this.baseCenterX - 34, 0, 68, worldH);
-      this.drawRoadStrip(ctx, 0, this.baseCenterY - 30, worldW, 60);
-
-      // Central stone-paved citadel courtyard
-      ctx.fillStyle = 'rgba(194, 178, 146, 0.42)';
-      ctx.fillRect(this.baseCenterX - 180, this.baseCenterY - 120, 360, 240);
-      ctx.strokeStyle = 'rgba(148, 134, 108, 0.35)';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(this.baseCenterX - 180, this.baseCenterY - 120, 360, 240);
-
-      canvasTex.refresh();
+      ctx.drawImage(sheet, 64, 64, 64, 64, 0, 0, tileSize, tileSize);
+      tileTex.refresh();
     }
 
-    this.add.image(0, 0, TEX_KEY).setOrigin(0, 0).setDepth(DEPTH.BACKGROUND);
+    this.add
+      .tileSprite(0, 0, worldW, worldH, TEX_KEY)
+      .setOrigin(0, 0)
+      .setDepth(DEPTH.BACKGROUND);
+
+    const g = this.add.graphics().setDepth(DEPTH.BACKGROUND + 1);
+    // Subtle gameplay-style dirt roads leading through the 4 gates and central plaza
+    this.drawRoadStrip(g, this.baseCenterX - 34, 0, 68, worldH);
+    this.drawRoadStrip(g, 0, this.baseCenterY - 30, worldW, 60);
+
+    // Central stone-paved citadel courtyard
+    g.fillStyle(0xc2b292, 0.42);
+    g.fillRect(this.baseCenterX - 180, this.baseCenterY - 120, 360, 240);
+    g.lineStyle(3, 0x94866c, 0.35);
+    g.strokeRect(this.baseCenterX - 180, this.baseCenterY - 120, 360, 240);
   }
 
   private drawRoadStrip(
-    ctx: CanvasRenderingContext2D,
+    g: Phaser.GameObjects.Graphics,
     x: number,
     y: number,
     w: number,
     h: number
   ) {
-    ctx.fillStyle = 'rgba(194, 178, 146, 0.56)';
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = 'rgba(148, 134, 108, 0.36)';
+    g.fillStyle(0xc2b292, 0.56);
+    g.fillRect(x, y, w, h);
+    g.fillStyle(0x94866c, 0.36);
     if (w > h) {
-      ctx.fillRect(x, y, w, 3);
-      ctx.fillRect(x, y + h - 3, w, 3);
+      g.fillRect(x, y, w, 3);
+      g.fillRect(x, y + h - 3, w, 3);
     } else {
-      ctx.fillRect(x, y, 3, h);
-      ctx.fillRect(x + w - 3, y, 3, h);
+      g.fillRect(x, y, 3, h);
+      g.fillRect(x + w - 3, y, 3, h);
     }
   }
 

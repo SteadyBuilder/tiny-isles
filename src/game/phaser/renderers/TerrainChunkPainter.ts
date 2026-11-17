@@ -85,21 +85,51 @@ function drawRoadTile(
   }
 }
 
-export interface BakedTerrainChunks {
-  chunkImages: Phaser.GameObjects.Image[];
-  chunkTexKeys: string[];
+export interface TerrainChunkGridInfo {
+  chunkTiles: number;
+  chunkPx: number;
+  numChunksX: number;
+  numChunksY: number;
+  worldOriginX: number;
+  worldOriginY: number;
+}
+
+export interface BakedTerrainChunk {
+  key: string;
+  texKey: string;
+  image: Phaser.GameObjects.Image;
+}
+
+export function getTerrainChunkGridInfo(
+  terrain: WorldTerrainMap,
+  chunkTiles: number
+): TerrainChunkGridInfo {
+  return {
+    chunkTiles,
+    chunkPx: chunkTiles * terrain.tileSize,
+    numChunksX: Math.ceil(terrain.cols / chunkTiles),
+    numChunksY: Math.ceil(terrain.rows / chunkTiles),
+    worldOriginX: terrain.minGx * terrain.tileSize,
+    worldOriginY: terrain.minGy * terrain.tileSize,
+  };
 }
 
 /**
- * 바이옴 타일맵·해안선·다리·도로·지면 장식을 CanvasTexture 청크로 베이크하는 전담 페인터
+ * 지정된 청크 좌표(cx, cy)의 지형·해안선·다리·도로·지면 장식 1개를 CanvasTexture로 베이크합니다.
  */
-export function bakeTerrainChunkTextures(
+export function bakeSingleTerrainChunk(
   scene: Phaser.Scene,
-  terrain: WorldTerrainMap
-): BakedTerrainChunks {
+  terrain: WorldTerrainMap,
+  cx: number,
+  cy: number,
+  chunkTiles: number
+): BakedTerrainChunk | null {
   const { tileSize, minGx, minGy, cols, rows } = terrain;
-  const numChunksX = Math.ceil(cols / CHUNK_TILES);
-  const numChunksY = Math.ceil(rows / CHUNK_TILES);
+  const startRx = cx * chunkTiles;
+  const startRy = cy * chunkTiles;
+  const chunkCols = Math.min(chunkTiles, cols - startRx);
+  const chunkRows = Math.min(chunkTiles, rows - startRy);
+  if (chunkCols <= 0 || chunkRows <= 0) return null;
 
   const waterImg = getSourceImage(scene, 'waterBg');
   const bush1Img = getSourceImage(scene, 'bush');
@@ -109,26 +139,18 @@ export function bakeTerrainChunkTextures(
   const waterRock1Img = getSourceImage(scene, 'waterRock1');
   const waterRock2Img = getSourceImage(scene, 'waterRock2');
 
-  const chunkImages: Phaser.GameObjects.Image[] = [];
-  const chunkTexKeys: string[] = [];
+  const w = chunkCols * tileSize;
+  const h = chunkRows * tileSize;
+  const key = `${cx}_${cy}`;
+  const texKey = `terrain_chunk_${key}`;
 
-  for (let cy = 0; cy < numChunksY; cy++) {
-    for (let cx = 0; cx < numChunksX; cx++) {
-      const startRx = cx * CHUNK_TILES;
-      const startRy = cy * CHUNK_TILES;
-      const chunkCols = Math.min(CHUNK_TILES, cols - startRx);
-      const chunkRows = Math.min(CHUNK_TILES, rows - startRy);
-      const w = chunkCols * tileSize;
-      const h = chunkRows * tileSize;
-      const texKey = `terrain_chunk_${cx}_${cy}`;
+  if (scene.textures.exists(texKey)) {
+    scene.textures.remove(texKey);
+  }
 
-      if (scene.textures.exists(texKey)) {
-        scene.textures.remove(texKey);
-      }
-
-      const canvasTex = scene.textures.createCanvas(texKey, w, h);
-      if (!canvasTex) continue;
-      const ctx = canvasTex.getContext();
+  const canvasTex = scene.textures.createCanvas(texKey, w, h);
+  if (!canvasTex) return null;
+  const ctx = canvasTex.getContext();
 
       for (let ty = 0; ty < chunkRows; ty++) {
         for (let tx = 0; tx < chunkCols; tx++) {
@@ -217,17 +239,13 @@ export function bakeTerrainChunkTextures(
         }
       }
 
-      canvasTex.refresh();
-      const worldOriginX = (minGx + startRx) * tileSize;
-      const worldOriginY = (minGy + startRy) * tileSize;
-      const chunkImg = scene.add
-        .image(worldOriginX, worldOriginY, texKey)
-        .setOrigin(0, 0)
-        .setDepth(DEPTH.BACKGROUND);
-      chunkImages.push(chunkImg);
-      chunkTexKeys.push(texKey);
-    }
-  }
+  canvasTex.refresh();
+  const worldOriginX = (minGx + startRx) * tileSize;
+  const worldOriginY = (minGy + startRy) * tileSize;
+  const chunkImg = scene.add
+    .image(worldOriginX, worldOriginY, texKey)
+    .setOrigin(0, 0)
+    .setDepth(DEPTH.BACKGROUND);
 
-  return { chunkImages, chunkTexKeys };
+  return { key, texKey, image: chunkImg };
 }

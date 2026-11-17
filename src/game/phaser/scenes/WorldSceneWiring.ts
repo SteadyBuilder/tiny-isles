@@ -252,7 +252,8 @@ export function createWorldControllersBundle(
 
   const viewportCulling = new ViewportCullingController({
     scene: host.scene,
-    getChunkImages: () => host.terrainRenderer.getChunkImages(),
+    syncTerrainChunks: (viewport, maxNewBakes) =>
+      host.terrainRenderer.syncChunksToViewport(viewport, maxNewBakes),
     getResourceVisuals: () => host.resourceEntityRenderer.getEntityVisuals(),
     getTerritoryBuildingVisuals: () => host.territoryStructureRenderer.getBuildingVisuals(),
     getConstructedVisuals: () => host.constructedBuildingRenderer.getVisuals(),

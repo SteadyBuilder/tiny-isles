@@ -98,18 +98,11 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   setOnlineCountRef.current = setOnlineCount;
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const parent = containerRef.current;
+    if (!parent) return;
 
-    const config = createPhaserConfig(containerRef.current, {
-      playerName,
-      playerColor,
-      zoom,
-    });
-
-    const game = new Phaser.Game(config);
-    game.registry.set('roomConfig', roomConfig);
-    game.registry.set('metaBonuses', metaBonuses);
-    gameRef.current = game;
+    let cancelled = false;
+    let game: Phaser.Game | null = null;
 
     const handleProgress = (val: number) => setLoadRatio(val);
     const handleComplete = () => setLoading(false);
@@ -173,7 +166,24 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     GameEvents.on('zoom-changed', handleZoomChanged);
     GameEvents.on('online-count-changed', handleOnlineCount);
 
+    // Yield 1 animation frame so unmounting LobbyDioramaCanvas releases its WebGL context cleanly
+    const rafId = requestAnimationFrame(() => {
+      if (cancelled || !containerRef.current) return;
+      const config = createPhaserConfig(containerRef.current, {
+        playerName,
+        playerColor,
+        zoom,
+      });
+      game = new Phaser.Game(config);
+      game.registry.set('roomConfig', roomConfig);
+      game.registry.set('metaBonuses', metaBonuses);
+      gameRef.current = game;
+    });
+
     return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+
       GameEvents.off('load-progress', handleProgress);
       GameEvents.off('load-complete', handleComplete);
       GameEvents.off('inventory-updated', handleInventoryUpdated);
@@ -188,7 +198,10 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       GameEvents.off('zoom-changed', handleZoomChanged);
       GameEvents.off('online-count-changed', handleOnlineCount);
 
-      game.destroy(true);
+      if (game) {
+        game.destroy(true);
+        game = null;
+      }
       gameRef.current = null;
     };
   }, []);

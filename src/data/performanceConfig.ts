@@ -10,6 +10,14 @@ export interface PerformanceConfig {
   readonly cameraMoveThresholdPx: number;
   /** 마물 AI의 방해 건물/성벽 전체 탐색 캐시 유지 주기 (ms) */
   readonly monsterTargetSearchIntervalMs: number;
+  /** 지형 청크 한 변의 타일 수 (16 * 64 = 1024px) */
+  readonly terrainChunkTiles: number;
+  /** 메모리에 유지할 최대 지형 청크 수 (LRU 캐시 상한) */
+  readonly maxCachedTerrainChunks: number;
+  /** 뷰포트 외곽 지형 청크 선행 베이킹 마진 (px) */
+  readonly terrainChunkPrefetchMarginPx: number;
+  /** 이동 중 프레임당 최대 신규 베이킹 청크 수 (프레임 드랍 방지) */
+  readonly maxChunksBakedPerFrame: number;
 }
 
 export const PERFORMANCE_CONFIG: PerformanceConfig = {
@@ -17,4 +25,8 @@ export const PERFORMANCE_CONFIG: PerformanceConfig = {
   cullingIntervalMs: 120,
   cameraMoveThresholdPx: 48,
   monsterTargetSearchIntervalMs: 150,
+  terrainChunkTiles: 16,
+  maxCachedTerrainChunks: 24,
+  terrainChunkPrefetchMarginPx: 512,
+  maxChunksBakedPerFrame: 2,
 };

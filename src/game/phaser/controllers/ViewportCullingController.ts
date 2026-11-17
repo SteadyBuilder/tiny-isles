@@ -11,7 +11,7 @@ import { EntityVisual } from '../renderers/ResourceEntityRenderer';
 
 export interface IViewportCullingContext {
   scene: Phaser.Scene;
-  getChunkImages: () => ReadonlyArray<Phaser.GameObjects.Image>;
+  syncTerrainChunks: (viewport: ViewportRect, maxNewBakes: number) => boolean;
   getResourceVisuals: () => ReadonlyMap<string, EntityVisual>;
   getTerritoryBuildingVisuals: () => ReadonlyArray<Phaser.GameObjects.Container>;
   getConstructedVisuals: () => Map<string, ConstructedVisualRef>;
@@ -19,8 +19,8 @@ export interface IViewportCullingContext {
 }
 
 /**
- * 카메라 뷰포트(worldView) 바깥의 지형 청크, 자원 엔티티, 건물, 개척 제단 카드의
- * 렌더링 가시성(visible) 및 오프스크린 애니메이션 재생을 주기적으로 컬링하는 컨트롤러
+ * 카메라 뷰포트(worldView) 바깥의 지형 청크 온디맨드 스트리밍(LRU) 및
+ * 자원 엔티티, 건물, 개척 제단 카드의 가시성·애니메이션을 주기적으로 컬링하는 컨트롤러
  */
 export class ViewportCullingController {
   private ctx: IViewportCullingContext;
@@ -28,14 +28,19 @@ export class ViewportCullingController {
   private lastCamX = Number.NaN;
   private lastCamY = Number.NaN;
   private lastCamZoom = Number.NaN;
+  private hasPendingTerrainBakes = false;
 
   constructor(ctx: IViewportCullingContext) {
     this.ctx = ctx;
   }
 
   public forceCullNow(): void {
+    const cam = this.ctx.scene.cameras?.main;
+    if (cam && (!cam.worldView || cam.worldView.width <= 0)) {
+      cam.preRender();
+    }
     this.lastCamX = Number.NaN;
-    this.cullToCamera();
+    this.cullToCamera(true);
   }
 
   public update(time: number): void {
@@ -50,6 +55,7 @@ export class ViewportCullingController {
     const intervalElapsed = time - this.lastCullTime >= PERFORMANCE_CONFIG.cullingIntervalMs;
 
     if (
+      !this.hasPendingTerrainBakes &&
       !Number.isNaN(this.lastCamX) &&
       !zoomChanged &&
       movedDist < PERFORMANCE_CONFIG.cameraMoveThresholdPx &&
@@ -63,10 +69,10 @@ export class ViewportCullingController {
     this.lastCamY = view.y;
     this.lastCamZoom = cam.zoom;
 
-    this.cullToCamera();
+    this.cullToCamera(false);
   }
 
-  private cullToCamera(): void {
+  private cullToCamera(forceAllChunks: boolean): void {
     const cam = this.ctx.scene.cameras?.main;
     if (!cam || !cam.worldView || cam.worldView.width <= 0) return;
 
@@ -79,27 +85,12 @@ export class ViewportCullingController {
       PERFORMANCE_CONFIG.cullingMarginPx
     );
 
-    this.cullChunks(viewport);
+    const maxNewBakes = forceAllChunks ? Infinity : PERFORMANCE_CONFIG.maxChunksBakedPerFrame;
+    this.hasPendingTerrainBakes = this.ctx.syncTerrainChunks(viewport, maxNewBakes);
     this.cullResourceEntities(viewport);
     this.cullContainers(this.ctx.getTerritoryBuildingVisuals(), viewport, 260);
     this.cullConstructedBuildings(viewport);
     this.cullContainers(this.ctx.getAltarCardContainers(), viewport, 120);
-  }
-
-  private cullChunks(viewport: ViewportRect): void {
-    for (const img of this.ctx.getChunkImages()) {
-      if (!img.scene) continue;
-      const inView = isRectInViewport(
-        img.x,
-        img.y,
-        img.displayWidth,
-        img.displayHeight,
-        viewport
-      );
-      if (img.visible !== inView) {
-        img.setVisible(inView);
-      }
-    }
   }
 
   private cullResourceEntities(viewport: ViewportRect): void {
