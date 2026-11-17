@@ -165,6 +165,7 @@ export class MonsterCampSystem {
 
       const node = this.createCampVisual(campState, tpl.buildingSprite);
       this.campNodes.set(isl.id, node);
+      this.ctx.fortification?.spawnForCamp(campState, hpMult, atkMult);
       this.spawnCampGarrison(campState);
     }
 
@@ -276,7 +277,7 @@ export class MonsterCampSystem {
       hpBar.fillStyle(0xfef08a, 0.92);
       hpBar.fillRect(-barW / 2, barY, Math.max(2, barW * node.hpTrailRatio), barH);
     }
-    hpBar.fillStyle(isFlashing ? 0xffffff : 0xe11d48, 1);
+    hpBar.fillStyle(0xe11d48, 1);
     if (ratio > 0) {
       hpBar.fillRect(-barW / 2, barY, Math.max(2, barW * ratio), barH);
     }

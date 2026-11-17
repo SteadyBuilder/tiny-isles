@@ -135,7 +135,12 @@ export class CampFortificationSystem {
     const container = scene.add.container(params.x, params.y);
     container.setDepth(ySortDepth(params.y, params.kind === 'tower' ? 140 : 60));
 
-    const tex = scene.textures.exists(params.spriteKey) ? params.spriteKey : 'tower';
+    const directionalKey =
+      params.kind === 'wall'
+        ? `${params.spriteKey}${params.isHoriz ? 'H' : 'V'}`
+        : params.spriteKey;
+    const resolvedKey = scene.textures.exists(directionalKey) ? directionalKey : params.spriteKey;
+    const tex = scene.textures.exists(resolvedKey) ? resolvedKey : 'tower';
     const sprite = scene.add.image(0, params.kind === 'tower' ? -18 : -8, tex);
     if (params.kind === 'tower') {
       sprite.setDisplaySize(96, 136);
@@ -144,7 +149,7 @@ export class CampFortificationSystem {
       const w = params.isHoriz ? 165 : 52;
       const h = params.isHoriz ? 58 : 145;
       sprite.setDisplaySize(w, h);
-      sprite.setTint(params.ring >= 3 ? 0xa855f7 : 0xef4444);
+      sprite.setTint(params.ring >= 3 ? 0xc084fc : 0xfca5a5);
     }
     container.add(sprite);
 

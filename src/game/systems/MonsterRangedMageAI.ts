@@ -11,6 +11,7 @@ export interface IMonsterRangedMageContext {
   isLocalPlayerFainted: () => boolean;
   damageLocalPlayer: (damage: number, attackerName: string) => void;
   healCampCore?: (territoryId: number, amount: number) => void;
+  clearMonsterAggro?: (monsterId: string) => void;
   projectileSystem?: ProjectileSystem;
   playExplosionAt: (x: number, y: number) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
@@ -22,9 +23,18 @@ export interface IMonsterRangedMageContext {
  */
 export class MonsterRangedMageAI {
   private ctx: IMonsterRangedMageContext;
+  private returningHome = new Set<string>();
 
   constructor(ctx: IMonsterRangedMageContext) {
     this.ctx = ctx;
+  }
+
+  public pruneStaleState(validIds: Set<string>): void {
+    for (const id of this.returningHome) {
+      if (!validIds.has(id)) {
+        this.returningHome.delete(id);
+      }
+    }
   }
 
   /**
@@ -56,19 +66,38 @@ export class MonsterRangedMageAI {
       this.performMageSupportHeal(mv);
     }
 
+    // 추격 한계(보이지 않는 벽)에 도달하면 어그로를 해제하고 빠른 속도로 스폰 부락으로 복귀
+    if (distFromHome > HUNTING_AI_CONFIG.campLeashRadiusPx) {
+      this.returningHome.add(m.id);
+      this.ctx.clearMonsterAggro?.(m.id);
+    }
+
+    if (this.returningHome.has(m.id)) {
+      if (distFromHome <= HUNTING_AI_CONFIG.campReturnArrivalRadiusPx) {
+        this.returningHome.delete(m.id);
+      } else {
+        const returnSpeed = m.speed * HUNTING_AI_CONFIG.campReturnSpeedMultiplier;
+        const vx = ((homeX - m.x) / distFromHome) * returnSpeed;
+        const vy = ((homeY - m.y) / distFromHome) * returnSpeed;
+        m.x += vx * dt;
+        m.y += vy * dt;
+        m.direction = vx < 0 ? 'left' : 'right';
+        mv.container.setPosition(m.x, m.y);
+        setDepthIfChanged(mv.container, ySortDepth(m.y, 28));
+        mv.sprite.setFlipX(m.direction === 'left');
+        return true;
+      }
+    }
+
     const aggroDetectRadius = hasActiveAggro
       ? HUNTING_AI_CONFIG.campLeashRadiusPx
       : HUNTING_AI_CONFIG.campAggroRadiusPx;
 
-    // 플레이어가 기절했거나 탐지 반경/최대 추격 이탈 거리를 벗어난 경우 본래 위치로 귀환
-    if (
-      playerFainted ||
-      distToPlayer > aggroDetectRadius ||
-      distFromHome > HUNTING_AI_CONFIG.campLeashRadiusPx
-    ) {
+    // 플레이어가 기절했거나 탐지 반경을 벗어난 경우 본래 위치로 귀환
+    if (playerFainted || distToPlayer > aggroDetectRadius) {
       if (distFromHome > 18) {
-        const vx = ((homeX - m.x) / distFromHome) * m.speed * 0.9;
-        const vy = ((homeY - m.y) / distFromHome) * m.speed * 0.9;
+        const vx = ((homeX - m.x) / distFromHome) * m.speed * 1.1;
+        const vy = ((homeY - m.y) / distFromHome) * m.speed * 1.1;
         m.x += vx * dt;
         m.y += vy * dt;
         m.direction = vx < 0 ? 'left' : 'right';

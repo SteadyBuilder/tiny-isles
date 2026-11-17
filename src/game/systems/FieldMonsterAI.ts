@@ -8,6 +8,7 @@ import { MonsterVisual } from './MonsterVisualManager';
 export interface IFieldMonsterAIContext {
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
+  clearMonsterAggro?: (monsterId: string) => void;
   executeRoleAttackOnPlayer: (mv: MonsterVisual, targetX: number, targetY: number) => void;
 }
 
@@ -23,6 +24,7 @@ interface PatrolTarget {
 export class FieldMonsterAI {
   private ctx: IFieldMonsterAIContext;
   private patrolTargets = new Map<string, PatrolTarget>();
+  private returningHome = new Set<string>();
 
   constructor(ctx: IFieldMonsterAIContext) {
     this.ctx = ctx;
@@ -32,6 +34,11 @@ export class FieldMonsterAI {
     for (const id of this.patrolTargets.keys()) {
       if (!validIds.has(id)) {
         this.patrolTargets.delete(id);
+      }
+    }
+    for (const id of this.returningHome) {
+      if (!validIds.has(id)) {
+        this.returningHome.delete(id);
       }
     }
   }
@@ -55,14 +62,28 @@ export class FieldMonsterAI {
     const distToPlayer = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
     const distFromHome = Math.hypot(m.x - homeX, m.y - homeY);
 
+    if (distFromHome > FIELD_MONSTER_CONFIG.fieldLeashRadiusPx) {
+      this.returningHome.add(m.id);
+      this.ctx.clearMonsterAggro?.(m.id);
+    }
+
+    if (this.returningHome.has(m.id)) {
+      if (distFromHome <= FIELD_MONSTER_CONFIG.fieldReturnArrivalRadiusPx) {
+        this.returningHome.delete(m.id);
+      } else {
+        const returnSpeed = m.speed * FIELD_MONSTER_CONFIG.fieldReturnSpeedMultiplier;
+        const vx = ((homeX - m.x) / distFromHome) * returnSpeed;
+        const vy = ((homeY - m.y) / distFromHome) * returnSpeed;
+        this.moveMonster(mv, vx, vy, dt, aliveWalls);
+        return true;
+      }
+    }
+
     const aggroRadius = hasActiveAggro
       ? FIELD_MONSTER_CONFIG.fieldLeashRadiusPx
       : FIELD_MONSTER_CONFIG.fieldAggroRadiusPx;
 
-    const shouldChase =
-      !playerFainted &&
-      distToPlayer <= aggroRadius &&
-      distFromHome <= FIELD_MONSTER_CONFIG.fieldLeashRadiusPx;
+    const shouldChase = !playerFainted && distToPlayer <= aggroRadius;
 
     if (!shouldChase) {
       this.updatePatrolOrReturn(mv, time, dt, homeX, homeY, distFromHome, aliveWalls);

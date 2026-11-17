@@ -226,6 +226,9 @@ export interface Monster {
   homeY?: number;
   patrolRadiusPx?: number;
   expReward?: number;
+  shieldHp?: number;
+  shieldMaxHp?: number;
+  shieldUntil?: number;
 }
 
 export interface WaveState {

@@ -68,11 +68,11 @@ export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
     fortification: {
       wallHp: 420,
       wallSprite: 'woodPalisade',
-      towerCount: 2,
-      towerHp: 480,
-      towerAttack: 24,
-      towerRangePx: 280,
-      towerFireRateMs: 1450,
+      towerCount: 0,
+      towerHp: 0,
+      towerAttack: 0,
+      towerRangePx: 0,
+      towerFireRateMs: 0,
       outerPatrolCount: 6,
     },
     garrisonSpecs: [
@@ -110,7 +110,7 @@ export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
     clearResourceReward: { wood: 40, stone: 35, gold: 22 },
     fortification: {
       wallHp: 780,
-      wallSprite: 'woodPalisade',
+      wallSprite: 'stoneWall',
       towerCount: 2,
       towerHp: 820,
       towerAttack: 38,
@@ -287,6 +287,10 @@ export const HUNTING_AI_CONFIG = {
   campAggroRadiusPx: 560,
   /** 부락 수비병의 최대 추격 이탈 거리 (px) */
   campLeashRadiusPx: 880,
+  /** 추격 이탈 한계 도달 후 부락 복귀 시 이동 속도 배율 */
+  campReturnSpeedMultiplier: 2.25,
+  /** 부락 복귀 완료로 판정하는 스폰 지점 도착 반경 (px) */
+  campReturnArrivalRadiusPx: 42,
   /** 웨이브/던전 진격 몹이 지나가는 플레이어를 발견하고 즉시 공격 전환하는 근접 어그로 반경 (px) */
   waveProximityAggroRadiusPx: 320,
   /** 근접 어그로로 추격 시 최대 이탈 허용 거리 (px) */

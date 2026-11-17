@@ -24,6 +24,10 @@ export const FIELD_MONSTER_CONFIG = {
   fieldAggroRadiusPx: 370,
   /** 최대 추격 이탈 거리 (px) */
   fieldLeashRadiusPx: 720,
+  /** 추격 이탈 한계 도달 후 거점 복귀 시 이동 속도 배율 */
+  fieldReturnSpeedMultiplier: 2.2,
+  /** 거점 복귀 완료 판정 반경 (px) */
+  fieldReturnArrivalRadiusPx: 42,
 } as const;
 
 /**

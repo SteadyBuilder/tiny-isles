@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { ELITE_SHIELD_BUFF_CONFIG } from '../../data/elites';
 import { HUNTING_AI_CONFIG } from '../../data/monsterCamps';
 import { PERFORMANCE_CONFIG } from '../../data/performanceConfig';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
@@ -91,6 +92,7 @@ export class MonsterCombatAI {
       isLocalPlayerFainted: ctx.isLocalPlayerFainted,
       damageLocalPlayer: ctx.damageLocalPlayer,
       healCampCore: ctx.healCampCore,
+      clearMonsterAggro: (monsterId) => this.aggroTargets.delete(monsterId),
       projectileSystem: ctx.projectileSystem,
       playExplosionAt: ctx.playExplosionAt,
       showFloatingText: ctx.showFloatingText,
@@ -98,6 +100,7 @@ export class MonsterCombatAI {
     this.fieldMonsterAI = new FieldMonsterAI({
       getLocalPlayerPosition: ctx.getLocalPlayerPosition,
       isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      clearMonsterAggro: (monsterId) => this.aggroTargets.delete(monsterId),
       executeRoleAttackOnPlayer: (mv, tx, ty) =>
         this.rangedMageAI.executeRoleAttackOnPlayer(mv, tx, ty),
     });
@@ -134,6 +137,8 @@ export class MonsterCombatAI {
       const m = mv.monster;
       if (m.isBoss) {
         this.bossSkillSystem.tryCastSkill(mv, time);
+      } else if (m.isElite && m.eliteAffix === 'fortified') {
+        this.tryActivateEliteShield(mv, time);
       }
       const sep = this.spatialGrid.computeSeparation(m.id, m.x, m.y);
 
@@ -388,32 +393,60 @@ export class MonsterCombatAI {
       );
     };
 
+    let effectiveDamage = params.damage;
+    const now = performance.now();
+    if (
+      mv.monster.isElite &&
+      (mv.monster.shieldUntil ?? 0) > now &&
+      (mv.monster.shieldHp ?? 0) > 0
+    ) {
+      const absorbed = Math.min(mv.monster.shieldHp!, effectiveDamage);
+      mv.monster.shieldHp = Math.max(0, mv.monster.shieldHp! - absorbed);
+      effectiveDamage -= absorbed;
+      if (mv.monster.shieldHp <= 0) {
+        mv.monster.shieldUntil = 0;
+        mv.monster.shieldMaxHp = 0;
+      }
+      if (absorbed > 0) {
+        this.ctx.showFloatingText(
+          mv.monster.x,
+          mv.monster.y - 42,
+          `🛡️ 방어막 -${absorbed}`,
+          '#f8fafc'
+        );
+      }
+    }
+
     if (!params.isHost && !params.fromRemote) {
-      mv.monster.hp = Math.max(1, mv.monster.hp - params.damage);
-      MonsterVisualManager.updateHpBar(mv, true);
-      this.ctx.showFloatingText(
-        mv.monster.x,
-        mv.monster.y - 25,
-        `-${params.damage}`,
-        mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
-      );
+      mv.monster.hp = Math.max(1, mv.monster.hp - effectiveDamage);
+      MonsterVisualManager.updateHpBar(mv, effectiveDamage > 0);
+      if (effectiveDamage > 0) {
+        this.ctx.showFloatingText(
+          mv.monster.x,
+          mv.monster.y - 25,
+          `-${effectiveDamage}`,
+          mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
+        );
+      }
       this.ctx.shakeObject(mv.container);
       triggerHitFeedback(true);
       this.ctx.broadcastMonsterHit?.(params.monsterId, params.damage, params.sourceName);
       return false;
     }
 
-    mv.monster.hp = Math.max(0, mv.monster.hp - params.damage);
-    this.ctx.showFloatingText(
-      mv.monster.x,
-      mv.monster.y - 25,
-      `-${params.damage}`,
-      mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
-    );
+    mv.monster.hp = Math.max(0, mv.monster.hp - effectiveDamage);
+    if (effectiveDamage > 0) {
+      this.ctx.showFloatingText(
+        mv.monster.x,
+        mv.monster.y - 25,
+        `-${effectiveDamage}`,
+        mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
+      );
+    }
 
     if (mv.monster.hp > 0) {
       this.ctx.shakeObject(mv.container);
-      MonsterVisualManager.updateHpBar(mv, true);
+      MonsterVisualManager.updateHpBar(mv, effectiveDamage > 0);
       triggerHitFeedback(true);
       if (!params.fromRemote) {
         if (params.hitMeta?.isCrit) sound.playHitCrit();
@@ -497,7 +530,31 @@ export class MonsterCombatAI {
         this.aggroTargets.delete(id);
       }
     }
+    this.rangedMageAI.pruneStaleState(validIds);
     this.fieldMonsterAI.pruneStaleState(validIds);
+  }
+
+  private tryActivateEliteShield(mv: MonsterVisual, time: number): void {
+    const m = mv.monster;
+    if (m.hp <= 0 || !m.isElite || m.eliteAffix !== 'fortified') return;
+
+    const now = performance.now();
+    if ((m.shieldUntil ?? 0) > now && (m.shieldHp ?? 0) > 0) return;
+
+    const lastShield = mv.lastShieldTime ?? -ELITE_SHIELD_BUFF_CONFIG.cooldownMs;
+    if (time - lastShield < ELITE_SHIELD_BUFF_CONFIG.cooldownMs) return;
+
+    const playerPos = this.ctx.getLocalPlayerPosition();
+    const dist = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
+    if (dist > 420 && m.hp >= m.maxHp) return;
+
+    mv.lastShieldTime = time;
+    const shieldAmount = Math.max(1, Math.round(m.maxHp * ELITE_SHIELD_BUFF_CONFIG.shieldHpRatio));
+    m.shieldMaxHp = shieldAmount;
+    m.shieldHp = shieldAmount;
+    m.shieldUntil = now + ELITE_SHIELD_BUFF_CONFIG.durationMs;
+    MonsterVisualManager.updateHpBar(mv, false);
+    this.ctx.showFloatingText(m.x, m.y - 44, '🛡️ 강철 방어막!', '#f8fafc');
   }
 
   public aggroCampMonsters(campTerritoryId: number, playerId: string): void {

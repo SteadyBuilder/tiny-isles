@@ -79,6 +79,15 @@ export const ELITE_AFFIX_IDS: EliteAffixId[] = [
   'fortified',
 ];
 
+export const ELITE_SHIELD_BUFF_CONFIG = {
+  /** 방어막 버프 재사용 대기시간 (ms) */
+  cooldownMs: 11_000,
+  /** 방어막 버프 유지 시간 (ms) */
+  durationMs: 3_600,
+  /** 최대 체력 대비 생성되는 임시 방어막 비율 */
+  shieldHpRatio: 0.25,
+} as const;
+
 export function pickRandomEliteAffix(): EliteAffixDefinition {
   const id = ELITE_AFFIX_IDS[Math.floor(Math.random() * ELITE_AFFIX_IDS.length)] ?? 'berserker';
   return ELITE_AFFIXES[id];

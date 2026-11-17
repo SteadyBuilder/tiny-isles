@@ -13,6 +13,7 @@ export interface MonsterVisual {
   hpFlashUntil: number;
   lastAttackTime: number;
   lastHealTime?: number;
+  lastShieldTime?: number;
 }
 
 /**
@@ -157,9 +158,12 @@ export class MonsterVisualManager {
     const now = performance.now();
     const isFlashing = now < mv.hpFlashUntil;
     const hasTrail = mv.hpTrailRatio > ratio + 0.002;
+    const hasActiveShield = Boolean(
+      m.isElite && (m.shieldUntil ?? 0) > now && (m.shieldHp ?? 0) > 0
+    );
 
     // 100마리 대군/부락 환경에서 아직 피격되지 않은 일반 몬스터는 HP바 드로우콜 생략 (보스/엘리트는 항상 표시)
-    if (!m.isBoss && !m.isElite && ratio >= 0.999 && !hasTrail && !isFlashing) {
+    if (!m.isBoss && !m.isElite && !hasActiveShield && ratio >= 0.999 && !hasTrail && !isFlashing) {
       mv.hpBar.clear();
       mv.hpBar.setVisible(false);
       return;
@@ -182,25 +186,30 @@ export class MonsterVisualManager {
     mv.hpBar.fillStyle(0x0f172a, 0.92);
     mv.hpBar.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
 
-    if (isFlashing) {
+    if (hasActiveShield) {
+      mv.hpBar.lineStyle(1.5, 0xe0f2fe, 0.98);
+      mv.hpBar.strokeRect(barX - 1.5, barY - 1.5, barW + 3, barH + 3);
+    } else if (isFlashing) {
       mv.hpBar.lineStyle(1.5, 0xfef08a, 0.95);
       mv.hpBar.strokeRect(barX - 1.5, barY - 1.5, barW + 3, barH + 3);
     }
 
-    // 지연 감소 트레일 바 (흰색-황금빛 잔상)
+    // 지연 감소 트레일 바 (황금빛 잔상)
     if (hasTrail) {
       mv.hpBar.fillStyle(0xfef08a, 0.95);
       mv.hpBar.fillRect(barX, barY, Math.max(2, barW * mv.hpTrailRatio), barH);
     }
 
-    const barColor = m.isBoss
+    const barColor = hasActiveShield
+      ? 0xffffff
+      : m.isBoss
       ? 0xdc2626
       : m.role === 'mage'
       ? 0xa855f7
       : m.role === 'ranged'
       ? 0x38bdf8
       : 0xef4444;
-    mv.hpBar.fillStyle(isFlashing ? 0xffffff : barColor, isFlashing ? 0.92 : 1);
+    mv.hpBar.fillStyle(barColor, 1);
     if (ratio > 0) {
       mv.hpBar.fillRect(barX, barY, Math.max(2, barW * ratio), barH);
     }
@@ -212,18 +221,25 @@ export class MonsterVisualManager {
     const drainStep = (MONSTER_HIT_FEEDBACK_CONFIG.hpTrailDrainPerSec * deltaMs) / 1000;
 
     for (const mv of monsters.values()) {
-      const ratio = Math.max(0, Math.min(1, mv.monster.hp / Math.max(1, mv.monster.maxHp)));
+      const m = mv.monster;
+      const ratio = Math.max(0, Math.min(1, m.hp / Math.max(1, m.maxHp)));
       const wasFlashing = mv.hpFlashUntil > 0 && now >= mv.hpFlashUntil;
+      const shieldExpired = Boolean(m.shieldUntil && m.shieldUntil > 0 && now >= m.shieldUntil);
       const needsTrailUpdate = mv.hpTrailRatio > ratio + 0.002;
       const isFlashing = now < mv.hpFlashUntil;
 
-      if (!needsTrailUpdate && !isFlashing && !wasFlashing) continue;
+      if (!needsTrailUpdate && !isFlashing && !wasFlashing && !shieldExpired) continue;
 
       if (needsTrailUpdate) {
         mv.hpTrailRatio = Math.max(ratio, mv.hpTrailRatio - drainStep);
       }
       if (wasFlashing) {
         mv.hpFlashUntil = 0;
+      }
+      if (shieldExpired) {
+        m.shieldUntil = 0;
+        m.shieldHp = 0;
+        m.shieldMaxHp = 0;
       }
       this.updateHpBar(mv, false);
     }
