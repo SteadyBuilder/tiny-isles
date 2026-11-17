@@ -1,7 +1,5 @@
 import Phaser from 'phaser';
-import { markPlayDataResetting, resetAllPlayData } from '../../../lib/adminResetService';
 import { sound } from '../../../lib/sound';
-import { storage } from '../../../lib/storage';
 import {
   ConstructedBuilding,
   Island,
@@ -12,7 +10,6 @@ import { RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
-import { LivingWorldCoordinator } from '../../systems/LivingWorldCoordinator';
 import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
@@ -33,7 +30,6 @@ export interface IWorldSystemsHost {
   onCoreDestroyed?: () => void;
   getPlayerPosition: () => { x: number; y: number };
   respawnPlayerAt: (x: number, y: number) => void;
-  applyRestoredPlayerPosition?: (x: number, y: number) => void;
   onPlayerFaintedVisual: (fainted: boolean) => void;
   onPlayerHitVisual: () => void;
   getLocalPlayerState: () => {
@@ -77,16 +73,14 @@ export interface WorldSystemsBundle {
   waveSystem: WaveSystem;
   towerDefenseSystem: TowerDefenseSystem;
   garrisonSystem: GarrisonSystem;
-  livingWorldCoordinator: LivingWorldCoordinator;
   multiplayerSync: MultiplayerSyncController;
 }
 
 /**
- * CoreGem, PlayerHealth, Wave, TowerDefense, Garrison, LivingWorld, MultiplayerSync 인스턴스를 생성/배선하는 팩토리
+ * CoreGem, PlayerHealth, Wave, TowerDefense, Garrison, MultiplayerSync 인스턴스를 생성/배선하는 팩토리
  */
 export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsBundle {
   let multiplayerSync!: MultiplayerSyncController;
-  let livingWorldCoordinator!: LivingWorldCoordinator;
 
   const playerHealthSystem = new PlayerHealthSystem({
     scene: host.scene,
@@ -154,7 +148,6 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
         multiplayerSync?.broadcastThreatSync(threatPercent, waveCount, bossWaveCount),
       emitThreatOrb: (worldX, worldY, amount) =>
         host.effectsRenderer.emitThreatOrbFromWorld(worldX, worldY, amount),
-      onMonstersChanged: () => livingWorldCoordinator?.requestImmediateSnapshot(),
     },
     coreGemSystem
   );
@@ -171,22 +164,6 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
   );
 
   const garrisonSystem = new GarrisonSystem({ scene: host.scene }, waveSystem);
-
-  livingWorldCoordinator = new LivingWorldCoordinator(
-    {
-      getPlayerId: host.getPlayerId,
-      getPlayerName: host.getPlayerName,
-      getPlayerColor: host.getPlayerColor,
-      getPlayerPosition: host.getPlayerPosition,
-      getCurrentTerritoryId: host.getCurrentTerritoryId,
-      getIslands: host.getIslands,
-      getConstructedBuildings: host.getConstructedBuildings,
-      applySyncedWorldState: host.applySyncedWorldState,
-      applyRestoredPlayerPosition: host.applyRestoredPlayerPosition,
-    },
-    waveSystem,
-    garrisonSystem
-  );
 
   multiplayerSync = new MultiplayerSyncController({
     scene: host.scene,
@@ -205,9 +182,6 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     },
     onHostStatusChanged: (isHost) => {
       waveSystem.setHostMode(isHost);
-      if (isHost) {
-        livingWorldCoordinator?.requestImmediateSnapshot();
-      }
     },
     onRemoteEntityHit: (entityId, damage) =>
       host.resourceEntityRenderer.handleRemoteHit(entityId, damage),
@@ -251,15 +225,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       coreGemSystem.applyRemoteCoreHpSync(territoryId, coreHp, coreMaxHp, damageDelta),
     onRemoteRepairTerritoryRequest: (territoryId) =>
       host.onRemoteRepairTerritoryRequest?.(territoryId),
-    onRemoteWorldDefenseFailed: (resetAt, attackerName) => {
-      markPlayDataResetting(true);
-      storage.resetAll();
-      try {
-        localStorage.setItem('tiny_isles_last_defense_reset_at', resetAt);
-      } catch {
-        // ignore storage error
-      }
-      GameEvents.emit('world-defense-failed', { resetAt, attackerName });
+    onRemoteWorldDefenseFailed: () => {
+      host.onCoreDestroyed?.();
     },
   });
   multiplayerSync.setup();
@@ -270,7 +237,6 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     waveSystem,
     towerDefenseSystem,
     garrisonSystem,
-    livingWorldCoordinator,
     multiplayerSync,
   };
 }

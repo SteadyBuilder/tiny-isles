@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { THREAT_WAVE_CONFIG } from '../data/worldRules';
-import { INITIAL_ISLANDS } from '../game/constants';
+import { getInitialConstructedBuildings, INITIAL_ISLANDS } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
-import { serverSync } from '../lib/serverSync';
 import { storage } from '../lib/storage';
-import { isPlayDataResetting, markPlayDataResetting } from '../lib/adminResetService';
-import { worldStateSync } from '../lib/worldStateSync';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
 import {
   ConstructedBuilding,
@@ -16,28 +13,14 @@ import {
   WaveState,
 } from '../types/game';
 
-/**
- * 게임 쉘(프로필, 인벤토리, 영지, 웨이브, 모달, 서버 동기화, 단축키) 상태를 통합 관리하는 커스텀 훅
- */
-export function useGameShellState() {
-  const playerIdRef = useRef<string>(storage.getPlayerId());
-  const [profile, setProfile] = useState(() => storage.loadProfile());
-  const [inventory, setInventory] = useState<Inventory>(() => storage.loadInventory());
-  const [onlineCount, setOnlineCount] = useState<number>(1);
-  const [unlockedIslandIds, setUnlockedIslandIds] = useState<number[]>(() => {
-    const saved = storage.loadUnlockedIslands();
-    return saved.length > 0 ? saved : [0];
-  });
-  const [islandStats, setIslandStats] = useState({
-    unlocked: unlockedIslandIds.length,
-    total: INITIAL_ISLANDS.length,
-  });
+const INITIAL_SESSION_INVENTORY: Inventory = {
+  wood: 30,
+  stone: 20,
+  gold: 10,
+};
 
-  const [territories, setTerritories] = useState<Island[]>(() => INITIAL_ISLANDS);
-  const [constructedBuildings, setConstructedBuildings] = useState<ConstructedBuilding[]>(() =>
-    storage.loadConstructedBuildings()
-  );
-  const [waveState, setWaveState] = useState<WaveState>({
+function createInitialWaveState(): WaveState {
+  return {
     threatPercent: 0,
     warningThreshold: THREAT_WAVE_CONFIG.warningThreshold,
     wavesUntilBoss: THREAT_WAVE_CONFIG.bossEveryNWaves,
@@ -48,7 +31,28 @@ export function useGameShellState() {
     nextWaveIsBoss: false,
     activeBoss: null,
     lastWaveMessage: null,
+  };
+}
+
+/**
+ * 게임 쉘(프로필, 세션 인벤토리, 영지, 웨이브, 모달, 단축키) 상태를 통합 관리하는 커스텀 훅
+ */
+export function useGameShellState() {
+  const playerIdRef = useRef<string>(storage.getPlayerId());
+  const [profile, setProfile] = useState(() => storage.loadProfile());
+  const [inventory, setInventory] = useState<Inventory>(INITIAL_SESSION_INVENTORY);
+  const [onlineCount, setOnlineCount] = useState<number>(1);
+  const [unlockedIslandIds, setUnlockedIslandIds] = useState<number[]>([0]);
+  const [islandStats, setIslandStats] = useState({
+    unlocked: 1,
+    total: INITIAL_ISLANDS.length,
   });
+
+  const [territories, setTerritories] = useState<Island[]>(() => INITIAL_ISLANDS);
+  const [constructedBuildings, setConstructedBuildings] = useState<ConstructedBuilding[]>(() =>
+    getInitialConstructedBuildings()
+  );
+  const [waveState, setWaveState] = useState<WaveState>(createInitialWaveState);
 
   const [showVillageModal, setShowVillageModal] = useState<boolean>(false);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<number>(0);
@@ -67,50 +71,15 @@ export function useGameShellState() {
     maxHp: 100,
     isFainted: false,
   });
-  const [defenseFailedResetAt, setDefenseFailedResetAt] = useState<string | null>(null);
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
     const handleHpUpdated = (next: PlayerHpState) => {
       setPlayerHp(next);
     };
-    const handleDefenseFailed = (payload?: { resetAt?: string }) => {
-      const resetAt = payload?.resetAt || new Date().toISOString();
-      setDefenseFailedResetAt(resetAt);
-    };
     GameEvents.on('player-hp-updated', handleHpUpdated);
-    GameEvents.on('world-defense-failed', handleDefenseFailed);
     return () => {
       GameEvents.off('player-hp-updated', handleHpUpdated);
-      GameEvents.off('world-defense-failed', handleDefenseFailed);
-    };
-  }, []);
-
-  // 미접속 플레이어가 재접속했을 때 본진 파괴로 인한 세계 초기화 공지 확인
-  useEffect(() => {
-    let isMounted = true;
-    const prevLastActiveAt = localStorage.getItem('tiny_isles_last_active_at');
-    const lastSeenResetAt = localStorage.getItem('tiny_isles_last_seen_reset_at');
-    localStorage.setItem('tiny_isles_last_active_at', new Date().toISOString());
-
-    worldStateSync.fetchLatestDefenseResetAt().then((resetAt) => {
-      if (!isMounted || !resetAt) return;
-      const resetMs = Date.parse(resetAt);
-      const prevActiveMs = prevLastActiveAt ? Date.parse(prevLastActiveAt) : NaN;
-      const lastSeenMs = lastSeenResetAt ? Date.parse(lastSeenResetAt) : NaN;
-
-      const playedBeforeReset = !Number.isNaN(prevActiveMs) && prevActiveMs < resetMs;
-      const notYetAcknowledged = Number.isNaN(lastSeenMs) || lastSeenMs < resetMs;
-
-      if (playedBeforeReset && notYetAcknowledged) {
-        markPlayDataResetting(true);
-        storage.resetAll();
-        setDefenseFailedResetAt(resetAt);
-      }
-    });
-
-    return () => {
-      isMounted = false;
     };
   }, []);
 
@@ -122,60 +91,10 @@ export function useGameShellState() {
     }, 6500);
   }, []);
 
-  // 서버에서 기존 플레이어 정보 복원
-  useEffect(() => {
-    let isMounted = true;
-    serverSync.fetchPlayer(playerIdRef.current).then((saved) => {
-      if (!isMounted || !saved) return;
-      if (saved.name) {
-        setProfile((prev) => {
-          const next = {
-            ...prev,
-            name: saved.name,
-            color: (saved.color as PlayerColor) || prev.color,
-          };
-          storage.saveProfile(next);
-          return next;
-        });
-      }
-      if (
-        typeof saved.wood === 'number' &&
-        typeof saved.stone === 'number' &&
-        typeof saved.gold === 'number'
-      ) {
-        const syncedInventory = {
-          wood: saved.wood,
-          stone: saved.stone,
-          gold: saved.gold,
-        };
-        setInventory(syncedInventory);
-        storage.saveInventory(syncedInventory);
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (!isPlayDataResetting()) {
-        serverSync.flushPlayerSync();
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('pagehide', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('pagehide', handleBeforeUnload);
-    };
-  }, []);
-
   const handleUpdateName = (name: string) => {
     setProfile((prev) => {
       const next = { ...prev, name };
       storage.saveProfile(next);
-      serverSync.savePlayer(playerIdRef.current, next, inventory);
       return next;
     });
   };
@@ -184,18 +103,12 @@ export function useGameShellState() {
     setProfile((prev) => {
       const next = { ...prev, color };
       storage.saveProfile(next);
-      serverSync.savePlayer(playerIdRef.current, next, inventory);
       return next;
     });
   };
 
   const handleUpdateInventory = (updater: (prev: Inventory) => Inventory) => {
-    setInventory((prev) => {
-      const next = updater(prev);
-      storage.saveInventory(next);
-      serverSync.savePlayer(playerIdRef.current, profile, next);
-      return next;
-    });
+    setInventory((prev) => updater(prev));
   };
 
   const handleUnlockedCountChange = (unlocked: number, total: number) => {
@@ -270,18 +183,26 @@ export function useGameShellState() {
     [territories, playerStandingTerritory?.id, handleShowAlert]
   );
 
-  const handleConfirmDefenseFailed = useCallback(() => {
-    if (defenseFailedResetAt) {
-      try {
-        localStorage.setItem('tiny_isles_last_seen_reset_at', defenseFailedResetAt);
-        localStorage.setItem('tiny_isles_last_active_at', new Date().toISOString());
-      } catch {
-        // ignore storage error
-      }
+  const resetSessionShellState = useCallback(() => {
+    setInventory(INITIAL_SESSION_INVENTORY);
+    setOnlineCount(1);
+    setUnlockedIslandIds([0]);
+    setIslandStats({ unlocked: 1, total: INITIAL_ISLANDS.length });
+    setTerritories(INITIAL_ISLANDS);
+    setConstructedBuildings(getInitialConstructedBuildings());
+    setWaveState(createInitialWaveState());
+    setShowVillageModal(false);
+    setSelectedTerritoryId(0);
+    setShowMinimapModal(false);
+    setNearIsland(null);
+    setPlayerGridPos({ gridX: 0, gridY: 0 });
+    setPlayerHp({ hp: 100, maxHp: 100, isFainted: false });
+    setAlertMessage(null);
+    if (alertTimerRef.current) {
+      clearTimeout(alertTimerRef.current);
+      alertTimerRef.current = null;
     }
-    setDefenseFailedResetAt(null);
-    window.location.reload();
-  }, [defenseFailedResetAt]);
+  }, []);
 
   return {
     playerId: playerIdRef.current,
@@ -312,7 +233,6 @@ export function useGameShellState() {
     setPlayerGridPos,
     playerStandingTerritoryId: playerStandingTerritory?.id ?? null,
     playerHp,
-    defenseFailedResetAt,
     joystickRef,
     currentTerritory,
     canBuildInCurrentTerritory,
@@ -325,6 +245,6 @@ export function useGameShellState() {
     handleZoomChange,
     handleOpenVillageModalForCurrent,
     handleOpenVillageModalById,
-    handleConfirmDefenseFailed,
+    resetSessionShellState,
   };
 }

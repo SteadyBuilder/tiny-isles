@@ -19,7 +19,6 @@ const STORAGE_KEYS = {
   CONSTRUCTED_BUILDINGS: 'tiny_isles_constructed_buildings',
   CORE_HPS: 'tiny_isles_core_hps',
   ZOOM: 'tiny_isles_zoom',
-  PLAYER_POSITION: 'tiny_isles_player_position',
   DATA_VERSION: 'tiny_isles_data_version',
 } as const;
 
@@ -34,7 +33,7 @@ function ensureCleanPlayDataVersion(): void {
     localStorage.removeItem(STORAGE_KEYS.VILLAGE_TIERS);
     localStorage.removeItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
     localStorage.removeItem(STORAGE_KEYS.CORE_HPS);
-    localStorage.removeItem(STORAGE_KEYS.PLAYER_POSITION);
+    localStorage.removeItem('tiny_isles_player_position');
     localStorage.removeItem('tiny_isles_world_sync_state');
     localStorage.removeItem('tiny_isles_garrisons');
     localStorage.setItem(STORAGE_KEYS.DATA_VERSION, PLAY_DATA_VERSION);
@@ -49,12 +48,6 @@ export interface SavedProfile {
   id?: string;
   name: string;
   color: PlayerColor;
-}
-
-export interface SavedPlayerPosition {
-  x: number;
-  y: number;
-  direction?: 'left' | 'right';
 }
 
 const DEFAULT_INVENTORY: Inventory = {
@@ -277,47 +270,6 @@ export const storage = {
     }
   },
 
-  loadPlayerPosition: (): SavedPlayerPosition | null => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.PLAYER_POSITION);
-      if (data) {
-        const parsed = JSON.parse(data);
-        if (
-          parsed &&
-          typeof parsed.x === 'number' &&
-          Number.isFinite(parsed.x) &&
-          typeof parsed.y === 'number' &&
-          Number.isFinite(parsed.y)
-        ) {
-          return {
-            x: parsed.x,
-            y: parsed.y,
-            direction: parsed.direction === 'left' ? 'left' : 'right',
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load player position from localStorage:', e);
-    }
-    return null;
-  },
-
-  savePlayerPosition: (pos: SavedPlayerPosition): void => {
-    try {
-      if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return;
-      localStorage.setItem(
-        STORAGE_KEYS.PLAYER_POSITION,
-        JSON.stringify({
-          x: Math.round(pos.x),
-          y: Math.round(pos.y),
-          direction: pos.direction === 'left' ? 'left' : 'right',
-        })
-      );
-    } catch (e) {
-      console.warn('Failed to save player position to localStorage:', e);
-    }
-  },
-
   resetAll: (): void => {
     try {
       localStorage.removeItem(STORAGE_KEYS.PROFILE);
@@ -329,7 +281,7 @@ export const storage = {
       localStorage.removeItem(STORAGE_KEYS.CONSTRUCTED_BUILDINGS);
       localStorage.removeItem(STORAGE_KEYS.CORE_HPS);
       localStorage.removeItem(STORAGE_KEYS.ZOOM);
-      localStorage.removeItem(STORAGE_KEYS.PLAYER_POSITION);
+      localStorage.removeItem('tiny_isles_player_position');
       localStorage.removeItem('tiny_isles_world_sync_state');
       localStorage.removeItem('tiny_isles_garrisons');
       localStorage.setItem(STORAGE_KEYS.DATA_VERSION, PLAY_DATA_VERSION);

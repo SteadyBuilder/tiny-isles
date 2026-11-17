@@ -21,7 +21,6 @@ import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRende
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
-import { isPlayDataResetting } from '../../../lib/adminResetService';
 
 export interface IWorldControllersHost {
   scene: Phaser.Scene;
@@ -243,11 +242,7 @@ export function createWorldControllersBundle(
     addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
     damageTerritoryCore: (id, dmg) =>
       host.systems.coreGemSystem.damageTerritoryCore(id, dmg, '마물 침공 테스트', true),
-    onWindowUnload: () => {
-      if (isPlayDataResetting()) return;
-      playerMovement.persistPositionNow();
-      void host.systems.livingWorldCoordinator?.persistAllSnapshots();
-    },
+    onWindowUnload: () => {},
   });
 
   const viewportCulling = new ViewportCullingController({

@@ -10,7 +10,6 @@ import {
   VillageTier,
   WorldSyncState,
 } from '../../types/game';
-import { storage } from '../../lib/storage';
 import { worldStateSync } from '../../lib/worldStateSync';
 import { GameEvents } from '../events/gameEvents';
 import { GarrisonSystem } from './GarrisonSystem';
@@ -28,7 +27,6 @@ export interface ILivingWorldContext {
     updatedIslands: Island[],
     updatedBuildings: ConstructedBuilding[]
   ) => void;
-  applyRestoredPlayerPosition?: (x: number, y: number) => void;
 }
 
 /**
@@ -67,18 +65,12 @@ export class LivingWorldCoordinator {
     this.initialized = true;
 
     const localPlayerId = this.ctx.getPlayerId();
-    const hasLocalPos = storage.loadPlayerPosition() !== null;
-    const [savedWorld, garrisons, myGarrison] = await Promise.all([
+    const [savedWorld, garrisons] = await Promise.all([
       worldStateSync.fetchWorldState(),
       worldStateSync.fetchGarrisons(localPlayerId),
-      hasLocalPos ? Promise.resolve(null) : worldStateSync.fetchPlayerGarrison(localPlayerId),
     ]);
 
     if (this.disposed) return;
-
-    if (!hasLocalPos && myGarrison) {
-      this.ctx.applyRestoredPlayerPosition?.(myGarrison.x, myGarrison.y);
-    }
 
     this.garrisonSystem.setGarrisons(garrisons);
     GameEvents.emit('garrisons-updated', garrisons);

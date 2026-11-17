@@ -199,8 +199,6 @@ export class WorldScene extends Phaser.Scene {
       onCoreDestroyed: () => this.missionSystem?.failByCoreDestroyed(),
       getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
       respawnPlayerAt: (x, y) => this.controllers?.playerMovement.respawnAt(x, y),
-      applyRestoredPlayerPosition: (x, y) =>
-        this.controllers?.playerMovement.applyRemoteRestoredPosition(x, y),
       onPlayerFaintedVisual: (fainted) => this.controllers?.playerMovement.setFaintedVisual(fainted),
       onPlayerHitVisual: () => this.controllers?.playerMovement.playHitVisual(),
       getLocalPlayerState: () => this.controllers.playerMovement.getState(),
@@ -394,7 +392,6 @@ export class WorldScene extends Phaser.Scene {
     this.unbindWebGLGuard = null;
     this.controllers?.playerMovement?.destroy();
     this.controllers?.towerPlacement?.destroy();
-    this.systems?.livingWorldCoordinator?.destroy();
     this.systems?.playerHealthSystem?.destroy();
     this.systems?.waveSystem?.destroy();
     this.systems?.coreGemSystem?.clearAllVisuals();

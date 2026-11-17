@@ -2,7 +2,6 @@ import type Phaser from 'phaser';
 import confetti from 'canvas-confetti';
 import { GOLD_MINE_BIOME_CONFIG } from '../../../data/biomes';
 import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
-import { serverSync } from '../../../lib/serverSync';
 import { sound } from '../../../lib/sound';
 import {
   ConstructableType,
@@ -391,7 +390,6 @@ export class TerritoryActionController {
     }
 
     if (isLocalTrigger) {
-      serverSync.saveUnlockedIsland(islandId, target.name, unlockedBy);
       this.ctx.broadcastUnlock(islandId, unlockedBy, resolvedOwnerId);
       this.ctx.emitThreatOrb?.(corePos.x, corePos.y, THREAT_WAVE_CONFIG.unlockThreatGain);
       this.ctx.addThreat(THREAT_WAVE_CONFIG.unlockThreatGain);

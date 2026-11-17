@@ -60,6 +60,7 @@ export function App() {
     handleZoomChange,
     handleOpenVillageModalForCurrent,
     handleOpenVillageModalById,
+    resetSessionShellState,
   } = useGameShellState();
 
   const {
@@ -78,10 +79,15 @@ export function App() {
     handleCreateCoopRoom,
     handleJoinCoopRoom,
     handleStartCoopMatch,
-    handleLeaveToLobby,
+    handleLeaveToLobby: leaveRoomToLobby,
     handleUpgradeTrait,
     handleSelectOrUnlockTitle,
   } = useRoomLobbyState(playerId, profile.name, profile.color);
+
+  const handleLeaveToLobby = () => {
+    leaveRoomToLobby();
+    resetSessionShellState();
+  };
 
   const [showLobbySettings, setShowLobbySettings] = useState(false);
   const [showLobbySound, setShowLobbySound] = useState(false);

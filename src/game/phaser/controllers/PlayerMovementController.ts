@@ -1,7 +1,5 @@
 import Phaser from 'phaser';
 import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
-import { isPlayDataResetting } from '../../../lib/adminResetService';
-import { storage } from '../../../lib/storage';
 import { Island, PlayerAction, PlayerColor } from '../../../types/game';
 import {
   TERRITORY_CENTER_X,
@@ -62,13 +60,6 @@ export class PlayerMovementController {
   private lastGridPos = { gridX: 0, gridY: 0 };
   private lastNearIsland: Island | null = null;
   private lastInteractTime = 0;
-  private lastSavedPos: { x: number; y: number } = {
-    x: PLAYER_COMBAT_CONFIG.mainVillageSpawn.x,
-    y: PLAYER_COMBAT_CONFIG.mainVillageSpawn.y,
-  };
-  private lastSavePosTime = 0;
-  private hasLocalSavedPosition = false;
-  private hasMovedSinceSpawn = false;
   private unbindInputs: Array<() => void> = [];
 
   constructor(ctx: IPlayerMovementContext) {
@@ -160,14 +151,10 @@ export class PlayerMovementController {
 
   public createPlayer(): void {
     const { scene } = this.ctx;
-    const savedPos = storage.loadPlayerPosition();
-    this.hasLocalSavedPosition = savedPos !== null;
-    this.hasMovedSinceSpawn = false;
-    const resolved = resolveSafeSpawnPosition(savedPos, this.ctx.getWaterBodies());
+    const resolved = resolveSafeSpawnPosition(null, this.ctx.getWaterBodies());
     const startX = resolved.x;
     const startY = resolved.y;
     this.currentDirection = resolved.direction;
-    this.lastSavedPos = { x: startX, y: startY };
 
     this.playerSprite = scene.physics.add.sprite(
       startX,
@@ -214,33 +201,6 @@ export class PlayerMovementController {
 
     this.playAnimation('idle');
     this.checkTerritoryAndGridUpdates();
-    if (resolved.usedFallback && savedPos) {
-      this.persistPositionNow();
-    }
-  }
-
-  public persistPositionNow(now: number = Date.now()): void {
-    if (!this.playerSprite || isPlayDataResetting()) return;
-    const x = Math.round(this.playerSprite.x);
-    const y = Math.round(this.playerSprite.y);
-    storage.savePlayerPosition({ x, y, direction: this.currentDirection });
-    this.lastSavedPos = { x, y };
-    this.lastSavePosTime = now;
-  }
-
-  public applyRemoteRestoredPosition(x: number, y: number): void {
-    if (this.hasLocalSavedPosition || this.hasMovedSinceSpawn || !this.playerSprite) return;
-    const resolved = resolveSafeSpawnPosition({ x, y }, this.ctx.getWaterBodies());
-    if (resolved.usedFallback) return;
-
-    this.pointerController.clearTarget();
-    this.playerSprite.setPosition(resolved.x, resolved.y);
-    this.playerSprite.setVelocity(0, 0);
-    this.playerNameTag.setPosition(resolved.x, resolved.y - 42);
-    this.playerIndicator.setPosition(resolved.x, resolved.y - 54);
-    this.updateHpBar(this.currentHp, this.currentMaxHp);
-    this.checkTerritoryAndGridUpdates();
-    this.persistPositionNow();
   }
 
   public updateHpBar(hp: number, maxHp: number): void {
@@ -391,7 +351,6 @@ export class PlayerMovementController {
     }
 
     if (vx !== 0 || vy !== 0) {
-      this.hasMovedSinceSpawn = true;
       const len = Math.hypot(vx, vy);
       const factor = usingJoystick ? (len >= 0.45 ? 1 : len / 0.45) : Math.min(1, len);
       this.playerSprite.setVelocity((vx / len) * speed * factor, (vy / len) * speed * factor);
@@ -423,13 +382,6 @@ export class PlayerMovementController {
     const isHoldInput = this.spaceKey?.isDown || this.eKey?.isDown || this.isActionHolding;
     if (isHoldInput && time - this.lastInteractTime >= 240) {
       this.ctx.onInteract();
-    }
-
-    if (
-      Math.hypot(px - this.lastSavedPos.x, py - this.lastSavedPos.y) >= 16 &&
-      time - this.lastSavePosTime >= 1000
-    ) {
-      this.persistPositionNow(time);
     }
 
     this.pointerController.updateZoom(delta);
@@ -467,7 +419,6 @@ export class PlayerMovementController {
   }
 
   public destroy(): void {
-    this.persistPositionNow();
     for (const unbind of this.unbindInputs) {
       unbind();
     }

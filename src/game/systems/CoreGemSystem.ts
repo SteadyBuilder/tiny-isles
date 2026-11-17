@@ -198,12 +198,12 @@ export class CoreGemSystem {
         this.ctx.broadcastTerritoryLost(territoryId);
       }
     } else {
-      // #0 중심 마을 본진이 파괴된 경우: 방어 실패 -> 전 플레이어 공지 및 세계/데이터 초기화
+      // #0 중심 마을 본진이 파괴된 경우: 인스턴스 룸 방어 실패(미션 패배) 처리
       if (this.defenseResetTriggered) return;
       this.defenseResetTriggered = true;
 
       const resetAt = new Date().toISOString();
-      const failMsg = '방어에 실패하였습니다. 세계가 초기화 됩니다.';
+      const failMsg = '중심 마을 본진이 파괴되었습니다. 방어에 실패했습니다.';
       this.ctx.showFloatingText(hitPos.x, hitPos.y - 50, `💥 ${failMsg}`, '#ef4444');
       GameEvents.emit('game-alert', failMsg);
 
@@ -211,7 +211,6 @@ export class CoreGemSystem {
         this.ctx.broadcastWorldDefenseFailed?.(resetAt, attackerName);
         this.ctx.onDefenseFailedReset?.(resetAt, attackerName);
       }
-      GameEvents.emit('world-defense-failed', { resetAt, attackerName });
     }
   }
 
