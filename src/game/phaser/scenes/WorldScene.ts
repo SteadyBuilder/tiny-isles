@@ -218,6 +218,8 @@ export class WorldScene extends Phaser.Scene {
       respawnPlayerAt: (x, y) => this.controllers?.playerMovement.respawnAt(x, y),
       onPlayerFaintedVisual: (fainted) => this.controllers?.playerMovement.setFaintedVisual(fainted),
       onPlayerHitVisual: () => this.controllers?.playerMovement.playHitVisual(),
+      onPlayerCastVisual: (durationMs) =>
+        this.controllers?.playerMovement.playCastVisual(durationMs),
       onPlayerClassVisualChanged: (classId) =>
         this.controllers?.playerMovement.setPlayerClassVisual(classId),
       getLocalPlayerState: () => this.controllers.playerMovement.getState(),

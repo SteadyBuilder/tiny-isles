@@ -123,8 +123,8 @@ export class PlayerInteractionController {
           targetX: hitX,
           targetY: hitY,
           durationMs: 165,
-          tint: isMage ? 0xc084fc : 0x38bdf8,
-          size: isMage ? 38 : 34,
+          tint: isMage ? undefined : 0x38bdf8,
+          size: isMage ? 46 : 34,
           isMagic: isMage,
           onArrive: () => {
             if (isMage) {

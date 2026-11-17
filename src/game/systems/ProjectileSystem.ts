@@ -47,14 +47,17 @@ export class ProjectileSystem {
     this.fxGraphics.setDepth(DEPTH.SPARK);
   }
 
-  private acquireSprite(): Phaser.GameObjects.Image {
+  private acquireSprite(isMagic = false): Phaser.GameObjects.Image {
+    const texKey =
+      isMagic && this.scene.textures.exists('magicProj') ? 'magicProj' : 'arrowProj';
     const popped = this.pool.pop();
     if (popped && popped.scene) {
+      popped.setTexture(texKey);
       popped.setActive(true);
       popped.setVisible(true);
       return popped;
     }
-    const img = this.scene.add.image(0, 0, 'arrowProj');
+    const img = this.scene.add.image(0, 0, texKey);
     img.setDepth(DEPTH.PROJECTILE);
     return img;
   }
@@ -88,12 +91,16 @@ export class ProjectileSystem {
     const vy = (dy / durationMs) * 1000;
     const angle = Math.atan2(dy, dx);
 
-    const sprite = this.acquireSprite();
-    const size = params.size ?? 34;
+    const sprite = this.acquireSprite(Boolean(params.isMagic));
+    const size = params.size ?? (params.isMagic ? 44 : 34);
     sprite.setPosition(params.startX, params.startY);
     sprite.setDisplaySize(size, size);
     sprite.setRotation(angle);
-    sprite.setTint(params.tint ?? 0xffffff);
+    if (params.tint !== undefined) {
+      sprite.setTint(params.tint);
+    } else {
+      sprite.clearTint();
+    }
 
     this.activeProjectiles.push({
       sprite,

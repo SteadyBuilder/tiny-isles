@@ -10,7 +10,7 @@ export interface Inventory {
   gold: number;
 }
 
-export type PlayerAction = 'idle' | 'run' | 'axe' | 'pickaxe';
+export type PlayerAction = 'idle' | 'run' | 'axe' | 'pickaxe' | 'cast' | 'hit' | 'stun';
 export type PlayerColor = 'blue' | 'red';
 
 export interface Player {

@@ -197,6 +197,25 @@ export class MonsterRangedMageAI {
     if (m.role === 'mage' && this.ctx.projectileSystem) {
       const strikeX = targetX;
       const strikeY = targetY;
+      if (mv.sprite.scene?.anims.exists('monster_archmage_cast')) {
+        mv.sprite.play('monster_archmage_cast', true);
+        mv.sprite.once('animationcomplete', () => {
+          if (mv.sprite.active && mv.sprite.scene?.anims.exists('monster_archmage_run')) {
+            mv.sprite.play('monster_archmage_run', true);
+          }
+        });
+      }
+      this.ctx.projectileSystem.fireProjectile({
+        startX: m.x,
+        startY: m.y - 18,
+        targetX: strikeX,
+        targetY: strikeY,
+        durationMs: 320,
+        tint: 0xd946ef,
+        size: 42,
+        isMagic: true,
+        onArrive: () => {},
+      });
       this.ctx.projectileSystem.spawnTelegraphZone({
         x: strikeX,
         y: strikeY,

@@ -211,8 +211,18 @@ export class PlayerMovementController {
       this.currentClassId !== 'pawn'
         ? `${color}_${this.currentClassId}_${action}`
         : `${color}_${action}`;
-    const fallbackKey = `${color}_${action}`;
-    const targetKey = this.ctx.scene.anims.exists(classAnimKey) ? classAnimKey : fallbackKey;
+    const classIdleKey =
+      this.currentClassId !== 'pawn'
+        ? `${color}_${this.currentClassId}_idle`
+        : `${color}_idle`;
+    const baseFallbackKey = `${color}_${action}`;
+
+    const targetKey = this.ctx.scene.anims.exists(classAnimKey)
+      ? classAnimKey
+      : this.ctx.scene.anims.exists(baseFallbackKey)
+      ? baseFallbackKey
+      : classIdleKey;
+
     if (this.ctx.scene.anims.exists(targetKey)) {
       this.playerSprite.play(targetKey, true);
     }
@@ -323,21 +333,38 @@ export class PlayerMovementController {
       this.dashController.cancelDash(this.playerSprite);
       this.pointerController.clearTarget();
       this.playerSprite.setVelocity(0, 0);
-      this.playerSprite.setAlpha(0.45);
+      this.playerSprite.setAlpha(0.65);
       this.playerSprite.setTint(0x94a3b8);
-      this.playAnimation('idle');
+      this.playAnimation('stun');
     } else {
       this.playerSprite.setAlpha(1);
       this.playerSprite.clearTint();
+      this.playAnimation('idle');
     }
   }
 
   public playHitVisual(): void {
     if (!this.playerSprite || this.isFainted) return;
     this.playerSprite.setTint(0xf87171);
-    this.ctx.scene.time.delayedCall(140, () => {
+    if (this.currentAction !== 'cast') {
+      this.playAnimation('hit');
+    }
+    this.ctx.scene.time.delayedCall(220, () => {
       if (!this.isFainted && this.playerSprite?.active && !this.dashController.getIsDashing()) {
         this.playerSprite.clearTint();
+        if (this.currentAction === 'hit') {
+          this.playAnimation('idle');
+        }
+      }
+    });
+  }
+
+  public playCastVisual(durationMs = 520): void {
+    if (!this.playerSprite || this.isFainted) return;
+    this.playAnimation('cast');
+    this.ctx.scene.time.delayedCall(durationMs, () => {
+      if (!this.isFainted && this.playerSprite?.active && this.currentAction === 'cast') {
+        this.playAnimation('idle');
       }
     });
   }
@@ -467,7 +494,13 @@ export class PlayerMovementController {
         else if (vx > 0) this.currentDirection = 'right';
         this.playerSprite.setFlipX(this.currentDirection === 'left');
 
-        if (this.currentAction !== 'axe' && this.currentAction !== 'pickaxe') {
+        if (
+          this.currentAction !== 'axe' &&
+          this.currentAction !== 'pickaxe' &&
+          this.currentAction !== 'cast' &&
+          this.currentAction !== 'hit' &&
+          this.currentAction !== 'stun'
+        ) {
           this.playAnimation('run');
         }
       } else {

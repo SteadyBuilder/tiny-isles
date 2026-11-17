@@ -52,6 +52,7 @@ export interface IWorldSystemsHost {
   respawnPlayerAt: (x: number, y: number) => void;
   onPlayerFaintedVisual: (fainted: boolean) => void;
   onPlayerHitVisual: () => void;
+  onPlayerCastVisual?: (durationMs?: number) => void;
   onPlayerClassVisualChanged?: (classId: PlayerClassId) => void;
   getLocalPlayerState: () => {
     x: number;
@@ -254,7 +255,12 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     projectileSystem,
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
-    playSkillEffect: (fxCtx) => host.skillEffectsRenderer.playClassSkill(fxCtx),
+    playSkillEffect: (fxCtx) => {
+      if (fxCtx.classId === 'archmage') {
+        host.onPlayerCastVisual?.(650);
+      }
+      host.skillEffectsRenderer.playClassSkill(fxCtx);
+    },
     triggerSkillSurge: host.triggerSkillSurge,
     getJobHallStatus: () => {
       const pos = host.getPlayerPosition();

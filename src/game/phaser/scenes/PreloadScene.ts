@@ -80,6 +80,7 @@ export class PreloadScene extends Phaser.Scene {
 
     // Projectiles & FX
     this.load.image('arrowProj', '/assets/fx/Arrow.png');
+    this.load.image('magicProj', '/assets/fx/Magic_Projectile.png');
     this.load.spritesheet('explosionFx', '/assets/fx/Explosion_01.png', {
       frameWidth: 192,
       frameHeight: 192,

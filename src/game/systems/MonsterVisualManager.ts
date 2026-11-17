@@ -50,7 +50,7 @@ export class MonsterVisualManager {
       texKey = scene.textures.exists(candidateKey) ? candidateKey : 'enemyPurpleWarriorRun';
       if (texKey === 'enemyLancerRun' && scene.anims.exists('monster_lancer_run')) {
         animKey = 'monster_lancer_run';
-      } else if (texKey === 'enemyMonkRun' && scene.anims.exists('monster_archmage_run')) {
+      } else if (texKey === 'enemyArchmageRun' && scene.anims.exists('monster_archmage_run')) {
         animKey = 'monster_archmage_run';
       } else if (texKey === 'enemyArcherRun' && scene.anims.exists('monster_skeleton_run')) {
         animKey = 'monster_skeleton_run';
@@ -72,13 +72,13 @@ export class MonsterVisualManager {
         : 'monster_zombie_run';
       displaySize = 165;
     } else if (monster.type === 'archmage' || monster.role === 'mage') {
-      texKey = scene.textures.exists('enemyMonkRun')
-        ? 'enemyMonkRun'
+      texKey = scene.textures.exists('enemyArchmageRun')
+        ? 'enemyArchmageRun'
         : 'enemyPurpleWarriorRun';
       animKey = scene.anims.exists('monster_archmage_run')
         ? 'monster_archmage_run'
         : 'monster_boss_run';
-      displaySize = 126;
+      displaySize = 128;
     }
 
     if (monster.isElite && !monster.isBoss) {

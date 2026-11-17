@@ -45,15 +45,27 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
       frameHeight: 192,
     });
 
-    scene.load.spritesheet(`${color}MonkIdle`, `/assets/units/${color}/Monk_Idle.png`, {
+    scene.load.spritesheet(`${color}ArchmageIdle`, `/assets/units/${color}/Archmage_Idle.png`, {
       frameWidth: 192,
       frameHeight: 192,
     });
-    scene.load.spritesheet(`${color}MonkRun`, `/assets/units/${color}/Monk_Run.png`, {
+    scene.load.spritesheet(`${color}ArchmageRun`, `/assets/units/${color}/Archmage_Run.png`, {
       frameWidth: 192,
       frameHeight: 192,
     });
-    scene.load.spritesheet(`${color}MonkAttack`, `/assets/units/${color}/Monk_Attack.png`, {
+    scene.load.spritesheet(`${color}ArchmageAttack`, `/assets/units/${color}/Archmage_Attack.png`, {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+    scene.load.spritesheet(`${color}ArchmageCast`, `/assets/units/${color}/Archmage_Cast.png`, {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+    scene.load.spritesheet(`${color}ArchmageHit`, `/assets/units/${color}/Archmage_Hit.png`, {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
+    scene.load.spritesheet(`${color}ArchmageStun`, `/assets/units/${color}/Archmage_Stun.png`, {
       frameWidth: 192,
       frameHeight: 192,
     });
@@ -72,11 +84,23 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
     frameWidth: 320,
     frameHeight: 320,
   });
-  scene.load.spritesheet('enemyMonkRun', '/assets/units/enemies/Black_Monk_Run.png', {
+  scene.load.spritesheet('enemyArchmageRun', '/assets/units/enemies/Black_Archmage_Run.png', {
     frameWidth: 192,
     frameHeight: 192,
   });
-  scene.load.spritesheet('enemyMonkAttack', '/assets/units/enemies/Black_Monk_Attack.png', {
+  scene.load.spritesheet('enemyArchmageAttack', '/assets/units/enemies/Black_Archmage_Attack.png', {
+    frameWidth: 192,
+    frameHeight: 192,
+  });
+  scene.load.spritesheet('enemyArchmageCast', '/assets/units/enemies/Black_Archmage_Cast.png', {
+    frameWidth: 192,
+    frameHeight: 192,
+  });
+  scene.load.spritesheet('enemyArchmageHit', '/assets/units/enemies/Black_Archmage_Hit.png', {
+    frameWidth: 192,
+    frameHeight: 192,
+  });
+  scene.load.spritesheet('enemyArchmageStun', '/assets/units/enemies/Black_Archmage_Stun.png', {
     frameWidth: 192,
     frameHeight: 192,
   });
@@ -251,7 +275,7 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
     { id: 'guardian', prefix: 'Warrior', idleEnd: 7, runEnd: 5, atkEnd: 3 },
     { id: 'lancer', prefix: 'Lancer', idleEnd: 11, runEnd: 5, atkEnd: 2 },
     { id: 'ranger', prefix: 'Archer', idleEnd: 5, runEnd: 3, atkEnd: 7 },
-    { id: 'archmage', prefix: 'Monk', idleEnd: 5, runEnd: 3, atkEnd: 10 },
+    { id: 'archmage', prefix: 'Archmage', idleEnd: 5, runEnd: 5, atkEnd: 5 },
   ] as const;
 
   for (const color of colors) {
@@ -259,6 +283,9 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
       const idleTex = `${color}${cls.prefix}Idle`;
       const runTex = `${color}${cls.prefix}Run`;
       const atkTex = `${color}${cls.prefix}Attack`;
+      const castTex = `${color}${cls.prefix}Cast`;
+      const hitTex = `${color}${cls.prefix}Hit`;
+      const stunTex = `${color}${cls.prefix}Stun`;
 
       if (scene.textures.exists(idleTex)) {
         scene.anims.create({
@@ -290,6 +317,30 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
           repeat: 0,
         });
       }
+      if (scene.textures.exists(castTex)) {
+        scene.anims.create({
+          key: `${color}_${cls.id}_cast`,
+          frames: scene.anims.generateFrameNumbers(castTex, { start: 0, end: 4 }),
+          frameRate: 11,
+          repeat: 0,
+        });
+      }
+      if (scene.textures.exists(hitTex)) {
+        scene.anims.create({
+          key: `${color}_${cls.id}_hit`,
+          frames: scene.anims.generateFrameNumbers(hitTex, { start: 0, end: 4 }),
+          frameRate: 16,
+          repeat: 0,
+        });
+      }
+      if (scene.textures.exists(stunTex)) {
+        scene.anims.create({
+          key: `${color}_${cls.id}_stun`,
+          frames: scene.anims.generateFrameNumbers(stunTex, { start: 0, end: 5 }),
+          frameRate: 10,
+          repeat: -1,
+        });
+      }
     }
   }
 
@@ -302,11 +353,43 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
       repeat: -1,
     });
   }
-  if (scene.textures.exists('enemyMonkRun')) {
+  if (scene.textures.exists('enemyArchmageRun')) {
     scene.anims.create({
       key: 'monster_archmage_run',
-      frames: scene.anims.generateFrameNumbers('enemyMonkRun', { start: 0, end: 3 }),
-      frameRate: 7,
+      frames: scene.anims.generateFrameNumbers('enemyArchmageRun', { start: 0, end: 5 }),
+      frameRate: 9,
+      repeat: -1,
+    });
+  }
+  if (scene.textures.exists('enemyArchmageAttack')) {
+    scene.anims.create({
+      key: 'monster_archmage_attack',
+      frames: scene.anims.generateFrameNumbers('enemyArchmageAttack', { start: 0, end: 5 }),
+      frameRate: 14,
+      repeat: 0,
+    });
+  }
+  if (scene.textures.exists('enemyArchmageCast')) {
+    scene.anims.create({
+      key: 'monster_archmage_cast',
+      frames: scene.anims.generateFrameNumbers('enemyArchmageCast', { start: 0, end: 4 }),
+      frameRate: 11,
+      repeat: 0,
+    });
+  }
+  if (scene.textures.exists('enemyArchmageHit')) {
+    scene.anims.create({
+      key: 'monster_archmage_hit',
+      frames: scene.anims.generateFrameNumbers('enemyArchmageHit', { start: 0, end: 4 }),
+      frameRate: 16,
+      repeat: 0,
+    });
+  }
+  if (scene.textures.exists('enemyArchmageStun')) {
+    scene.anims.create({
+      key: 'monster_archmage_stun',
+      frames: scene.anims.generateFrameNumbers('enemyArchmageStun', { start: 0, end: 5 }),
+      frameRate: 10,
       repeat: -1,
     });
   }

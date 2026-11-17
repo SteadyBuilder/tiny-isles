@@ -89,7 +89,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_lich_king',
     name: '🔮 불사의 리치 킹',
     type: 'archmage',
-    spriteKey: 'enemyMonkRun',
+    spriteKey: 'enemyArchmageRun',
     tintHex: 0xc084fc,
     scale: 1.05,
     skillId: 'frost_nova',
