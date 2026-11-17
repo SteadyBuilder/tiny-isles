@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
 import {
   ConstructedBuilding,
   Inventory,
@@ -208,6 +209,10 @@ export function createWorldControllersBundle(
       host.resourceEntityRenderer.getEntityInteractionPoint(visual),
     onInteract: () => playerInteraction.tryInteract(),
     isPlacementActive: () => towerPlacement.isActive(),
+    getAttackRange: (isBoss) => {
+      const baseRange = host.systems.playerProgressionSystem.getClassDef().attackRange;
+      return isBoss ? Math.max(baseRange, PLAYER_COMBAT_CONFIG.meleeRangeBoss) : baseRange;
+    },
     getConstructedBuildings: host.getConstructedBuildings,
   });
 

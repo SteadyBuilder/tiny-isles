@@ -26,6 +26,7 @@ export interface IPlayerPointerContext {
   getEntityInteractionPoint: (visual: EntityVisual) => { x: number; y: number };
   onInteract: () => void;
   isPlacementActive?: () => boolean;
+  getAttackRange?: (isBoss: boolean) => number;
 }
 
 /**
@@ -35,7 +36,12 @@ export class PlayerPointerController {
   private ctx: IPlayerPointerContext;
   private mouseTarget: { x: number; y: number; active: boolean } = { x: 0, y: 0, active: false };
   private touchIndicator!: Phaser.GameObjects.Image;
-  private touchTargetObj: { x: number; y: number; entityVisual?: EntityVisual } | null = null;
+  private touchTargetObj: {
+    x: number;
+    y: number;
+    entityVisual?: EntityVisual;
+    stopDistance?: number;
+  } | null = null;
   private targetZoom: number;
 
   constructor(ctx: IPlayerPointerContext) {
@@ -104,9 +110,10 @@ export class PlayerPointerController {
     const dist = Phaser.Math.Distance.Between(px, py, this.mouseTarget.x, this.mouseTarget.y);
 
     if (this.touchTargetObj) {
+      const stopDistance = this.touchTargetObj.stopDistance ?? 90;
       const reachedTarget = this.touchTargetObj.entityVisual
         ? this.ctx.isWithinEntityGatherRange(px, py, this.touchTargetObj.entityVisual)
-        : dist < 90;
+        : dist <= stopDistance;
 
       if (reachedTarget) {
         this.mouseTarget.active = false;
@@ -169,12 +176,19 @@ export class PlayerPointerController {
         px - touchedMonster.monster.x,
         py - touchedMonster.monster.y
       );
-      const meleeRange = touchedMonster.monster.isBoss
-        ? PLAYER_COMBAT_CONFIG.meleeRangeBoss
-        : PLAYER_COMBAT_CONFIG.meleeRangeRegular;
-      this.touchTargetObj = { x: touchedMonster.monster.x, y: touchedMonster.monster.y };
-      if (distFromPlayer < meleeRange) {
+      const attackRange =
+        this.ctx.getAttackRange?.(touchedMonster.monster.isBoss) ??
+        (touchedMonster.monster.isBoss
+          ? PLAYER_COMBAT_CONFIG.meleeRangeBoss
+          : PLAYER_COMBAT_CONFIG.meleeRangeRegular);
+      this.touchTargetObj = {
+        x: touchedMonster.monster.x,
+        y: touchedMonster.monster.y,
+        stopDistance: Math.max(36, attackRange - 4),
+      };
+      if (distFromPlayer <= attackRange) {
         this.mouseTarget.active = false;
+        this.touchTargetObj = null;
         this.ctx.onInteract();
       } else {
         this.mouseTarget = { x: touchedMonster.monster.x, y: touchedMonster.monster.y, active: true };

@@ -77,10 +77,10 @@ export const PLAYER_COMBAT_CONFIG = {
   maxHp: 100,
   /** 플레이어 근접 공격 기본 데미지 */
   meleeDamage: 35,
-  /** 일반 몬스터 근접 공격 사거리 (px) */
-  meleeRangeRegular: 130,
+  /** 일반 몬스터 근접 공격 사거리 (px) - 자원 채집 거리와 동일 수준 */
+  meleeRangeRegular: 60,
   /** 보스 몬스터 근접 공격 사거리 (px) */
-  meleeRangeBoss: 165,
+  meleeRangeBoss: 80,
   /** 기절 후 메인 마을 리스폰 대기 시간 (ms) */
   faintRespawnDelayMs: 1500,
   /** 리스폰 직후 무적 유지 시간 (ms) */

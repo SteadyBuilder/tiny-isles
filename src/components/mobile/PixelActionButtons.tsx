@@ -1,23 +1,34 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { PLAYER_CLASS_DEFINITIONS } from '../../data/classes';
 import { GameEvents } from '../../game/events/gameEvents';
 import { sound } from '../../lib/sound';
 import { GESTURE_BLOCK_PROPS, attachGestureBlock } from '../../lib/touchGestureGuard';
+import { PlayerProgressionState } from '../../types/game';
 
 export interface PixelActionButtonsProps {
   onAction: () => void;
   onOpenVillageModal?: () => void;
   canBuild?: boolean;
+  progression?: PlayerProgressionState;
 }
 
 export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
   onAction,
   onOpenVillageModal,
   canBuild = false,
+  progression,
 }) => {
   const [isActionActive, setIsActionActive] = useState(false);
   const [isBuildPressed, setIsBuildPressed] = useState(false);
+  const [isSkillPressed, setIsSkillPressed] = useState(false);
   const actionPointerIdRef = useRef<number | null>(null);
   const actionZoneRef = useRef<HTMLDivElement | null>(null);
+
+  const classDef = progression ? PLAYER_CLASS_DEFINITIONS[progression.classId] : null;
+  const skillCooldownSec = progression
+    ? Math.max(0, Math.ceil(progression.skillCooldownRemainingMs / 1000))
+    : 0;
+  const isSkillOnCooldown = skillCooldownSec > 0;
 
   useEffect(() => {
     const el = actionZoneRef.current;
@@ -85,7 +96,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           onPointerUp={() => setIsBuildPressed(false)}
           onPointerLeave={() => setIsBuildPressed(false)}
           onPointerCancel={() => setIsBuildPressed(false)}
-          className="relative w-12 h-12 flex items-center justify-center select-none hover:brightness-110"
+          className="relative w-11 h-11 flex items-center justify-center select-none hover:brightness-110"
           aria-label="마을 건설 버튼"
           title="마을 발전 및 건설"
         >
@@ -101,10 +112,61 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           <img
             src="/assets/ui/Icons/Tool_Hammer.png"
             alt="건설"
-            className={`absolute w-6 h-6 pixel-art drop-shadow-[0_1px_0_rgba(0,0,0,0.7)] transition-transform duration-75 ${
+            className={`absolute w-5 h-5 pixel-art drop-shadow-[0_1px_0_rgba(0,0,0,0.7)] transition-transform duration-75 ${
               isBuildPressed ? 'translate-y-[2px]' : '-translate-y-[1px]'
             }`}
           />
+        </button>
+      )}
+
+      {classDef && (
+        <button
+          id="mobile-skill-btn"
+          type="button"
+          disabled={isSkillOnCooldown}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isSkillOnCooldown) return;
+            setIsSkillPressed(true);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+            sound.playClick();
+            GameEvents.emit('cast-active-skill');
+          }}
+          onPointerUp={() => setIsSkillPressed(false)}
+          onPointerLeave={() => setIsSkillPressed(false)}
+          onPointerCancel={() => setIsSkillPressed(false)}
+          className={`relative w-12 h-12 rounded-full flex items-center justify-center select-none transition-[filter] ${
+            isSkillOnCooldown
+              ? 'cursor-not-allowed grayscale opacity-75'
+              : 'hover:brightness-110'
+          }`}
+          aria-label={`${classDef.skillName} 스킬 버튼`}
+          title={`${classDef.skillName}: ${classDef.skillDescription}`}
+        >
+          <img
+            src={
+              isSkillPressed && !isSkillOnCooldown
+                ? '/assets/ui/round_blue_pressed.png'
+                : '/assets/ui/round_blue.png'
+            }
+            alt=""
+            className="w-full h-full object-contain pixel-art drop-shadow-[0_4px_6px_rgba(0,0,0,0.75)]"
+          />
+          <span
+            className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-75 ${
+              isSkillPressed && !isSkillOnCooldown ? 'translate-y-[2px]' : '-translate-y-[1px]'
+            }`}
+          >
+            <span className="text-lg leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
+              {classDef.skillIcon}
+            </span>
+          </span>
+          {isSkillOnCooldown && (
+            <span className="absolute inset-1 rounded-full bg-black/60 flex items-center justify-center text-[11px] font-black text-[#fca5a5] pixel-btn-shadow pointer-events-none">
+              {skillCooldownSec}s
+            </span>
+          )}
         </button>
       )}
 

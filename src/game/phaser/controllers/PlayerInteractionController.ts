@@ -88,7 +88,9 @@ export class PlayerInteractionController {
     // 1. 마물 타격 (전직 클래스별 사거리·원거리·광역·관통 특성 반영)
     const targetsInRange: Array<{ mv: MonsterVisual; dist: number }> = [];
     for (const mv of this.ctx.getMonsterVisuals().values()) {
-      const range = mv.monster.isBoss ? Math.max(baseRange, 165) : baseRange;
+      const range = mv.monster.isBoss
+        ? Math.max(baseRange, PLAYER_COMBAT_CONFIG.meleeRangeBoss)
+        : baseRange;
       const d = Math.hypot(px - mv.monster.x, py - mv.monster.y);
       if (d <= range) {
         targetsInRange.push({ mv, dist: d });

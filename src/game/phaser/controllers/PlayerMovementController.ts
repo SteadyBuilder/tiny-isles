@@ -41,6 +41,7 @@ export interface IPlayerMovementContext {
   onInteract: () => void;
   isPlacementActive?: () => boolean;
   getMoveSpeed?: () => number;
+  getAttackRange?: (isBoss: boolean) => number;
   getConstructedBuildings?: () => ConstructedBuilding[];
 }
 
@@ -89,6 +90,7 @@ export class PlayerMovementController {
       getEntityInteractionPoint: ctx.getEntityInteractionPoint,
       onInteract: ctx.onInteract,
       isPlacementActive: ctx.isPlacementActive,
+      getAttackRange: ctx.getAttackRange,
     });
   }
 

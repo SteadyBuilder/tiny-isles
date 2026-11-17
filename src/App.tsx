@@ -225,6 +225,7 @@ export function App() {
         nearIsland={nearIsland}
         onZoomChange={handleZoomChange}
         currentZoom={zoom}
+        progression={playerProgression}
       />
 
       <MinimapModal
