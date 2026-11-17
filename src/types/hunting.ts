@@ -10,29 +10,68 @@ export type EliteAffixId = 'berserker' | 'swift' | 'vampiric' | 'arcane_nova' | 
 
 export type EquipmentSlot = 'weapon' | 'armor' | 'relic';
 
-export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'set';
 
-export interface ItemTemplate {
-  id: string;
-  name: string;
-  icon: string;
-  slot: EquipmentSlot;
-  rarity: ItemRarity;
-  minRing: 1 | 2 | 3 | 4;
+export type ItemSetId = 'set_bulwark' | 'set_stormdragon' | 'set_skywind' | 'set_abyssalsage';
+
+export interface EquipmentStats {
   bonusAttack: number;
   bonusMaxHp: number;
   bonusSpeed: number;
+  bonusCritChance?: number;
+  bonusCritDamagePercent?: number;
+  bonusLifestealPercent?: number;
+  bonusCooldownReductionPercent?: number;
+  bonusAttackSpeedPercent?: number;
+  bonusSkillDamagePercent?: number;
+  bonusDamageReductionPercent?: number;
+  bonusThornsDamage?: number;
+  bonusHpRegenPerSec?: number;
+  bonusAttackRange?: number;
+}
+
+export interface ItemTemplate extends EquipmentStats {
+  id: string;
+  name: string;
+  icon: string;
+  spritePath: string;
+  textureKey: string;
+  slot: EquipmentSlot;
+  rarity: ItemRarity;
+  minRing: 1 | 2 | 3 | 4;
   salvageGold: number;
   description: string;
+  preferredClass?: PlayerClassId | 'all';
+  setId?: ItemSetId;
 }
 
 export interface EquipmentItem extends ItemTemplate {
   instanceId: string;
   obtainedAt: number;
-  bonusCritChance?: number;
-  bonusLifestealPercent?: number;
-  bonusCooldownReductionPercent?: number;
   affixLabel?: string;
+}
+
+export interface ItemSetBonusTier {
+  requiredPieces: 2 | 3;
+  label: string;
+  bonuses: Partial<EquipmentStats>;
+}
+
+export interface ItemSetDefinition {
+  id: ItemSetId;
+  name: string;
+  preferredClass: PlayerClassId;
+  description: string;
+  pieceIds: readonly [string, string, string];
+  tiers: readonly ItemSetBonusTier[];
+}
+
+export interface ActiveSetBonusState {
+  setId: ItemSetId;
+  name: string;
+  equippedCount: number;
+  totalPieces: number;
+  activeTiers: readonly ItemSetBonusTier[];
 }
 
 export interface EquippedItemsMap {
@@ -72,6 +111,8 @@ export interface PotionDefinition {
   name: string;
   shortName: string;
   icon: string;
+  spritePath: string;
+  textureKey: string;
   hotkey: '1' | '2' | '3';
   healAmount: number;
   costGold: number;
@@ -88,6 +129,8 @@ export interface ResourceBundleDrop {
   gold: number;
   label: string;
   icon: string;
+  spritePath: string;
+  textureKey: string;
 }
 
 export type MonsterDropResult =
@@ -111,8 +154,16 @@ export interface PlayerProgressionState {
   totalMaxHp: number;
   totalSpeed: number;
   totalCritChance: number;
+  totalCritDamagePercent: number;
   totalLifestealPercent: number;
   totalCooldownReductionPercent: number;
+  totalAttackSpeedPercent: number;
+  totalSkillDamagePercent: number;
+  totalDamageReductionPercent: number;
+  totalThornsDamage: number;
+  totalHpRegenPerSec: number;
+  totalAttackRangeBonus: number;
+  activeSetBonuses: ActiveSetBonusState[];
 }
 
 export interface MonsterCampState {

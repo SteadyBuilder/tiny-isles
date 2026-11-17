@@ -41,10 +41,19 @@ export interface IPlayerInteractionContext {
     monsterId: string,
     damage: number,
     attackerName: string,
-    attackerId: string
+    attackerId: string,
+    hitMeta?: { isSkill?: boolean; isCrit?: boolean }
   ) => void;
   getPlayerClassDef?: () => PlayerClassDefinition;
   getPlayerAttackDamage?: () => number;
+  getEffectiveAttackCooldownMs?: () => number;
+  getEffectiveAttackRange?: () => number;
+  rollNormalAttackWithAffixes?: (baseDamage: number) => {
+    finalDamage: number;
+    isCrit: boolean;
+    lifestealHeal: number;
+  };
+  healPlayer?: (amount: number) => void;
   tryAttackCampCore?: (px: number, py: number, rangePx: number, damage: number) => boolean;
   projectileSystem?: ProjectileSystem;
   findGatherableEntityVisual: (x: number, y: number) => EntityVisual | null;
@@ -72,6 +81,27 @@ export class PlayerInteractionController {
     this.ctx = ctx;
   }
 
+  private dealNormalAttackHit(targetId: string, baseDamage: number, tx: number, ty: number): void {
+    const rolled = this.ctx.rollNormalAttackWithAffixes?.(baseDamage) ?? {
+      finalDamage: baseDamage,
+      isCrit: false,
+      lifestealHeal: 0,
+    };
+    this.ctx.damageMonster(
+      targetId,
+      rolled.finalDamage,
+      this.ctx.getPlayerName(),
+      this.ctx.getPlayerId(),
+      { isCrit: rolled.isCrit }
+    );
+    if (rolled.isCrit) {
+      this.ctx.showFloatingText(tx, ty - 38, '💥 치명타!', '#fde047');
+    }
+    if (rolled.lifestealHeal > 0) {
+      this.ctx.healPlayer?.(rolled.lifestealHeal);
+    }
+  }
+
   public tryInteract(): void {
     if (this.ctx.isPlayerFainted()) return;
 
@@ -81,11 +111,15 @@ export class PlayerInteractionController {
     const { x: px, y: py } = this.ctx.getPlayerPosition();
 
     const classDef = this.ctx.getPlayerClassDef?.();
-    const baseRange = classDef?.attackRange ?? PLAYER_COMBAT_CONFIG.meleeRangeRegular;
+    const baseRange =
+      this.ctx.getEffectiveAttackRange?.() ??
+      classDef?.attackRange ??
+      PLAYER_COMBAT_CONFIG.meleeRangeRegular;
     const attackDamage = this.ctx.getPlayerAttackDamage?.() ?? PLAYER_COMBAT_CONFIG.meleeDamage;
-    const attackCooldownMs = classDef?.attackCooldownMs ?? 320;
+    const attackCooldownMs =
+      this.ctx.getEffectiveAttackCooldownMs?.() ?? classDef?.attackCooldownMs ?? 320;
 
-    // 1. 마물 타격 (전직 클래스별 사거리·원거리·광역·관통·공격 쿨타임 반영)
+    // 1. 마물 타격 (전직 클래스별 사거리·공속·치명타·흡혈·원거리·광역·관통 반영)
     const targetsInRange: Array<{ mv: MonsterVisual; dist: number }> = [];
     for (const mv of this.ctx.getMonsterVisuals().values()) {
       const range = mv.monster.isBoss
@@ -131,21 +165,16 @@ export class PlayerInteractionController {
             if (isMage) {
               for (const mv of this.ctx.getMonsterVisuals().values()) {
                 if (Math.hypot(mv.monster.x - hitX, mv.monster.y - hitY) <= 95) {
-                  this.ctx.damageMonster(
+                  this.dealNormalAttackHit(
                     mv.monster.id,
                     attackDamage,
-                    this.ctx.getPlayerName(),
-                    this.ctx.getPlayerId()
+                    mv.monster.x,
+                    mv.monster.y
                   );
                 }
               }
             } else {
-              this.ctx.damageMonster(
-                targetId,
-                attackDamage,
-                this.ctx.getPlayerName(),
-                this.ctx.getPlayerId()
-              );
+              this.dealNormalAttackHit(targetId, attackDamage, hitX, hitY);
             }
           },
         });
@@ -154,12 +183,8 @@ export class PlayerInteractionController {
         else sound.playSwordSlash();
         const maxTargets = classDef?.isSplash || classDef?.isPiercing ? 4 : 1;
         for (let i = 0; i < Math.min(maxTargets, targetsInRange.length); i++) {
-          this.ctx.damageMonster(
-            targetsInRange[i].mv.monster.id,
-            attackDamage,
-            this.ctx.getPlayerName(),
-            this.ctx.getPlayerId()
-          );
+          const mv = targetsInRange[i].mv;
+          this.dealNormalAttackHit(mv.monster.id, attackDamage, mv.monster.x, mv.monster.y);
         }
       }
       return;

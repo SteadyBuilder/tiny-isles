@@ -18,6 +18,8 @@ export const POTION_DEFINITIONS: Record<PotionId, PotionDefinition> = {
     name: '소형 치유 물약',
     shortName: '소형',
     icon: '🧪',
+    spritePath: '/assets/items/potions/potion_small.png',
+    textureKey: 'item_potion_small',
     hotkey: '1',
     healAmount: 45,
     costGold: 6,
@@ -30,6 +32,8 @@ export const POTION_DEFINITIONS: Record<PotionId, PotionDefinition> = {
     name: '중형 치유 물약',
     shortName: '중형',
     icon: '⚗️',
+    spritePath: '/assets/items/potions/potion_medium.png',
+    textureKey: 'item_potion_medium',
     hotkey: '2',
     healAmount: 110,
     costGold: 14,
@@ -42,6 +46,8 @@ export const POTION_DEFINITIONS: Record<PotionId, PotionDefinition> = {
     name: '대형 치유 물약',
     shortName: '대형',
     icon: '🏺',
+    spritePath: '/assets/items/potions/potion_large.png',
+    textureKey: 'item_potion_large',
     hotkey: '3',
     healAmount: 240,
     costGold: 28,
@@ -101,6 +107,14 @@ export const MONSTER_DROP_BALANCE_CONFIG = {
   },
 } as const;
 
+export const RESOURCE_BUNDLE_SPRITES = [
+  { textureKey: 'item_bundle_wood', spritePath: '/assets/items/bundles/bundle_wood.png' },
+  { textureKey: 'item_bundle_stone', spritePath: '/assets/items/bundles/bundle_stone.png' },
+  { textureKey: 'item_bundle_gold', spritePath: '/assets/items/bundles/bundle_gold.png' },
+  { textureKey: 'item_bundle_elite', spritePath: '/assets/items/bundles/bundle_elite.png' },
+  { textureKey: 'item_bundle_boss', spritePath: '/assets/items/bundles/bundle_boss.png' },
+] as const;
+
 function randInt(min: number, max: number): number {
   if (max <= min) return min;
   return min + Math.floor(Math.random() * (max - min + 1));
@@ -114,7 +128,15 @@ function rollResourceBundle(
     const wood = randInt(4, 6);
     const stone = randInt(3, 5);
     const gold = randInt(4, 7);
-    return { wood, stone, gold, label: '보스 전리품 꾸러미', icon: '🎒' };
+    return {
+      wood,
+      stone,
+      gold,
+      label: '보스 전리품 꾸러미',
+      icon: '🎒',
+      spritePath: '/assets/items/bundles/bundle_boss.png',
+      textureKey: 'item_bundle_boss',
+    };
   }
 
   if (tier === 'elite') {
@@ -122,21 +144,61 @@ function rollResourceBundle(
     if (roll < 0.45) {
       const wood = randInt(2, 3 + Math.floor(ring / 2));
       const stone = randInt(1, 2);
-      return { wood, stone, gold: 0, label: '정예 보급 꾸러미', icon: '🎒' };
+      return {
+        wood,
+        stone,
+        gold: 0,
+        label: '정예 보급 꾸러미',
+        icon: '🎒',
+        spritePath: '/assets/items/bundles/bundle_elite.png',
+        textureKey: 'item_bundle_elite',
+      };
     }
     const gold = randInt(2, 3 + Math.floor(ring / 2));
-    return { wood: 1, stone: 1, gold, label: '정예 금화 주머니', icon: '💰' };
+    return {
+      wood: 1,
+      stone: 1,
+      gold,
+      label: '정예 금화 주머니',
+      icon: '💰',
+      spritePath: '/assets/items/bundles/bundle_gold.png',
+      textureKey: 'item_bundle_gold',
+    };
   }
 
   // 일반 몬스터: 기존 채집/생산 경제(벌목장 30초당 +2 등)를 해치지 않는 소량 꾸러미
   const pick = Math.random();
   if (pick < 0.4) {
-    return { wood: randInt(1, 2), stone: 0, gold: 0, label: '목재 꾸러미', icon: '🪵' };
+    return {
+      wood: randInt(1, 2),
+      stone: 0,
+      gold: 0,
+      label: '목재 꾸러미',
+      icon: '🪵',
+      spritePath: '/assets/items/bundles/bundle_wood.png',
+      textureKey: 'item_bundle_wood',
+    };
   }
   if (pick < 0.75) {
-    return { wood: 0, stone: randInt(1, 2), gold: 0, label: '석재 꾸러미', icon: '🪨' };
+    return {
+      wood: 0,
+      stone: randInt(1, 2),
+      gold: 0,
+      label: '석재 꾸러미',
+      icon: '🪨',
+      spritePath: '/assets/items/bundles/bundle_stone.png',
+      textureKey: 'item_bundle_stone',
+    };
   }
-  return { wood: 0, stone: 0, gold: randInt(1, 2), label: '작은 금화 주머니', icon: '🪙' };
+  return {
+    wood: 0,
+    stone: 0,
+    gold: randInt(1, 2),
+    label: '작은 금화 주머니',
+    icon: '🪙',
+    spritePath: '/assets/items/bundles/bundle_gold.png',
+    textureKey: 'item_bundle_gold',
+  };
 }
 
 function rollPotionId(tier: 'normal' | 'elite' | 'boss', ring: 1 | 2 | 3 | 4): PotionId {

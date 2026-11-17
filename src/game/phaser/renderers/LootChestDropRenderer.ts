@@ -41,6 +41,7 @@ export class LootChestDropRenderer {
     const { x, y, item, onOpened } = params;
     const rarityMeta = RARITY_META[item.rarity];
     const rarityColor = hexColorToNumber(rarityMeta.colorHex);
+    const isSetItem = item.rarity === 'set';
 
     const landX = x + (Math.random() - 0.5) * 44;
     const landY = y + 36;
@@ -49,28 +50,29 @@ export class LootChestDropRenderer {
     root.setDepth(ySortDepth(landY, 180));
     this.activeContainers.add(root);
 
-    // 1. 등급별 빛나는 바닥 조명 오라
+    // 1. 등급별 빛나는 바닥 조명 오라 (세트 아이템은 에메랄드 광채 강화)
     const glowImage = scene.textures.exists('loot_glow_tex')
       ? scene.add.image(0, 6, 'loot_glow_tex')
       : null;
     if (glowImage) {
       glowImage.setTint(rarityColor);
       glowImage.setAlpha(0);
-      glowImage.setScale(0.7);
+      glowImage.setScale(isSetItem ? 0.95 : 0.7);
       root.add(glowImage);
     } else {
       const fallbackGlow = scene.add.graphics();
-      fallbackGlow.fillStyle(rarityColor, 0.35);
-      fallbackGlow.fillCircle(0, 6, 36);
+      fallbackGlow.fillStyle(rarityColor, isSetItem ? 0.45 : 0.35);
+      fallbackGlow.fillCircle(0, 6, isSetItem ? 44 : 36);
       root.add(fallbackGlow);
     }
 
-    // 2. 등급별 수직 조명 기둥 (상자 착지 후 점등)
+    // 2. 등급별 수직 조명 기둥 (세트/전설 아이템은 하늘로 치솟는 에메랄드/황금 기둥)
+    const beamHeight = isSetItem ? 185 : item.rarity === 'legendary' ? 160 : 124;
     const lightBeam = scene.add.graphics();
-    lightBeam.fillStyle(rarityColor, 0.24);
-    lightBeam.fillRect(-16, -120, 32, 124);
-    lightBeam.fillStyle(0xffffff, 0.22);
-    lightBeam.fillRect(-6, -110, 12, 114);
+    lightBeam.fillStyle(rarityColor, isSetItem ? 0.34 : 0.24);
+    lightBeam.fillRect(isSetItem ? -20 : -16, -beamHeight, isSetItem ? 40 : 32, beamHeight + 4);
+    lightBeam.fillStyle(isSetItem ? 0xa7f3d0 : 0xffffff, isSetItem ? 0.35 : 0.22);
+    lightBeam.fillRect(-7, -beamHeight + 10, 14, beamHeight - 6);
     lightBeam.setAlpha(0);
     root.add(lightBeam);
 
@@ -84,10 +86,13 @@ export class LootChestDropRenderer {
     root.add(chestSprite);
 
     // 4. 등급 라벨 (상자 위)
+    const boxTitle = isSetItem
+      ? `💚✨ ${rarityMeta.label} 보물상자`
+      : `✨ ${rarityMeta.label} 상자`;
     const labelText = scene.add
-      .text(0, -38, `✨ ${rarityMeta.label} 상자`, {
+      .text(0, -38, boxTitle, {
         fontFamily: 'Pretendard, sans-serif',
-        fontSize: '12px',
+        fontSize: isSetItem ? '13px' : '12px',
         fontStyle: 'bold',
         color: rarityMeta.colorHex,
         stroke: '#000000',
@@ -119,30 +124,28 @@ export class LootChestDropRenderer {
         chestSprite.y = 0;
         chestSprite.setDisplaySize(54, 54);
 
-        // 착지 순간 등급별 빛나는 링 & 조명 점등 + 보석/액세서리 드랍 음향
         sound.playGemDrop();
-        this.spawnPulseRing(landX, landY + 4, rarityColor, 48);
+        this.spawnPulseRing(landX, landY + 4, rarityColor, isSetItem ? 64 : 48);
         labelText.setAlpha(1);
 
         if (glowImage) {
           scene.tweens.add({
             targets: glowImage,
-            alpha: 0.85,
-            scale: 1.25,
+            alpha: isSetItem ? 0.95 : 0.85,
+            scale: isSetItem ? 1.45 : 1.25,
             duration: 240,
             yoyo: true,
-            repeat: 2,
+            repeat: isSetItem ? 3 : 2,
           });
         }
         scene.tweens.add({
           targets: lightBeam,
-          alpha: 0.9,
-          duration: 220,
+          alpha: isSetItem ? 1.0 : 0.9,
+          duration: 240,
           yoyo: true,
-          repeat: 1,
+          repeat: isSetItem ? 2 : 1,
         });
 
-        // 열리기 직전 미세 떨림
         scene.tweens.add({
           targets: chestSprite,
           angle: 6,
@@ -154,7 +157,7 @@ export class LootChestDropRenderer {
       },
     });
 
-    // 6. 약 1초 후 자동으로 열리며 등급별 빛 폭발 & 아이템 지급
+    // 6. 약 1초 후 자동으로 열리며 실제 장비 스프라이트 팝업 & 아이템 지급
     const openTimer = scene.time.delayedCall(1000, () => {
       this.activeTimers.delete(openTimer);
       if (!this.isSceneAlive() || !root.scene) {
@@ -169,7 +172,7 @@ export class LootChestDropRenderer {
       chestSprite.setDisplaySize(56, 56);
 
       sound.playPop();
-      this.spawnPulseRing(landX, landY, rarityColor, 78);
+      this.spawnPulseRing(landX, landY, rarityColor, isSetItem ? 96 : 78);
       this.spawnRaritySparks(landX, landY - 8, rarityColor);
 
       scene.tweens.add({
@@ -180,18 +183,33 @@ export class LootChestDropRenderer {
         yoyo: true,
       });
 
-      labelText.setText(`${item.icon} [${rarityMeta.label}] ${item.name}`);
+      // 상자에서 실제 장비 스프라이트 튀어나오기
+      if (item.textureKey && scene.textures.exists(item.textureKey)) {
+        const itemIconSprite = scene.add.image(0, -10, item.textureKey);
+        itemIconSprite.setDisplaySize(44, 44);
+        root.add(itemIconSprite);
+        scene.tweens.add({
+          targets: itemIconSprite,
+          y: -52,
+          scaleX: itemIconSprite.scaleX * 1.15,
+          scaleY: itemIconSprite.scaleY * 1.15,
+          duration: 380,
+          ease: 'Back.easeOut',
+        });
+      }
+
+      labelText.setText(`[${rarityMeta.label}] ${item.name}`);
       labelText.setFontSize('13px');
       scene.tweens.add({
         targets: labelText,
-        y: -76,
+        y: -90,
         duration: 850,
         ease: 'Cubic.easeOut',
       });
 
       onOpened(item);
 
-      const cleanupTimer = scene.time.delayedCall(900, () => {
+      const cleanupTimer = scene.time.delayedCall(950, () => {
         this.activeTimers.delete(cleanupTimer);
         if (!root.scene) return;
         scene.tweens.add({
@@ -207,6 +225,78 @@ export class LootChestDropRenderer {
       this.activeTimers.add(cleanupTimer);
     });
     this.activeTimers.add(openTimer);
+  }
+
+  /**
+   * 물약 또는 자원 꾸러미 드랍 시 실제 스프라이트가 땅에 튀었다가 획득되는 연출
+   */
+  public playLootIconDrop(params: {
+    x: number;
+    y: number;
+    textureKey: string;
+    glowColorHex: string;
+  }): void {
+    if (!this.isSceneAlive()) return;
+    const { scene } = this;
+    const { x, y, textureKey, glowColorHex } = params;
+    if (!scene.textures.exists(textureKey)) return;
+
+    const glowColor = hexColorToNumber(glowColorHex);
+    const landX = x + (Math.random() - 0.5) * 38;
+    const landY = y + 18 + Math.random() * 14;
+
+    const container = scene.add.container(x, y - 10);
+    container.setDepth(ySortDepth(landY, 175));
+    this.activeContainers.add(container);
+
+    if (scene.textures.exists('loot_glow_tex')) {
+      const glow = scene.add.image(0, 4, 'loot_glow_tex');
+      glow.setTint(glowColor);
+      glow.setScale(0.42);
+      glow.setAlpha(0.7);
+      container.add(glow);
+    }
+
+    const icon = scene.add.image(0, 0, textureKey);
+    icon.setDisplaySize(36, 36);
+    container.add(icon);
+
+    scene.tweens.add({
+      targets: container,
+      x: landX,
+      y: landY,
+      duration: 240,
+      ease: 'Quad.easeOut',
+    });
+
+    scene.tweens.add({
+      targets: icon,
+      y: -22,
+      duration: 130,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        if (!this.isSceneAlive() || !container.scene) return;
+        this.spawnPulseRing(landX, landY, glowColor, 32);
+      },
+    });
+
+    const fadeTimer = scene.time.delayedCall(750, () => {
+      this.activeTimers.delete(fadeTimer);
+      if (!container.scene) return;
+      scene.tweens.add({
+        targets: container,
+        y: landY - 24,
+        alpha: 0,
+        duration: 260,
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+          this.activeContainers.delete(container);
+          if (container.scene) container.destroy();
+        },
+      });
+    });
+    this.activeTimers.add(fadeTimer);
   }
 
   private spawnPulseRing(x: number, y: number, color: number, maxRadius: number): void {

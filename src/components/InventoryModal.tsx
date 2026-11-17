@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { PLAYER_CLASS_DEFINITIONS } from '../data/classes';
-import { RARITY_META } from '../data/items';
 import { POTION_LIST } from '../data/potions';
 import { GameEvents } from '../game/events/gameEvents';
-import { EquipmentItem, EquipmentSlot, PlayerProgressionState } from '../types/game';
+import {
+  EQUIPMENT_BAG_MAX_SIZE,
+  pickBestUpgradeItemIds,
+  pickInferiorSalvageIds,
+  rankBagItemsWithComparison,
+} from '../game/utils/equipmentScoreUtils';
+import { EquipmentSlot, PlayerProgressionState } from '../types/game';
+import { BagItemCard } from './inventory/BagItemCard';
+import { EquipmentSlotCard } from './inventory/EquipmentSlotCard';
 import { PixelGameButton } from './ui/PixelGameButton';
 import { WoodModalFrame } from './ui/WoodModalFrame';
 
@@ -13,32 +20,83 @@ interface InventoryModalProps {
   progression: PlayerProgressionState;
 }
 
-const SLOT_LABELS: Record<EquipmentSlot, { label: string; emptyHint: string }> = {
-  weapon: { label: '⚔️ 무기 슬롯', emptyHint: '장착된 무기 없음' },
-  armor: { label: '🛡️ 방어구 슬롯', emptyHint: '장착된 방어구 없음' },
-  relic: { label: '💍 유물 슬롯', emptyHint: '장착된 유물 없음' },
-};
+type CategoryFilter = 'all' | EquipmentSlot;
 
-function formatItemStats(item: EquipmentItem): string {
-  const parts: string[] = [];
-  if (item.bonusAttack) parts.push(`공격력 +${item.bonusAttack}`);
-  if (item.bonusMaxHp) parts.push(`체력 +${item.bonusMaxHp}`);
-  if (item.bonusSpeed) parts.push(`이속 +${item.bonusSpeed}`);
-  if (item.bonusCritChance) parts.push(`치명타 +${item.bonusCritChance}%`);
-  if (item.bonusLifestealPercent) parts.push(`흡혈 +${item.bonusLifestealPercent}%`);
-  if (item.bonusCooldownReductionPercent) parts.push(`쿨감 +${item.bonusCooldownReductionPercent}%`);
-  return parts.join(' · ');
-}
+const CATEGORY_TABS: ReadonlyArray<{ id: CategoryFilter; label: string }> = [
+  { id: 'all', label: '전체' },
+  { id: 'weapon', label: '⚔️ 무기' },
+  { id: 'armor', label: '🛡️ 방어구' },
+  { id: 'relic', label: '💍 유물' },
+];
 
 export const InventoryModal: React.FC<InventoryModalProps> = ({
   isOpen,
   onClose,
   progression,
 }) => {
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+
+  const rankedItems = useMemo(
+    () =>
+      rankBagItemsWithComparison(
+        progression.bagItems,
+        progression.equipped,
+        progression.classId
+      ),
+    [progression.bagItems, progression.equipped, progression.classId]
+  );
+
+  const recommendedIds = useMemo(
+    () =>
+      pickBestUpgradeItemIds(
+        progression.bagItems,
+        progression.equipped,
+        progression.classId
+      ),
+    [progression.bagItems, progression.equipped, progression.classId]
+  );
+
+  const inferiorIds = useMemo(
+    () =>
+      pickInferiorSalvageIds(
+        progression.bagItems,
+        progression.equipped,
+        progression.classId,
+        true
+      ),
+    [progression.bagItems, progression.equipped, progression.classId]
+  );
+
   if (!isOpen) return null;
 
   const classDef = PLAYER_CLASS_DEFINITIONS[progression.classId];
   const slots: EquipmentSlot[] = ['weapon', 'armor', 'relic'];
+
+  const countsBySlot: Record<CategoryFilter, number> = {
+    all: rankedItems.length,
+    weapon: rankedItems.filter((e) => e.item.slot === 'weapon').length,
+    armor: rankedItems.filter((e) => e.item.slot === 'armor').length,
+    relic: rankedItems.filter((e) => e.item.slot === 'relic').length,
+  };
+
+  const upgradeBySlot: Record<EquipmentSlot, boolean> = {
+    weapon: rankedItems.some((e) => e.item.slot === 'weapon' && e.comparison.isUpgrade),
+    armor: rankedItems.some((e) => e.item.slot === 'armor' && e.comparison.isUpgrade),
+    relic: rankedItems.some((e) => e.item.slot === 'relic' && e.comparison.isUpgrade),
+  };
+
+  const filteredItems =
+    categoryFilter === 'all'
+      ? rankedItems
+      : rankedItems.filter((entry) => entry.item.slot === categoryFilter);
+
+  const inferiorGoldPreview = progression.bagItems
+    .filter((it) => inferiorIds.includes(it.instanceId))
+    .reduce((acc, it) => acc + it.salvageGold, 0);
+
+  const handleToggleSlotFilter = (slot: EquipmentSlot) => {
+    setCategoryFilter((prev) => (prev === slot ? 'all' : slot));
+  };
 
   return (
     <WoodModalFrame
@@ -46,7 +104,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       title="개인 장비 & 전리품 가방"
       ribbonVariant="blue"
       frameVariant="wood"
-      maxWidthClass="max-w-lg"
+      maxWidthClass="max-w-2xl"
       onClose={onClose}
       headerRight={
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#29150b]/85 border border-[#b89568] text-xs font-black text-[#fde68a]">
@@ -54,15 +112,17 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
             Lv.{progression.level} {classDef.name}
           </span>
           <span>·</span>
-          <span>가방 {progression.bagItems.length}/16</span>
+          <span>
+            가방 {progression.bagItems.length}/{EQUIPMENT_BAG_MAX_SIZE}
+          </span>
         </div>
       }
     >
       {/* Combat Summary Banner */}
-      <div className="ts-paper-sheet p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-black text-[#2b1810]">
+      <div className="ts-paper-sheet p-2.5 space-y-1.5 text-xs font-black text-[#2b1810]">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span>
-            ⚔️ 총 공격력: <strong className="text-[#b91c1c]">{progression.totalAttack}</strong>
+            ⚔️ 공격력: <strong className="text-[#b91c1c]">{progression.totalAttack}</strong>
           </span>
           <span>
             ❤️ 최대 체력: <strong className="text-[#15803d]">{progression.totalMaxHp}</strong>
@@ -71,18 +131,68 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
             👟 이동속도: <strong className="text-[#1d4ed8]">{progression.totalSpeed}</strong>
           </span>
           <span>
-            💥 치명타: <strong className="text-[#d97706]">{progression.totalCritChance}%</strong>
+            💥 치명: <strong className="text-[#d97706]">{progression.totalCritChance}%</strong>
+            <span className="text-[10px] text-[#785e42]">
+              ({progression.totalCritDamagePercent}%)
+            </span>
           </span>
           <span>
-            🩸 흡혈: <strong className="text-[#be123c]">{progression.totalLifestealPercent}%</strong>
+            ⚡ 공속: <strong className="text-[#0284c7]">+{progression.totalAttackSpeedPercent}%</strong>
+          </span>
+          <span>
+            🔥 스킬피해: <strong className="text-[#9333ea]">+{progression.totalSkillDamagePercent}%</strong>
           </span>
           <span>
             ⏱️ 쿨감: <strong className="text-[#7c3aed]">{progression.totalCooldownReductionPercent}%</strong>
           </span>
+          <span>
+            🩸 흡혈: <strong className="text-[#be123c]">{progression.totalLifestealPercent}%</strong>
+          </span>
+          {progression.totalDamageReductionPercent > 0 && (
+            <span>
+              🛡️ 피감: <strong className="text-[#0f766e]">{progression.totalDamageReductionPercent}%</strong>
+            </span>
+          )}
+          {progression.totalThornsDamage > 0 && (
+            <span>
+              🌵 반사: <strong className="text-[#047857]">{progression.totalThornsDamage}</strong>
+            </span>
+          )}
+          {progression.totalHpRegenPerSec > 0 && (
+            <span>
+              💚 재생: <strong className="text-[#15803d]">+{progression.totalHpRegenPerSec}/s</strong>
+            </span>
+          )}
+          {progression.totalAttackRangeBonus > 0 && (
+            <span>
+              🎯 사거리: <strong className="text-[#0369a1]">+{progression.totalAttackRangeBonus}px</strong>
+            </span>
+          )}
         </div>
-        <span className="text-[11px] font-bold text-[#6e4625]">
-          정예·보스 및 부락 본진 처치 시 랜덤 옵션 장비 드랍!
-        </span>
+
+        {/* Active Diablo Emerald Set Effects */}
+        {progression.activeSetBonuses && progression.activeSetBonuses.length > 0 && (
+          <div className="p-2 rounded-lg bg-emerald-950/90 border border-emerald-400 text-[11px] space-y-1">
+            {progression.activeSetBonuses.map((setInfo) => (
+              <div key={setInfo.setId} className="space-y-0.5">
+                <div className="font-black text-emerald-300">
+                  💚 활성 세트: {setInfo.name} ({setInfo.equippedCount}/{setInfo.totalPieces})
+                </div>
+                {setInfo.activeTiers.length > 0 ? (
+                  setInfo.activeTiers.map((t) => (
+                    <div key={t.requiredPieces} className="text-[10px] font-bold text-emerald-100">
+                      ✔ [{t.requiredPieces}세트 효과] {t.label}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-[10px] font-bold text-emerald-400/80">
+                    동일 세트 1개 더 장착 시 2세트 효과가 활성화됩니다!
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Healing Potions */}
@@ -93,14 +203,26 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
             const count = progression.potions?.[potion.id] ?? 0;
             const disabled = count <= 0 || (progression.potionCooldownRemainingMs ?? 0) > 0;
             return (
-              <PixelGameButton
+              <button
                 key={potion.id}
-                label={`${potion.icon} ${potion.shortName} ×${count}`}
-                variant="blue"
-                size="sm"
+                type="button"
                 disabled={disabled}
                 onClick={() => GameEvents.emit('use-potion', potion.id)}
-              />
+                className={`px-2 py-1 rounded-md border text-[11px] font-black flex items-center gap-1.5 transition-transform active:scale-95 ${
+                  disabled
+                    ? 'bg-[#3b2a1c]/30 border-[#8c7051] text-[#6e4625] cursor-not-allowed opacity-60'
+                    : 'bg-[#1e3a8a] border-[#60a5fa] text-white hover:brightness-110'
+                }`}
+              >
+                <img
+                  src={potion.spritePath}
+                  alt={potion.name}
+                  className="w-4 h-4 object-contain [image-rendering:pixelated]"
+                />
+                <span>
+                  {potion.shortName} ×{count}
+                </span>
+              </button>
             );
           })}
         </div>
@@ -108,117 +230,99 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
 
       {/* Equipped 3 Slots */}
       <div className="space-y-1.5">
-        <div className="text-xs font-black text-[#fef3c7] drop-shadow">장착 중인 장비 (3슬롯)</div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-black text-[#fef3c7] drop-shadow">
+            장착 중인 장비 (슬롯 클릭 시 해당 부위만 필터링)
+          </span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {slots.map((slot) => {
-            const equipped = progression.equipped[slot];
-            const meta = SLOT_LABELS[slot];
-            const rarity = equipped ? RARITY_META[equipped.rarity] : null;
-
-            return (
-              <div
-                key={slot}
-                className="ts-paper-sheet p-2 flex flex-col justify-between gap-1.5 border-2"
-                style={{
-                  borderColor: rarity ? rarity.colorHex : '#a89070',
-                }}
-              >
-                <div className="text-[10px] font-black text-[#5c422a]">{meta.label}</div>
-                {equipped ? (
-                  <>
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-lg leading-none shrink-0">{equipped.icon}</span>
-                      <div className="min-w-0">
-                        <div className="text-xs font-black truncate text-[#2b1810]">
-                          <span
-                            className={`px-1 py-0.5 rounded text-[9px] mr-1 ${rarity?.badgeBg || ''}`}
-                          >
-                            {rarity?.label}
-                          </span>
-                          {equipped.name}
-                        </div>
-                        <div className="text-[10px] font-bold text-[#3a200f] leading-tight">
-                          {formatItemStats(equipped)}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => GameEvents.emit('unequip-slot', slot)}
-                      className="w-full py-1 rounded bg-[#5c422a] text-[#fef3c7] text-[10px] font-black hover:brightness-110 active:scale-95"
-                    >
-                      장착 해제
-                    </button>
-                  </>
-                ) : (
-                  <div className="py-3 text-center text-[11px] font-bold text-[#785e42]">
-                    {meta.emptyHint}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {slots.map((slot) => (
+            <EquipmentSlotCard
+              key={slot}
+              slot={slot}
+              equippedItem={progression.equipped[slot]}
+              allEquipped={progression.equipped}
+              isFilterSelected={categoryFilter === slot}
+              hasUpgradeAvailable={upgradeBySlot[slot]}
+              onSelectSlotFilter={handleToggleSlotFilter}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Bag Items List */}
+      {/* Category Filter Tabs & Batch Actions */}
       <div className="space-y-1.5">
-        <div className="text-xs font-black text-[#fef3c7] drop-shadow">
-          보유 전리품 ({progression.bagItems.length} / 16)
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1">
+            {CATEGORY_TABS.map((tab) => {
+              const active = categoryFilter === tab.id;
+              const hasUpgrade = tab.id !== 'all' && upgradeBySlot[tab.id];
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(tab.id)}
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-black flex items-center gap-1 transition-all ${
+                    active
+                      ? 'bg-[#fde047] border-[#78350f] text-[#2b1810] shadow'
+                      : 'bg-[#29150b]/85 border-[#785e42] text-[#fde68a] hover:brightness-110'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className="text-[10px] opacity-80">({countsBySlot[tab.id]})</span>
+                  {hasUpgrade && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <PixelGameButton
+              label={
+                recommendedIds.length > 0
+                  ? `✨ 추천 일괄장착 (${recommendedIds.length})`
+                  : '✨ 최적 장착중'
+              }
+              variant="blue"
+              size="sm"
+              disabled={recommendedIds.length === 0}
+              onClick={() => GameEvents.emit('equip-recommended-items')}
+            />
+            <button
+              type="button"
+              disabled={inferiorIds.length === 0}
+              onClick={() => GameEvents.emit('salvage-inferior-items')}
+              className={`px-2 py-1.5 rounded-md border text-[10px] font-black transition-all ${
+                inferiorIds.length > 0
+                  ? 'bg-[#fef3c7] border-[#b45309] text-[#92400e] hover:brightness-105 active:scale-95'
+                  : 'bg-[#29150b]/40 border-[#5c422a] text-[#a8a29e] cursor-not-allowed'
+              }`}
+              title="추천 장비보다 효율이 낮은 일반~전설 장비를 한 번에 분해합니다 (세트 아이템 보호)"
+            >
+              🔨 하위 일괄분해 ({inferiorIds.length} · +{inferiorGoldPreview}🪙)
+            </button>
+          </div>
         </div>
-        <div className="ts-paper-sheet p-2 max-h-60 overflow-y-auto space-y-1.5">
-          {progression.bagItems.length === 0 ? (
+
+        {/* Bag Items List */}
+        <div className="ts-paper-sheet p-2 max-h-72 overflow-y-auto space-y-1.5">
+          {filteredItems.length === 0 ? (
             <div className="py-6 text-center text-xs font-bold text-[#6e4625]">
-              가방이 비어 있습니다. 주변 몬스터 부락의 본진을 파괴해 장비를 획득하세요!
+              {progression.bagItems.length === 0
+                ? '가방이 비어 있습니다. 정예·보스 사냥 또는 몬스터 부락 본진을 파괴해 장비를 획득하세요!'
+                : '선택한 카테고리에 해당하는 장비가 가방에 없습니다.'}
             </div>
           ) : (
-            progression.bagItems.map((item) => {
-              const rarity = RARITY_META[item.rarity];
-              return (
-                <div
-                  key={item.instanceId}
-                  className="p-2 rounded-lg border-2 bg-[#f5e7cc] flex items-center justify-between gap-2"
-                  style={{
-                    borderColor: rarity.colorHex,
-                  }}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xl leading-none shrink-0">{item.icon}</span>
-                    <div className="min-w-0">
-                      <div className="text-xs font-black truncate text-[#2b1810]">
-                        <span className={`px-1 py-0.5 rounded text-[9px] mr-1 ${rarity.badgeBg}`}>
-                          {rarity.label}
-                        </span>
-                        {item.name}
-                      </div>
-                      <div className="text-[10px] font-extrabold text-[#3a200f]">
-                        {formatItemStats(item)}
-                      </div>
-                      <div className="text-[10px] font-bold text-[#6e4625] truncate">
-                        {item.description}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <PixelGameButton
-                      label="장착"
-                      variant="blue"
-                      size="sm"
-                      onClick={() => GameEvents.emit('equip-item', item.instanceId)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => GameEvents.emit('salvage-item', item.instanceId)}
-                      className="px-2 py-1.5 rounded border border-[#b45309] bg-[#fef3c7] text-[#92400e] text-[10px] font-black hover:brightness-105 active:scale-95"
-                      title="아이템을 분해하여 금화를 획득합니다"
-                    >
-                      분해 (+{item.salvageGold}🪙)
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+            filteredItems.map((entry) => (
+              <BagItemCard
+                key={entry.item.instanceId}
+                entry={entry}
+                equipped={progression.equipped}
+                playerClassId={progression.classId}
+              />
+            ))
           )}
         </div>
       </div>

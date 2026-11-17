@@ -39,7 +39,11 @@ export const PotionQuickSlot: React.FC<PotionQuickSlotProps> = ({
             <span className="hidden md:inline px-1 rounded bg-black/45 text-[9px] text-[#86efac]">
               {potion.hotkey}
             </span>
-            <span className="leading-none">{potion.icon}</span>
+            <img
+              src={potion.spritePath}
+              alt={potion.name}
+              className="w-4 h-4 object-contain shrink-0 [image-rendering:pixelated]"
+            />
             <span className="tabular-nums">×{count}</span>
             {cdSec && count > 0 && (
               <span className="text-[9px] text-[#fca5a5] tabular-nums">{cdSec}s</span>

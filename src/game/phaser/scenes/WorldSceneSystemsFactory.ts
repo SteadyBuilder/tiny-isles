@@ -123,6 +123,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
 
   const projectileSystem = new ProjectileSystem(host.scene);
 
+  let waveSystem!: WaveSystem;
+
   const playerHealthSystem = new PlayerHealthSystem({
     scene: host.scene,
     isSceneAlive: host.isSceneAlive,
@@ -131,6 +133,29 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     onPlayerFaintedVisual: host.onPlayerFaintedVisual,
     onPlayerHitVisual: host.onPlayerHitVisual,
     onPlayerDamagedShake: () => host.combatFeedbackRenderer.triggerPlayerDamagedShake(),
+    getDamageReductionPercent: () => playerProgressionSystem?.getDamageReductionPercent() ?? 0,
+    onThornsReflect: (px, py) => {
+      const thorns = playerProgressionSystem?.getThornsDamage() ?? 0;
+      if (thorns <= 0 || !waveSystem) return;
+      for (const mv of waveSystem.getMonsterVisuals().values()) {
+        if (Math.hypot(mv.monster.x - px, mv.monster.y - py) <= 115) {
+          waveSystem.damageMonster(
+            mv.monster.id,
+            thorns,
+            `${host.getPlayerName()} (가시반사)`,
+            false,
+            host.getPlayerId()
+          );
+          host.effectsRenderer.showFloatingText(
+            mv.monster.x,
+            mv.monster.y - 30,
+            `🛡️ 반사 -${thorns}`,
+            '#34d399'
+          );
+          break;
+        }
+      }
+    },
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
   });
 
@@ -155,7 +180,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     onDefenseFailedReset: () => host.onCoreDestroyed?.(),
   });
 
-  const waveSystem = new WaveSystem(
+  waveSystem = new WaveSystem(
     {
       scene: host.scene,
       isHuntingMode: host.isHuntingMode,
@@ -196,7 +221,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
                 playerProgressionSystem?.grantRewardItem(openedItem);
                 GameEvents.emit(
                   'game-alert',
-                  `💎 전리품 드랍! [${openedItem.icon}${openedItem.name}] 획득!`
+                  `💎 전리품 드랍! [${openedItem.name}] 획득!`
                 );
               },
             });
@@ -205,29 +230,41 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
             const def = POTION_DEFINITIONS[loot.potionId];
             if (added > 0 && def) {
               sound.playGemDrop();
+              host.lootChestRenderer.playLootIconDrop({
+                x,
+                y,
+                textureKey: def.textureKey,
+                glowColorHex: '#4ade80',
+              });
               host.effectsRenderer.showFloatingText(
                 x,
                 y - 26,
-                `${def.icon} ${def.name} +${added}`,
+                `${def.name} +${added}`,
                 '#4ade80'
               );
               GameEvents.emit(
                 'game-alert',
-                `${def.icon} 몬스터가 [${def.name}]을(를) 드랍했습니다!`
+                `🧪 몬스터가 [${def.name}]을(를) 드랍했습니다!`
               );
             }
           } else if (loot.kind === 'resource') {
-            const { wood, stone, gold, label, icon } = loot.bundle;
+            const { wood, stone, gold, label, icon, textureKey } = loot.bundle;
             host.addResources(wood, stone, gold);
             const parts: string[] = [];
             if (wood > 0) parts.push(`🪵+${wood}`);
             if (stone > 0) parts.push(`🪨+${stone}`);
             if (gold > 0) parts.push(`🪙+${gold}`);
             if (parts.length > 0) {
+              host.lootChestRenderer.playLootIconDrop({
+                x,
+                y,
+                textureKey,
+                glowColorHex: '#fbbf24',
+              });
               host.effectsRenderer.showFloatingText(
                 x,
                 y - 12,
-                `${icon} ${parts.join(' ')}`,
+                `${parts.join(' ')}`,
                 '#fde047'
               );
               if (isBoss || meta?.isElite) {

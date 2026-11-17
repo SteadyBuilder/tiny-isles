@@ -1,252 +1,101 @@
-import { EquipmentItem, ItemRarity, ItemTemplate } from '../types/hunting';
-
-export const RARITY_META: Record<
+import {
+  EquipmentItem,
+  FieldEliteTier,
   ItemRarity,
-  { label: string; colorHex: string; badgeBg: string; borderClass: string }
-> = {
+  ItemTemplate,
+} from '../types/hunting';
+import { HIGH_AND_SET_TIER_ITEMS } from './catalogs/highTierItems';
+import { LOW_AND_MID_TIER_ITEMS } from './catalogs/lowTierItems';
+import { applyRandomAffix } from './itemAffixes';
+
+export interface RarityMetaInfo {
+  label: string;
+  colorHex: string;
+  glowHex: string;
+  badgeBg: string;
+  borderClass: string;
+}
+
+export const RARITY_META: Record<ItemRarity, RarityMetaInfo> = {
   common: {
     label: '일반',
     colorHex: '#e2e8f0',
+    glowHex: '#cbd5e1',
     badgeBg: 'bg-slate-600 text-white',
     borderClass: 'border-slate-400',
   },
   rare: {
     label: '희귀',
     colorHex: '#38bdf8',
+    glowHex: '#0ea5e9',
     badgeBg: 'bg-sky-600 text-white',
     borderClass: 'border-sky-400',
   },
   epic: {
     label: '영웅',
     colorHex: '#c084fc',
+    glowHex: '#a855f7',
     badgeBg: 'bg-purple-600 text-white',
     borderClass: 'border-purple-400',
   },
   legendary: {
     label: '전설',
     colorHex: '#fbbf24',
+    glowHex: '#f59e0b',
     badgeBg: 'bg-amber-500 text-amber-950',
     borderClass: 'border-amber-400',
+  },
+  set: {
+    label: '세트',
+    colorHex: '#10b981',
+    glowHex: '#34d399',
+    badgeBg: 'bg-emerald-600 text-emerald-50 ring-1 ring-emerald-300',
+    borderClass: 'border-emerald-400',
   },
 };
 
 /**
- * 몬스터 부락 본진 파괴 시 개인별로 획득 가능한 장비 아이템 도감
+ * 전체 장비 아이템 도감 (일반 3 + 희귀 9 + 영웅 9 + 전설 9 + 에메랄드 세트 12 = 42종)
  */
 export const ITEM_CATALOG: ItemTemplate[] = [
-  // 1링 (초급 부락 보상 - 일반/희귀)
-  {
-    id: 'wpn_militia_blade',
-    name: '수비대 강철검',
-    icon: '🗡️',
-    slot: 'weapon',
-    rarity: 'common',
-    minRing: 1,
-    bonusAttack: 12,
-    bonusMaxHp: 0,
-    bonusSpeed: 0,
-    salvageGold: 6,
-    description: '전초기지 토벌로 획득한 튼튼한 제식 검입니다.',
-  },
-  {
-    id: 'arm_leather_cuirass',
-    name: '사냥꾼의 가죽 흉갑',
-    icon: '🦺',
-    slot: 'armor',
-    rarity: 'common',
-    minRing: 1,
-    bonusAttack: 0,
-    bonusMaxHp: 45,
-    bonusSpeed: 8,
-    salvageGold: 6,
-    description: '가볍고 질긴 가죽 갑옷으로 생명력과 기동력을 높여줍니다.',
-  },
-  {
-    id: 'rel_swift_boots',
-    name: '바람길 행군 장화',
-    icon: '🥾',
-    slot: 'relic',
-    rarity: 'rare',
-    minRing: 1,
-    bonusAttack: 6,
-    bonusMaxHp: 20,
-    bonusSpeed: 28,
-    salvageGold: 12,
-    description: '부락 사이를 빠르게 누빌 수 있는 마법 깃든 군화입니다.',
-  },
-
-  // 2링 (중급 부락 보상 - 희귀/영웅)
-  {
-    id: 'wpn_knight_halberd',
-    name: '흑기사의 파쇄 미늘창',
-    icon: '🪓',
-    slot: 'weapon',
-    rarity: 'rare',
-    minRing: 2,
-    bonusAttack: 24,
-    bonusMaxHp: 25,
-    bonusSpeed: 0,
-    salvageGold: 15,
-    description: '중급 부락 지휘관이 사용하던 묵직한 파쇄 무기입니다.',
-  },
-  {
-    id: 'arm_chainmail_plate',
-    name: '미스릴 사슬 판금갑',
-    icon: '🛡️',
-    slot: 'armor',
-    rarity: 'rare',
-    minRing: 2,
-    bonusAttack: 5,
-    bonusMaxHp: 90,
-    bonusSpeed: 0,
-    salvageGold: 15,
-    description: '원거리 화살과 마법 파편을 효과적으로 튕겨내는 판금 갑옷입니다.',
-  },
-  {
-    id: 'rel_blood_pendant',
-    name: '붉은 결의의 휘장',
-    icon: '🎖️',
-    slot: 'relic',
-    rarity: 'epic',
-    minRing: 2,
-    bonusAttack: 18,
-    bonusMaxHp: 50,
-    bonusSpeed: 18,
-    salvageGold: 22,
-    description: '착용자의 투지를 끌어올려 공·방·이속을 고루 강화합니다.',
-  },
-
-  // 3링 (상급 부락 보상 - 영웅)
-  {
-    id: 'wpn_arcane_archbow',
-    name: '별빛 성소의 마궁',
-    icon: '🏹',
-    slot: 'weapon',
-    rarity: 'epic',
-    minRing: 3,
-    bonusAttack: 42,
-    bonusMaxHp: 30,
-    bonusSpeed: 15,
-    salvageGold: 30,
-    description: '응축된 마력으로 적의 갑옷을 꿰뚫는 상급 부락의 보물입니다.',
-  },
-  {
-    id: 'arm_guardian_aegis',
-    name: '성전의 불멸 성갑',
-    icon: '🥋',
-    slot: 'armor',
-    rarity: 'epic',
-    minRing: 3,
-    bonusAttack: 12,
-    bonusMaxHp: 160,
-    bonusSpeed: 10,
-    salvageGold: 30,
-    description: '고대 성소의 축복이 깃들어 막대한 체력을 부여하는 성갑입니다.',
-  },
-
-  // 4링 (최외곽 심연 요새 보상 - 전설)
-  {
-    id: 'wpn_abyss_slayer',
-    name: '심연절단자 칼라드볼그',
-    icon: '⚔️',
-    slot: 'weapon',
-    rarity: 'legendary',
-    minRing: 4,
-    bonusAttack: 75,
-    bonusMaxHp: 60,
-    bonusSpeed: 20,
-    salvageGold: 55,
-    description: '최외곽 대군주 부락을 평정한 영웅에게만 허락되는 전설의 신검입니다.',
-  },
-  {
-    id: 'arm_dragonlord_mail',
-    name: '고룡 군주의 비늘 갑주',
-    icon: '👑',
-    slot: 'armor',
-    rarity: 'legendary',
-    minRing: 4,
-    bonusAttack: 25,
-    bonusMaxHp: 260,
-    bonusSpeed: 20,
-    salvageGold: 55,
-    description: '100마리 마물 대군의 집중 포화 속에서도 끄떡없는 전설의 갑주입니다.',
-  },
-  {
-    id: 'rel_heart_of_eternity',
-    name: '태양왕의 영원한 심장',
-    icon: '💎',
-    slot: 'relic',
-    rarity: 'legendary',
-    minRing: 4,
-    bonusAttack: 45,
-    bonusMaxHp: 140,
-    bonusSpeed: 40,
-    salvageGold: 55,
-    description: '찬란한 태양의 마력으로 착용자의 모든 한계를 초월하게 만듭니다.',
-  },
+  ...LOW_AND_MID_TIER_ITEMS,
+  ...HIGH_AND_SET_TIER_ITEMS,
 ];
 
-interface ItemAffixSpec {
-  label: string;
-  critRange: [number, number];
-  lifestealRange: [number, number];
-  cdrRange: [number, number];
-  attackBonus: number;
-}
+export const SET_ITEM_CATALOG: ItemTemplate[] = ITEM_CATALOG.filter(
+  (item) => item.rarity === 'set'
+);
 
-const ITEM_AFFIX_POOL: ItemAffixSpec[] = [
-  { label: '치명의', critRange: [6, 15], lifestealRange: [0, 0], cdrRange: [0, 0], attackBonus: 4 },
-  { label: '흡혈의', critRange: [0, 0], lifestealRange: [3, 8], cdrRange: [0, 0], attackBonus: 3 },
-  { label: '신속한', critRange: [0, 0], lifestealRange: [0, 0], cdrRange: [6, 14], attackBonus: 2 },
-  { label: '파멸의', critRange: [5, 12], lifestealRange: [2, 5], cdrRange: [0, 0], attackBonus: 8 },
-  { label: '초월의', critRange: [4, 10], lifestealRange: [0, 0], cdrRange: [5, 12], attackBonus: 6 },
-];
+export const NON_SET_ITEM_CATALOG: ItemTemplate[] = ITEM_CATALOG.filter(
+  (item) => item.rarity !== 'set'
+);
 
-function randInt(min: number, max: number): number {
-  if (max <= min) return min;
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
-function applyRandomAffix(item: EquipmentItem, guaranteeAffix: boolean): EquipmentItem {
-  const shouldRoll = guaranteeAffix || item.rarity !== 'common' || Math.random() < 0.45;
-  if (!shouldRoll) return item;
-
-  const affix = ITEM_AFFIX_POOL[Math.floor(Math.random() * ITEM_AFFIX_POOL.length)];
-  const rarityBoost = item.rarity === 'legendary' ? 1.4 : item.rarity === 'epic' ? 1.2 : 1.0;
-
-  const bonusCritChance =
-    affix.critRange[1] > 0
-      ? Math.round(randInt(affix.critRange[0], affix.critRange[1]) * rarityBoost)
-      : undefined;
-  const bonusLifestealPercent =
-    affix.lifestealRange[1] > 0
-      ? Math.round(randInt(affix.lifestealRange[0], affix.lifestealRange[1]) * rarityBoost)
-      : undefined;
-  const bonusCooldownReductionPercent =
-    affix.cdrRange[1] > 0
-      ? Math.round(randInt(affix.cdrRange[0], affix.cdrRange[1]) * rarityBoost)
-      : undefined;
-
-  return {
-    ...item,
-    affixLabel: affix.label,
-    name: `${affix.label} ${item.name}`,
-    bonusAttack: item.bonusAttack + Math.round(affix.attackBonus * rarityBoost),
-    bonusCritChance,
-    bonusLifestealPercent,
-    bonusCooldownReductionPercent,
-  };
+function pickRandom<T>(arr: readonly T[], fallback: T): T {
+  if (arr.length === 0) return fallback;
+  return arr[Math.floor(Math.random() * arr.length)] ?? fallback;
 }
 
 /**
  * 부락 링 등급(1~4) 및 반복 토벌 횟수에 비례하여 개인 보상 장비를 추첨하는 순수 함수
+ * - 2링 이상 부락 상자에서는 점진적 확률로 에메랄드 세트 아이템이 출현
  */
 export function rollCampRewardItem(ring: 1 | 2 | 3 | 4, clearCount: number): EquipmentItem {
   const effectiveRing = Math.min(4, ring + Math.floor(clearCount / 2)) as 1 | 2 | 3 | 4;
-  const candidates = ITEM_CATALOG.filter((item) => item.minRing <= effectiveRing);
-  const highTierPool = candidates.filter((item) => item.minRing >= Math.max(1, effectiveRing - 1));
-  const pool = highTierPool.length > 0 ? highTierPool : candidates;
-  const picked = pool[Math.floor(Math.random() * pool.length)] || ITEM_CATALOG[0];
+
+  // 2링: 14%, 3링: 24%, 4링: 36% (+반복 토벌 보너스)
+  const setChance =
+    effectiveRing >= 2 ? Math.min(0.45, 0.06 + (effectiveRing - 1) * 0.1 + clearCount * 0.02) : 0;
+
+  let picked: ItemTemplate;
+  if (Math.random() < setChance && SET_ITEM_CATALOG.length > 0) {
+    picked = pickRandom(SET_ITEM_CATALOG, ITEM_CATALOG[0]);
+  } else {
+    const candidates = NON_SET_ITEM_CATALOG.filter((item) => item.minRing <= effectiveRing);
+    const highTierPool = candidates.filter(
+      (item) => item.minRing >= Math.max(1, effectiveRing - 1)
+    );
+    picked = pickRandom(highTierPool.length > 0 ? highTierPool : candidates, ITEM_CATALOG[0]);
+  }
 
   const clearScale = 1 + Math.min(5, Math.max(0, clearCount - 1)) * 0.15;
   const suffix = clearCount > 1 ? ` +${clearCount - 1}` : '';
@@ -264,13 +113,14 @@ export function rollCampRewardItem(ring: 1 | 2 | 3 | 4, clearCount: number): Equ
 
 /**
  * 일반·정예·보스 몬스터 처치 시 디아블로식 필드 장비 드랍을 추첨하는 순수 함수
+ * - 2링~4링 정예/보스에서 점진적 확률로 에메랄드 세트 아이템 드랍
  */
 export function rollMonsterDropItem(params: {
   ring: 1 | 2 | 3 | 4;
   isElite: boolean;
   isBoss: boolean;
   difficultyId: 'normal' | 'hard' | 'nightmare';
-  eliteTier?: import('../types/hunting').FieldEliteTier;
+  eliteTier?: FieldEliteTier;
 }): EquipmentItem | null {
   const diffBonus =
     params.difficultyId === 'nightmare' ? 0.2 : params.difficultyId === 'hard' ? 0.1 : 0;
@@ -278,27 +128,43 @@ export function rollMonsterDropItem(params: {
     params.eliteTier === 'weakened'
       ? 0.38
       : params.eliteTier === 'empowered'
-      ? 0.62
-      : 0.45;
+        ? 0.62
+        : 0.45;
   const dropChance = params.isBoss
     ? 1.0
     : params.isElite
-    ? eliteBaseChance + diffBonus
-    : 0.12 + diffBonus * 0.25;
+      ? eliteBaseChance + diffBonus
+      : 0.12 + diffBonus * 0.25;
 
   if (Math.random() > dropChance) return null;
 
   const effectiveRing = params.isBoss
     ? 4
-    : (Math.min(4, params.ring + (params.isElite && Math.random() < 0.4 ? 1 : 0)) as 1 | 2 | 3 | 4);
-  const candidates = ITEM_CATALOG.filter((item) => item.minRing <= effectiveRing);
-  const minRarityFilter = params.isBoss
-    ? candidates.filter((i) => i.rarity === 'epic' || i.rarity === 'legendary')
-    : params.isElite
-    ? candidates.filter((i) => i.rarity !== 'common')
-    : candidates;
-  const pool = minRarityFilter.length > 0 ? minRarityFilter : candidates;
-  const picked = pool[Math.floor(Math.random() * pool.length)] || ITEM_CATALOG[0];
+    : (Math.min(4, params.ring + (params.isElite && Math.random() < 0.4 ? 1 : 0)) as
+        | 1
+        | 2
+        | 3
+        | 4);
+
+  // 세트 아이템 드랍 확률 (2링~4링 정예/보스)
+  const setDropChance = params.isBoss
+    ? 0.32 + diffBonus * 0.5
+    : params.isElite && effectiveRing >= 2
+      ? 0.08 + (effectiveRing - 2) * 0.07 + diffBonus * 0.25
+      : 0;
+
+  let picked: ItemTemplate;
+  if (Math.random() < setDropChance && SET_ITEM_CATALOG.length > 0) {
+    picked = pickRandom(SET_ITEM_CATALOG, ITEM_CATALOG[0]);
+  } else {
+    const candidates = NON_SET_ITEM_CATALOG.filter((item) => item.minRing <= effectiveRing);
+    const minRarityFilter = params.isBoss
+      ? candidates.filter((i) => i.rarity === 'epic' || i.rarity === 'legendary')
+      : params.isElite
+        ? candidates.filter((i) => i.rarity !== 'common')
+        : candidates;
+    picked = pickRandom(minRarityFilter.length > 0 ? minRarityFilter : candidates, ITEM_CATALOG[0]);
+  }
 
   const baseItem: EquipmentItem = {
     ...picked,

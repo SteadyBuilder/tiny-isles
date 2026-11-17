@@ -6,7 +6,6 @@ import {
 } from '../../data/classes';
 import { RARITY_META } from '../../data/items';
 import { INITIAL_POTION_INVENTORY, POTION_DEFINITIONS } from '../../data/potions';
-import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { sound } from '../../lib/sound';
 import { SkillEffectContext } from '../../types/combat';
 import {
@@ -20,6 +19,15 @@ import {
   PotionInventory,
 } from '../../types/game';
 import { GameEvents } from '../events/gameEvents';
+import {
+  EQUIPMENT_BAG_MAX_SIZE,
+  pickBestUpgradeItemIds,
+  pickInferiorSalvageIds,
+} from '../utils/equipmentScoreUtils';
+import {
+  ComputedProgressionStats,
+  computeProgressionStats,
+} from '../utils/progressionStatsUtils';
 import { MonsterVisual } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
 
@@ -58,7 +66,7 @@ export interface IPlayerProgressionContext {
 }
 
 /**
- * 사냥 특화 모드 개인별 경험치(EXP)·레벨업·전직(4클래스)·장비 인벤토리·물약·액티브 스킬 전담 시스템
+ * 사냥 특화 모드 개인별 경험치(EXP)·레벨업·전직(4클래스)·장비/세트 인벤토리·물약·액티브 스킬 전담 시스템
  */
 export class PlayerProgressionSystem {
   private ctx: IPlayerProgressionContext;
@@ -76,6 +84,7 @@ export class PlayerProgressionSystem {
   private bagItems: EquipmentItem[] = [];
   private potions: PotionInventory = { ...INITIAL_POTION_INVENTORY };
   private potionCooldownRemainingMs = 0;
+  private hpRegenAccumulatorMs = 0;
 
   constructor(ctx: IPlayerProgressionContext) {
     this.ctx = ctx;
@@ -93,57 +102,39 @@ export class PlayerProgressionSystem {
     return this.level;
   }
 
+  public getComputedStats(): ComputedProgressionStats {
+    return computeProgressionStats(this.level, this.getClassDef(), this.equipped);
+  }
+
   public getTotalAttack(): number {
-    const cls = this.getClassDef();
-    const levelBonus = (this.level - 1) * LEVEL_PROGRESSION_CONFIG.attackGainPerLevel;
-    const eqBonus =
-      (this.equipped.weapon?.bonusAttack ?? 0) +
-      (this.equipped.armor?.bonusAttack ?? 0) +
-      (this.equipped.relic?.bonusAttack ?? 0);
-    return PLAYER_COMBAT_CONFIG.meleeDamage + levelBonus + cls.baseAttackBonus + eqBonus;
+    return this.getComputedStats().totalAttack;
   }
 
   public getTotalMaxHp(): number {
-    const cls = this.getClassDef();
-    const levelBonus = (this.level - 1) * LEVEL_PROGRESSION_CONFIG.hpGainPerLevel;
-    const eqBonus =
-      (this.equipped.weapon?.bonusMaxHp ?? 0) +
-      (this.equipped.armor?.bonusMaxHp ?? 0) +
-      (this.equipped.relic?.bonusMaxHp ?? 0);
-    return PLAYER_COMBAT_CONFIG.maxHp + levelBonus + cls.baseHpBonus + eqBonus;
+    return this.getComputedStats().totalMaxHp;
   }
 
   public getTotalSpeed(): number {
+    return this.getComputedStats().totalSpeed;
+  }
+
+  public getEffectiveAttackCooldownMs(): number {
     const cls = this.getClassDef();
-    const eqBonus =
-      (this.equipped.weapon?.bonusSpeed ?? 0) +
-      (this.equipped.armor?.bonusSpeed ?? 0) +
-      (this.equipped.relic?.bonusSpeed ?? 0);
-    return 250 + cls.baseSpeedBonus + eqBonus;
+    const atkSpd = this.getComputedStats().totalAttackSpeedPercent;
+    return Math.max(120, Math.round(cls.attackCooldownMs / (1 + atkSpd / 100)));
   }
 
-  public getTotalCritChance(): number {
-    const eqCrit =
-      (this.equipped.weapon?.bonusCritChance ?? 0) +
-      (this.equipped.armor?.bonusCritChance ?? 0) +
-      (this.equipped.relic?.bonusCritChance ?? 0);
-    return Math.min(75, 5 + eqCrit);
+  public getEffectiveAttackRange(): number {
+    const cls = this.getClassDef();
+    return cls.attackRange + this.getComputedStats().totalAttackRangeBonus;
   }
 
-  public getTotalLifestealPercent(): number {
-    const eqLifesteal =
-      (this.equipped.weapon?.bonusLifestealPercent ?? 0) +
-      (this.equipped.armor?.bonusLifestealPercent ?? 0) +
-      (this.equipped.relic?.bonusLifestealPercent ?? 0);
-    return Math.min(35, eqLifesteal);
+  public getDamageReductionPercent(): number {
+    return this.getComputedStats().totalDamageReductionPercent;
   }
 
-  public getTotalCooldownReductionPercent(): number {
-    const eqCdr =
-      (this.equipped.weapon?.bonusCooldownReductionPercent ?? 0) +
-      (this.equipped.armor?.bonusCooldownReductionPercent ?? 0) +
-      (this.equipped.relic?.bonusCooldownReductionPercent ?? 0);
-    return Math.min(50, eqCdr);
+  public getThornsDamage(): number {
+    return this.getComputedStats().totalThornsDamage;
   }
 
   public rollDamageWithAffixes(baseDamage: number): {
@@ -151,17 +142,21 @@ export class PlayerProgressionSystem {
     isCrit: boolean;
     lifestealHeal: number;
   } {
-    const critChance = this.getTotalCritChance();
-    const isCrit = Math.random() * 100 < critChance;
-    const finalDamage = isCrit ? Math.round(baseDamage * 1.75) : baseDamage;
-    const lifestealPct = this.getTotalLifestealPercent();
-    const lifestealHeal = lifestealPct > 0 ? Math.max(1, Math.round((finalDamage * lifestealPct) / 100)) : 0;
+    const stats = this.getComputedStats();
+    const isCrit = Math.random() * 100 < stats.totalCritChance;
+    const critMult = stats.totalCritDamagePercent / 100;
+    const finalDamage = isCrit ? Math.round(baseDamage * critMult) : baseDamage;
+    const lifestealHeal =
+      stats.totalLifestealPercent > 0
+        ? Math.max(1, Math.round((finalDamage * stats.totalLifestealPercent) / 100))
+        : 0;
     return { finalDamage, isCrit, lifestealHeal };
   }
 
   public getState(): PlayerProgressionState {
     const cls = this.getClassDef();
-    const cdrRatio = 1 - this.getTotalCooldownReductionPercent() / 100;
+    const stats = this.getComputedStats();
+    const cdrRatio = 1 - stats.totalCooldownReductionPercent / 100;
     return {
       level: this.level,
       exp: this.exp,
@@ -174,12 +169,7 @@ export class PlayerProgressionSystem {
       bagItems: [...this.bagItems],
       potions: { ...this.potions },
       potionCooldownRemainingMs: Math.max(0, Math.ceil(this.potionCooldownRemainingMs)),
-      totalAttack: this.getTotalAttack(),
-      totalMaxHp: this.getTotalMaxHp(),
-      totalSpeed: this.getTotalSpeed(),
-      totalCritChance: this.getTotalCritChance(),
-      totalLifestealPercent: this.getTotalLifestealPercent(),
-      totalCooldownReductionPercent: this.getTotalCooldownReductionPercent(),
+      ...stats,
     };
   }
 
@@ -230,7 +220,7 @@ export class PlayerProgressionSystem {
   }
 
   public grantRewardItem(item: EquipmentItem): void {
-    if (this.bagItems.length >= 24) {
+    if (this.bagItems.length >= EQUIPMENT_BAG_MAX_SIZE) {
       this.bagItems.shift();
     }
     this.bagItems.push(item);
@@ -246,7 +236,7 @@ export class PlayerProgressionSystem {
     this.ctx.showFloatingText(
       pos.x,
       pos.y - 72,
-      `🎁 [${rarityMeta.label}] ${item.icon} ${item.name} 획득! ([I] 인벤토리)`,
+      `🎁 [${rarityMeta.label}] ${item.name} 획득! ([I] 인벤토리)`,
       rarityMeta.colorHex
     );
     this.emitState();
@@ -275,6 +265,10 @@ export class PlayerProgressionSystem {
   public unequipSlot(slot: EquipmentSlot): void {
     const current = this.equipped[slot];
     if (!current) return;
+    if (this.bagItems.length >= EQUIPMENT_BAG_MAX_SIZE) {
+      GameEvents.emit('game-alert', '🎒 가방이 가득 찼습니다! 불필요한 장비를 먼저 분해해 주세요.');
+      return;
+    }
     this.equipped[slot] = null;
     this.bagItems.push(current);
     this.ctx.onMaxHpChanged(this.getTotalMaxHp(), 0);
@@ -294,6 +288,58 @@ export class PlayerProgressionSystem {
       pos.y - 45,
       `🔨 장비 분해 (+🪙${removed.salvageGold})`,
       '#fbbf24'
+    );
+    this.emitState();
+  }
+
+  public equipRecommendedItems(): void {
+    let equippedCount = 0;
+    // 세트 시너지 변화로 다른 슬롯 추천이 연쇄 갱신될 수 있으므로 최대 3회 순회
+    for (let pass = 0; pass < 3; pass++) {
+      const ids = pickBestUpgradeItemIds(this.bagItems, this.equipped, this.classId);
+      if (ids.length === 0) break;
+      for (const id of ids) {
+        this.equipItem(id);
+        equippedCount += 1;
+      }
+    }
+    if (equippedCount > 0) {
+      sound.playUnlock();
+      GameEvents.emit('game-alert', `✨ 최적 추천 장비 ${equippedCount}종을 자동 장착했습니다!`);
+    } else {
+      GameEvents.emit('game-alert', '✅ 현재 장착 중인 장비가 이미 최고 효율입니다!');
+    }
+  }
+
+  public salvageInferiorItems(): void {
+    const ids = pickInferiorSalvageIds(this.bagItems, this.equipped, this.classId, true);
+    if (ids.length === 0) {
+      GameEvents.emit('game-alert', '🧹 분해할 하위 비추천 장비가 없습니다. (세트 장비는 보호됩니다)');
+      return;
+    }
+    const idSet = new Set(ids);
+    let totalGold = 0;
+    const remaining: EquipmentItem[] = [];
+    for (const item of this.bagItems) {
+      if (idSet.has(item.instanceId)) {
+        totalGold += item.salvageGold;
+      } else {
+        remaining.push(item);
+      }
+    }
+    this.bagItems = remaining;
+    this.ctx.addGold(totalGold);
+    sound.playMine();
+    const pos = this.ctx.getPlayerPosition();
+    this.ctx.showFloatingText(
+      pos.x,
+      pos.y - 50,
+      `🔨 하위 장비 ${ids.length}개 일괄 분해 (+🪙${totalGold})`,
+      '#fbbf24'
+    );
+    GameEvents.emit(
+      'game-alert',
+      `🔨 비추천 하위 장비 ${ids.length}개를 일괄 분해하여 🪙${totalGold} 금화를 획득했습니다!`
     );
     this.emitState();
   }
@@ -372,12 +418,14 @@ export class PlayerProgressionSystem {
   public castActiveSkill(): void {
     if (this.skillCooldownRemainingMs > 0 || this.ctx.isPlayerFainted?.()) return;
     const cls = this.getClassDef();
-    const cdrRatio = 1 - this.getTotalCooldownReductionPercent() / 100;
+    const stats = this.getComputedStats();
+    const cdrRatio = 1 - stats.totalCooldownReductionPercent / 100;
     this.skillCooldownRemainingMs = Math.round(cls.skillCooldownMs * cdrRatio);
 
     const pos = this.ctx.getPlayerPosition();
     const facingDir = this.ctx.getPlayerDirection?.() ?? 'right';
-    const baseSkillDmg = Math.round(this.getTotalAttack() * cls.skillDamageMultiplier);
+    const skillAmp = 1 + stats.totalSkillDamagePercent / 100;
+    const baseSkillDmg = Math.round(stats.totalAttack * cls.skillDamageMultiplier * skillAmp);
     const monsters = this.ctx.getMonsterVisuals();
 
     sound.playSkillCast(this.classId);
@@ -555,6 +603,19 @@ export class PlayerProgressionSystem {
       const nextSec = Math.ceil(this.potionCooldownRemainingMs / 250);
       if (prevSec !== nextSec || this.potionCooldownRemainingMs === 0) {
         dirty = true;
+      }
+    }
+
+    const hpRegen = this.getComputedStats().totalHpRegenPerSec;
+    if (hpRegen > 0 && !this.ctx.isPlayerFainted?.()) {
+      this.hpRegenAccumulatorMs += deltaMs;
+      if (this.hpRegenAccumulatorMs >= 1000) {
+        const ticks = Math.floor(this.hpRegenAccumulatorMs / 1000);
+        this.hpRegenAccumulatorMs -= ticks * 1000;
+        const hpState = this.ctx.getPlayerHpState?.();
+        if (!hpState || hpState.hp < hpState.maxHp) {
+          this.ctx.healPlayer(hpRegen * ticks);
+        }
       }
     }
 

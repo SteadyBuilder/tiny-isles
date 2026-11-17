@@ -308,3 +308,21 @@ html, body {
   animation: combatDamageFlash var(--damage-duration, 360ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+@keyframes emeraldSetGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.55), inset 0 0 8px rgba(52, 211, 153, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(52, 211, 153, 0.9), inset 0 0 14px rgba(110, 231, 183, 0.45);
+  }
+}
+
+.ts-set-emerald-card {
+  border-color: #10b981 !important;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%) !important;
+  animation: emeraldSetGlow 2.4s ease-in-out infinite;
+}
+
+.ts-set-emerald-icon {
+  filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.85));
+}

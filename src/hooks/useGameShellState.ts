@@ -44,8 +44,16 @@ const INITIAL_PLAYER_PROGRESSION: PlayerProgressionState = {
   totalMaxHp: PLAYER_COMBAT_CONFIG.maxHp,
   totalSpeed: 250,
   totalCritChance: 5,
+  totalCritDamagePercent: 175,
   totalLifestealPercent: 0,
   totalCooldownReductionPercent: 0,
+  totalAttackSpeedPercent: 0,
+  totalSkillDamagePercent: 0,
+  totalDamageReductionPercent: 0,
+  totalThornsDamage: 0,
+  totalHpRegenPerSec: 0,
+  totalAttackRangeBonus: 0,
+  activeSetBonuses: [],
 };
 
 const INITIAL_DASH_STATE: DashCooldownState = {

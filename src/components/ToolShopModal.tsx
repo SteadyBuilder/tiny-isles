@@ -85,8 +85,12 @@ export const ToolShopModal: React.FC<ToolShopModalProps> = ({
               className="ts-paper-sheet p-2.5 flex items-center justify-between gap-3 border-2 border-[#a89070]"
             >
               <div className="flex items-start gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-[#2b1810]/10 border border-[#a89070] flex items-center justify-center text-2xl shrink-0">
-                  {potion.icon}
+                <div className="w-11 h-11 rounded-lg bg-[#2b1810]/10 border border-[#a89070] flex items-center justify-center p-1 shrink-0">
+                  <img
+                    src={potion.spritePath}
+                    alt={potion.name}
+                    className="w-9 h-9 object-contain [image-rendering:pixelated]"
+                  />
                 </div>
                 <div className="min-w-0 space-y-0.5">
                   <div className="flex items-center gap-1.5 flex-wrap">

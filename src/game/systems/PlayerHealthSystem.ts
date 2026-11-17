@@ -13,6 +13,8 @@ export interface IPlayerHealthContext {
   onPlayerFaintedVisual: (fainted: boolean) => void;
   onPlayerHitVisual: () => void;
   onPlayerDamagedShake?: () => void;
+  getDamageReductionPercent?: () => number;
+  onThornsReflect?: (px: number, py: number) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
 }
 
@@ -82,21 +84,25 @@ export class PlayerHealthSystem {
     const now = this.ctx.scene.time.now;
     if (now < this.invincibleUntil) return;
 
-    this.hp = Math.max(0, this.hp - damage);
+    const drPct = Math.min(50, Math.max(0, this.ctx.getDamageReductionPercent?.() ?? 0));
+    const mitigatedDamage = Math.max(1, Math.round(damage * (1 - drPct / 100)));
+
+    this.hp = Math.max(0, this.hp - mitigatedDamage);
     const { x, y } = this.ctx.getPlayerPosition();
 
     this.ctx.onPlayerHitVisual();
     this.ctx.onPlayerDamagedShake?.();
-    this.ctx.showFloatingText(x, y - 35, `💔 -${damage}`, '#f87171');
+    this.ctx.showFloatingText(x, y - 35, `💔 -${mitigatedDamage}`, '#f87171');
+    this.ctx.onThornsReflect?.(x, y);
     sound.playPlayerHurt();
 
-    const dmgRatio = damage / Math.max(1, this.maxHp);
+    const dmgRatio = mitigatedDamage / Math.max(1, this.maxHp);
     const intensity = Math.max(
       0.45,
       Math.min(1, dmgRatio / PLAYER_DAMAGED_OVERLAY_CONFIG.heavyDamageRatioThreshold)
     );
     GameEvents.emit('player-damaged-fx', {
-      damage,
+      damage: mitigatedDamage,
       intensity,
       timestamp: now,
     });

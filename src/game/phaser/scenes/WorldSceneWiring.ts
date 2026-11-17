@@ -157,10 +157,17 @@ export function createWorldControllersBundle(
     spendInventory: host.spendResources,
     addHarvestedResource: host.addHarvestedResource,
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
-    damageMonster: (id, dmg, attacker, attackerId) =>
-      host.systems.waveSystem.damageMonster(id, dmg, attacker, false, attackerId),
+    damageMonster: (id, dmg, attacker, attackerId, hitMeta) =>
+      host.systems.waveSystem.damageMonster(id, dmg, attacker, false, attackerId, hitMeta),
     getPlayerClassDef: () => host.systems.playerProgressionSystem.getClassDef(),
     getPlayerAttackDamage: () => host.systems.playerProgressionSystem.getTotalAttack(),
+    getEffectiveAttackCooldownMs: () =>
+      host.systems.playerProgressionSystem.getEffectiveAttackCooldownMs(),
+    getEffectiveAttackRange: () =>
+      host.systems.playerProgressionSystem.getEffectiveAttackRange(),
+    rollNormalAttackWithAffixes: (baseDamage) =>
+      host.systems.playerProgressionSystem.rollDamageWithAffixes(baseDamage),
+    healPlayer: (amount) => host.systems.playerHealthSystem.healPlayer(amount),
     tryAttackCampCore: (px, py, rangePx, dmg) =>
       host.systems.monsterCampSystem.tryAttackNearestCampCore(px, py, rangePx, dmg),
     projectileSystem: host.systems.projectileSystem,
@@ -218,7 +225,7 @@ export function createWorldControllersBundle(
     onInteract: () => playerInteraction.tryInteract(),
     isPlacementActive: () => towerPlacement.isActive(),
     getAttackRange: (isBoss) => {
-      const baseRange = host.systems.playerProgressionSystem.getClassDef().attackRange;
+      const baseRange = host.systems.playerProgressionSystem.getEffectiveAttackRange();
       return isBoss ? Math.max(baseRange, PLAYER_COMBAT_CONFIG.meleeRangeBoss) : baseRange;
     },
     getConstructedBuildings: host.getConstructedBuildings,
@@ -270,6 +277,10 @@ export function createWorldControllersBundle(
     equipItem: (instanceId) => host.systems.playerProgressionSystem.equipItem(instanceId),
     unequipSlot: (slot) => host.systems.playerProgressionSystem.unequipSlot(slot),
     salvageItem: (instanceId) => host.systems.playerProgressionSystem.salvageItem(instanceId),
+    equipRecommendedItems: () =>
+      host.systems.playerProgressionSystem.equipRecommendedItems(),
+    salvageInferiorItems: () =>
+      host.systems.playerProgressionSystem.salvageInferiorItems(),
     castActiveSkill: () => host.systems.playerProgressionSystem.castActiveSkill(),
     buyPotion: (potionId) => host.systems.playerProgressionSystem.buyPotion(potionId),
     usePotion: (potionId) => host.systems.playerProgressionSystem.usePotion(potionId),

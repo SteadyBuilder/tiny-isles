@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { ITEM_CATALOG } from '../../../data/items';
+import { POTION_LIST, RESOURCE_BUNDLE_SPRITES } from '../../../data/potions';
 
 /**
  * 사냥 특화 모드(4대 전직 클래스, 특화 마물 병과, 부락 본진, 경량 배칭 텍스처) 에셋 로더 및 애니메이션 등록기
@@ -180,6 +182,27 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
   scene.load.image('blackCastle', '/assets/buildings/Black_Castle.png');
   scene.load.image('blackTower', '/assets/buildings/Black_Tower.png');
   scene.load.image('purpleCastle', '/assets/buildings/Purple_Castle.png');
+
+  // 장비·물약·자원 꾸러미 스프라이트
+  const loadedKeys = new Set<string>();
+  for (const item of ITEM_CATALOG) {
+    if (!loadedKeys.has(item.textureKey)) {
+      loadedKeys.add(item.textureKey);
+      scene.load.image(item.textureKey, item.spritePath);
+    }
+  }
+  for (const potion of POTION_LIST) {
+    if (!loadedKeys.has(potion.textureKey)) {
+      loadedKeys.add(potion.textureKey);
+      scene.load.image(potion.textureKey, potion.spritePath);
+    }
+  }
+  for (const bundle of RESOURCE_BUNDLE_SPRITES) {
+    if (!loadedKeys.has(bundle.textureKey)) {
+      loadedKeys.add(bundle.textureKey);
+      scene.load.image(bundle.textureKey, bundle.spritePath);
+    }
+  }
 }
 
 export function registerHuntingModeAnimations(scene: Phaser.Scene): void {

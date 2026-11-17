@@ -36,6 +36,8 @@ export interface IWorldEventBusContext {
   equipItem?: (instanceId: string) => void;
   unequipSlot?: (slot: EquipmentSlot) => void;
   salvageItem?: (instanceId: string) => void;
+  equipRecommendedItems?: () => void;
+  salvageInferiorItems?: () => void;
   castActiveSkill?: () => void;
   buyPotion?: (potionId: PotionId) => void;
   usePotion?: (potionId: PotionId) => void;
@@ -136,6 +138,14 @@ export class WorldEventBusController {
 
     this.register('salvage-item', (instanceId) => {
       this.ctx.salvageItem?.(instanceId);
+    });
+
+    this.register('equip-recommended-items', () => {
+      this.ctx.equipRecommendedItems?.();
+    });
+
+    this.register('salvage-inferior-items', () => {
+      this.ctx.salvageInferiorItems?.();
     });
 
     this.register('cast-active-skill', () => {

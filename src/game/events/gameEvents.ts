@@ -92,6 +92,8 @@ export interface GameEventPayloads {
   'equip-item': string; // instanceId
   'unequip-slot': EquipmentSlot;
   'salvage-item': string; // instanceId
+  'equip-recommended-items': void;
+  'salvage-inferior-items': void;
   'cast-active-skill': void;
   'trigger-dash': void;
   'dash-state-updated': DashCooldownState;
