@@ -10,6 +10,7 @@ import { MissionResultModal } from './components/MissionResultModal';
 import { PlayerProgressionHud } from './components/PlayerProgressionHud';
 import { InventoryModal } from './components/InventoryModal';
 import { JobAdvancementModal } from './components/JobAdvancementModal';
+import { ToolShopModal } from './components/ToolShopModal';
 import { HudSettingsModal } from './components/HudSettingsModal';
 import { HudHelpModal } from './components/HudHelpModal';
 import { SoundModal } from './components/SoundModal';
@@ -48,6 +49,9 @@ export function App() {
     showJobHallModal,
     setShowJobHallModal,
     isNearJobHall,
+    showToolShopModal,
+    setShowToolShopModal,
+    isNearToolShop,
     playerProgression,
     dashState,
     alertMessage,
@@ -270,8 +274,11 @@ export function App() {
         dashState={dashState}
         hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall' && b.hp > 0)}
         isNearJobHall={isNearJobHall}
+        hasToolShopBuilt={constructedBuildings.some((b) => b.type === 'tool_shop' && b.hp > 0)}
+        isNearToolShop={isNearToolShop}
         onOpenInventory={() => setShowInventoryModal(true)}
         onOpenJobHall={() => setShowJobHallModal(true)}
+        onOpenToolShop={() => setShowToolShopModal(true)}
       />
 
       <InventoryModal
@@ -286,6 +293,16 @@ export function App() {
         progression={playerProgression}
         hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall' && b.hp > 0)}
         isNearJobHall={isNearJobHall}
+      />
+
+      <ToolShopModal
+        isOpen={showToolShopModal}
+        onClose={() => setShowToolShopModal(false)}
+        progression={playerProgression}
+        playerHp={playerHp}
+        gold={inventory.gold}
+        hasToolShopBuilt={constructedBuildings.some((b) => b.type === 'tool_shop' && b.hp > 0)}
+        isNearToolShop={isNearToolShop}
       />
 
       {sessionStatus === 'paused' && (

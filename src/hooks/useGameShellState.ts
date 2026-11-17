@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getRequiredExpForLevel } from '../data/classes';
 import { PLAYER_DASH_CONFIG } from '../data/combatFeedbackConfig';
+import { INITIAL_POTION_INVENTORY } from '../data/potions';
 import { PLAYER_COMBAT_CONFIG, THREAT_WAVE_CONFIG } from '../data/worldRules';
 import { getInitialConstructedBuildings, INITIAL_ISLANDS } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
@@ -37,6 +38,8 @@ const INITIAL_PLAYER_PROGRESSION: PlayerProgressionState = {
     relic: null,
   },
   bagItems: [],
+  potions: { ...INITIAL_POTION_INVENTORY },
+  potionCooldownRemainingMs: 0,
   totalAttack: PLAYER_COMBAT_CONFIG.meleeDamage,
   totalMaxHp: PLAYER_COMBAT_CONFIG.maxHp,
   totalSpeed: 250,
@@ -91,6 +94,8 @@ export function useGameShellState() {
   const [showInventoryModal, setShowInventoryModal] = useState<boolean>(false);
   const [showJobHallModal, setShowJobHallModal] = useState<boolean>(false);
   const [isNearJobHall, setIsNearJobHall] = useState<boolean>(false);
+  const [showToolShopModal, setShowToolShopModal] = useState<boolean>(false);
+  const [isNearToolShop, setIsNearToolShop] = useState<boolean>(false);
   const [playerProgression, setPlayerProgression] = useState<PlayerProgressionState>(
     INITIAL_PLAYER_PROGRESSION
   );
@@ -128,6 +133,12 @@ export function useGameShellState() {
     const handleJobHallProximity = (isNear: boolean) => {
       setIsNearJobHall(isNear);
     };
+    const handleOpenToolShop = () => {
+      setShowToolShopModal(true);
+    };
+    const handleToolShopProximity = (isNear: boolean) => {
+      setIsNearToolShop(isNear);
+    };
     const handleOpenInventory = () => {
       setShowInventoryModal((prev) => !prev);
     };
@@ -136,6 +147,8 @@ export function useGameShellState() {
     GameEvents.on('dash-state-updated', handleDashStateUpdated);
     GameEvents.on('open-job-hall-modal', handleOpenJobHall);
     GameEvents.on('job-hall-proximity-changed', handleJobHallProximity);
+    GameEvents.on('open-tool-shop-modal', handleOpenToolShop);
+    GameEvents.on('tool-shop-proximity-changed', handleToolShopProximity);
     GameEvents.on('open-inventory-modal', handleOpenInventory);
     return () => {
       GameEvents.off('player-hp-updated', handleHpUpdated);
@@ -143,6 +156,8 @@ export function useGameShellState() {
       GameEvents.off('dash-state-updated', handleDashStateUpdated);
       GameEvents.off('open-job-hall-modal', handleOpenJobHall);
       GameEvents.off('job-hall-proximity-changed', handleJobHallProximity);
+      GameEvents.off('open-tool-shop-modal', handleOpenToolShop);
+      GameEvents.off('tool-shop-proximity-changed', handleToolShopProximity);
       GameEvents.off('open-inventory-modal', handleOpenInventory);
     };
   }, []);
@@ -221,6 +236,12 @@ export function useGameShellState() {
       if (e.key === 'b' || e.key === 'B' || e.code === 'KeyB') {
         e.preventDefault();
         handleOpenVillageModalForCurrent();
+      } else if (e.key === '1') {
+        GameEvents.emit('use-potion', 'potion_small');
+      } else if (e.key === '2') {
+        GameEvents.emit('use-potion', 'potion_medium');
+      } else if (e.key === '3') {
+        GameEvents.emit('use-potion', 'potion_large');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -260,6 +281,8 @@ export function useGameShellState() {
     setShowInventoryModal(false);
     setShowJobHallModal(false);
     setIsNearJobHall(false);
+    setShowToolShopModal(false);
+    setIsNearToolShop(false);
     setPlayerProgression(INITIAL_PLAYER_PROGRESSION);
     setDashState(INITIAL_DASH_STATE);
     setShowMinimapModal(false);
@@ -297,6 +320,9 @@ export function useGameShellState() {
     showJobHallModal,
     setShowJobHallModal,
     isNearJobHall,
+    showToolShopModal,
+    setShowToolShopModal,
+    isNearToolShop,
     playerProgression,
     dashState,
     alertMessage,

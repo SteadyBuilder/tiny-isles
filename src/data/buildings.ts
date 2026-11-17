@@ -209,8 +209,8 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 28,
     costGold: 15,
     maxHp: 380,
-    shortEffect: '30초마다 코어 +20 · 영지 건물 +35 수리',
-    description: '영지 내 코어 보석(+20 HP)과 성벽/방책(+35 HP)을 주기적으로 수리합니다.',
+    shortEffect: '5초마다 주변 플레이어 체력 치유 · 30초마다 코어 +20 & 건물 +35 수리',
+    description: '성소 반경 내 플레이어의 체력을 5초마다 치유하고, 영지 코어(+20 HP)와 건물(+35 HP)을 수리합니다.',
   },
   {
     type: 'lumber_camp',
@@ -268,6 +268,21 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     shortEffect: '4대 클래스(전사·창병·궁수·마법사) 전직 해금 · 건물 접근 시 [E] 전직',
     description:
       '사냥으로 성장한 모험가가 상위 4대 클래스(가디언, 드래곤 랜서, 레인저, 아크메이지)로 전직할 수 있는 성전입니다.',
+  },
+  {
+    type: 'tool_shop',
+    category: 'special',
+    categoryLabel: '특수건물',
+    name: '도구 상점',
+    icon: '🧪',
+    spriteKey: 'market',
+    costWood: 18,
+    costStone: 14,
+    costGold: 4,
+    maxHp: 340,
+    shortEffect: '금화로 치유 물약 구매 · 건물 접근 시 [E] 상점 열기',
+    description:
+      '금화를 사용해 소형·중형·대형 치유 물약을 구매할 수 있는 만물 도구 상점입니다.',
   },
 ];
 

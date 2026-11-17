@@ -106,6 +106,13 @@ export class ConstructedBuildingRenderer {
         container.add(rangeRing);
       }
 
+      if (cb.type === 'special_sanctuary') {
+        const auraRing = this.scene.add.graphics();
+        auraRing.lineStyle(1.5, 0x4ade80, 0.22);
+        auraRing.strokeCircle(0, 0, 300);
+        container.add(auraRing);
+      }
+
       if (cb.type === 'job_hall') {
         const badge = this.scene.add
           .text(0, -104, '🏛️ 왕국 전직소 [E]', {
@@ -113,6 +120,18 @@ export class ConstructedBuildingRenderer {
             fontSize: '12px',
             fontStyle: 'bold',
             color: '#fde047',
+            stroke: '#000000',
+            strokeThickness: 3,
+          })
+          .setOrigin(0.5);
+        container.add(badge);
+      } else if (cb.type === 'tool_shop') {
+        const badge = this.scene.add
+          .text(0, -104, '🧪 도구 상점 [E]', {
+            fontFamily: 'Pretendard, sans-serif',
+            fontSize: '12px',
+            fontStyle: 'bold',
+            color: '#6ee7b7',
             stroke: '#000000',
             strokeThickness: 3,
           })

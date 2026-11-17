@@ -1,6 +1,7 @@
 import React from 'react';
 import { PLAYER_CLASS_DEFINITIONS } from '../data/classes';
 import { RARITY_META } from '../data/items';
+import { POTION_LIST } from '../data/potions';
 import { GameEvents } from '../game/events/gameEvents';
 import { EquipmentItem, EquipmentSlot, PlayerProgressionState } from '../types/game';
 import { PixelGameButton } from './ui/PixelGameButton';
@@ -82,6 +83,27 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
         <span className="text-[11px] font-bold text-[#6e4625]">
           정예·보스 및 부락 본진 처치 시 랜덤 옵션 장비 드랍!
         </span>
+      </div>
+
+      {/* Healing Potions */}
+      <div className="ts-paper-sheet p-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] font-black text-[#2b1810]">🧪 보유 물약 (단축키 1·2·3)</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {POTION_LIST.map((potion) => {
+            const count = progression.potions?.[potion.id] ?? 0;
+            const disabled = count <= 0 || (progression.potionCooldownRemainingMs ?? 0) > 0;
+            return (
+              <PixelGameButton
+                key={potion.id}
+                label={`${potion.icon} ${potion.shortName} ×${count}`}
+                variant="blue"
+                size="sm"
+                disabled={disabled}
+                onClick={() => GameEvents.emit('use-potion', potion.id)}
+              />
+            );
+          })}
+        </div>
       </div>
 
       {/* Equipped 3 Slots */}

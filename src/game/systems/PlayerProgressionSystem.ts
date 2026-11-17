@@ -5,6 +5,7 @@ import {
   getRequiredExpForLevel,
 } from '../../data/classes';
 import { RARITY_META } from '../../data/items';
+import { INITIAL_POTION_INVENTORY, POTION_DEFINITIONS } from '../../data/potions';
 import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { sound } from '../../lib/sound';
 import { SkillEffectContext } from '../../types/combat';
@@ -15,6 +16,8 @@ import {
   PlayerClassDefinition,
   PlayerClassId,
   PlayerProgressionState,
+  PotionId,
+  PotionInventory,
 } from '../../types/game';
 import { GameEvents } from '../events/gameEvents';
 import { MonsterVisual } from './MonsterVisualManager';
@@ -48,12 +51,14 @@ export interface IPlayerProgressionContext {
   playSkillEffect?: (ctx: SkillEffectContext) => void;
   triggerSkillSurge?: (dirX: number, dirY: number, speedPx: number, durationMs: number) => void;
   getJobHallStatus?: () => { hasBuilt: boolean; isNear: boolean };
+  getToolShopStatus?: () => { hasBuilt: boolean; isNear: boolean };
+  getPlayerHpState?: () => { hp: number; maxHp: number; isFainted: boolean };
   playLevelUpEffect?: (x: number, y: number, level: number, delayMs?: number) => void;
   playClassAdvancementEffect?: (x: number, y: number, classId: PlayerClassId) => void;
 }
 
 /**
- * 사냥 특화 모드 개인별 경험치(EXP)·레벨업·전직(4클래스)·장비 인벤토리·액티브 스킬 전담 시스템
+ * 사냥 특화 모드 개인별 경험치(EXP)·레벨업·전직(4클래스)·장비 인벤토리·물약·액티브 스킬 전담 시스템
  */
 export class PlayerProgressionSystem {
   private ctx: IPlayerProgressionContext;
@@ -69,6 +74,8 @@ export class PlayerProgressionSystem {
     relic: null,
   };
   private bagItems: EquipmentItem[] = [];
+  private potions: PotionInventory = { ...INITIAL_POTION_INVENTORY };
+  private potionCooldownRemainingMs = 0;
 
   constructor(ctx: IPlayerProgressionContext) {
     this.ctx = ctx;
@@ -165,6 +172,8 @@ export class PlayerProgressionSystem {
       skillCooldownMaxMs: Math.round(cls.skillCooldownMs * cdrRatio),
       equipped: { ...this.equipped },
       bagItems: [...this.bagItems],
+      potions: { ...this.potions },
+      potionCooldownRemainingMs: Math.max(0, Math.ceil(this.potionCooldownRemainingMs)),
       totalAttack: this.getTotalAttack(),
       totalMaxHp: this.getTotalMaxHp(),
       totalSpeed: this.getTotalSpeed(),
@@ -450,14 +459,107 @@ export class PlayerProgressionSystem {
     this.emitState();
   }
 
+  public grantPotion(potionId: PotionId, count = 1): number {
+    if (count <= 0) return 0;
+    const def = POTION_DEFINITIONS[potionId];
+    if (!def) return 0;
+    const prev = this.potions[potionId] ?? 0;
+    const next = Math.min(def.maxStack, prev + count);
+    const added = next - prev;
+    if (added > 0) {
+      this.potions[potionId] = next;
+      this.emitState();
+    }
+    return added;
+  }
+
+  public buyPotion(potionId: PotionId): boolean {
+    const def = POTION_DEFINITIONS[potionId];
+    if (!def) return false;
+
+    const shopStatus = this.ctx.getToolShopStatus?.();
+    if (shopStatus && !shopStatus.hasBuilt) {
+      GameEvents.emit('game-alert', '🏗️ 먼저 영지에 [도구 상점]을 건설해야 물약을 구매할 수 있습니다!');
+      return false;
+    }
+    if (shopStatus && !shopStatus.isNear) {
+      GameEvents.emit('game-alert', '🚶 [도구 상점] 건물 앞으로 이동해야 구매할 수 있습니다!');
+      return false;
+    }
+
+    const currentCount = this.potions[potionId] ?? 0;
+    if (currentCount >= def.maxStack) {
+      GameEvents.emit('game-alert', `🎒 ${def.name}은(는) 최대 ${def.maxStack}개까지 소지할 수 있습니다.`);
+      return false;
+    }
+
+    if (this.ctx.getGold() < def.costGold) {
+      GameEvents.emit('game-alert', `🪙 금화가 부족합니다! (필요: ${def.costGold} 금화)`);
+      return false;
+    }
+
+    this.ctx.spendGold(def.costGold);
+    this.potions[potionId] = currentCount + 1;
+    sound.playUnlock();
+    const pos = this.ctx.getPlayerPosition();
+    this.ctx.showFloatingText(pos.x, pos.y - 45, `${def.icon} ${def.name} 구매!`, '#fde047');
+    this.emitState();
+    return true;
+  }
+
+  public usePotion(potionId: PotionId): boolean {
+    if (this.ctx.isPlayerFainted?.()) return false;
+    const def = POTION_DEFINITIONS[potionId];
+    if (!def) return false;
+
+    const count = this.potions[potionId] ?? 0;
+    if (count <= 0) {
+      GameEvents.emit('game-alert', `${def.icon} ${def.name}이(가) 없습니다. 도구 상점에서 구매하거나 사냥으로 획득하세요!`);
+      return false;
+    }
+
+    if (this.potionCooldownRemainingMs > 0) {
+      return false;
+    }
+
+    const hpState = this.ctx.getPlayerHpState?.();
+    if (hpState && hpState.hp >= hpState.maxHp) {
+      const pos = this.ctx.getPlayerPosition();
+      this.ctx.showFloatingText(pos.x, pos.y - 40, '💚 이미 체력이 가득 찼습니다!', '#86efac');
+      return false;
+    }
+
+    this.potions[potionId] = count - 1;
+    this.potionCooldownRemainingMs = def.cooldownMs;
+    this.ctx.healPlayer(def.healAmount);
+    sound.playHeal();
+    this.emitState();
+    return true;
+  }
+
   public update(deltaMs: number): void {
+    let dirty = false;
+
     if (this.skillCooldownRemainingMs > 0) {
       const prevSec = Math.ceil(this.skillCooldownRemainingMs / 250);
       this.skillCooldownRemainingMs = Math.max(0, this.skillCooldownRemainingMs - deltaMs);
       const nextSec = Math.ceil(this.skillCooldownRemainingMs / 250);
       if (prevSec !== nextSec || this.skillCooldownRemainingMs === 0) {
-        this.emitState();
+        dirty = true;
       }
+    }
+
+    if (this.potionCooldownRemainingMs > 0) {
+      const prevSec = Math.ceil(this.potionCooldownRemainingMs / 250);
+      this.potionCooldownRemainingMs = Math.max(0, this.potionCooldownRemainingMs - deltaMs);
+      const nextSec = Math.ceil(this.potionCooldownRemainingMs / 250);
+      if (prevSec !== nextSec || this.potionCooldownRemainingMs === 0) {
+        dirty = true;
+      }
+    }
+
+    if (dirty) {
+      this.emitState();
     }
   }
 }

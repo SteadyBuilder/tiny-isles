@@ -1,3 +1,4 @@
+import { SANCTUARY_HEAL_CONFIG } from '../../../data/potions';
 import { WORLD_CLOCK_CONFIG } from '../../../data/worldRules';
 import { ConstructedBuilding, Island } from '../../../types/game';
 
@@ -10,17 +11,19 @@ export interface ITerritoryPassiveContext {
   updateConstructedBuildingHpBar: (buildingId: string) => void;
   onCoreHealed?: (territoryId: number, coreHp: number, coreMaxHp: number) => void;
   onBuildingHealed?: (buildingId: string, hp: number, maxHp: number) => void;
+  onSanctuaryAuraTick?: () => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   saveWorldState: (immediate?: boolean) => void;
   emitWorldStateToReact: (immediate?: boolean) => void;
 }
 
 /**
- * 특수 경제 건물(벌목 작업장/석공 작업장/황금 연금술 공방) 자동 채집 및 회복 건물(주민 가옥/성소) 주기 효과 처리기 (30초 주기)
+ * 특수 경제 건물(벌목 작업장/석공 작업장/황금 연금술 공방) 자동 채집 및 회복 건물(주민 가옥/성소) 주기 효과 처리기 (30초 주기 + 성소 5초 오라)
  */
 export class TerritoryPassiveSystem {
   private ctx: ITerritoryPassiveContext;
   private passiveTickAccum = 0;
+  private sanctuaryAuraAccum = 0;
 
   constructor(ctx: ITerritoryPassiveContext) {
     this.ctx = ctx;
@@ -34,6 +37,12 @@ export class TerritoryPassiveSystem {
   }
 
   public update(delta: number): void {
+    this.sanctuaryAuraAccum += delta;
+    if (this.sanctuaryAuraAccum >= SANCTUARY_HEAL_CONFIG.healIntervalMs) {
+      this.sanctuaryAuraAccum = 0;
+      this.ctx.onSanctuaryAuraTick?.();
+    }
+
     this.passiveTickAccum += delta;
     if (this.passiveTickAccum < WORLD_CLOCK_CONFIG.passiveTickIntervalMs) return;
     this.passiveTickAccum = 0;

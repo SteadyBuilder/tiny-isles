@@ -4,6 +4,7 @@ import {
   Inventory,
   PlayerClassId,
   PlayerColor,
+  PotionId,
 } from '../../../types/game';
 import { GameEventPayloads, GameEvents } from '../../events/gameEvents';
 
@@ -36,6 +37,8 @@ export interface IWorldEventBusContext {
   unequipSlot?: (slot: EquipmentSlot) => void;
   salvageItem?: (instanceId: string) => void;
   castActiveSkill?: () => void;
+  buyPotion?: (potionId: PotionId) => void;
+  usePotion?: (potionId: PotionId) => void;
   onWindowUnload: () => void;
 }
 
@@ -137,6 +140,14 @@ export class WorldEventBusController {
 
     this.register('cast-active-skill', () => {
       this.ctx.castActiveSkill?.();
+    });
+
+    this.register('buy-potion', (potionId) => {
+      this.ctx.buyPotion?.(potionId);
+    });
+
+    this.register('use-potion', (potionId) => {
+      this.ctx.usePotion?.(potionId);
     });
 
     if (typeof window !== 'undefined') {

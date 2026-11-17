@@ -83,6 +83,10 @@ export interface GameEventPayloads {
   'player-progression-updated': PlayerProgressionState;
   'job-hall-proximity-changed': boolean;
   'open-job-hall-modal': void;
+  'tool-shop-proximity-changed': boolean;
+  'open-tool-shop-modal': void;
+  'buy-potion': import('../../types/hunting').PotionId;
+  'use-potion': import('../../types/hunting').PotionId;
   'open-inventory-modal': void;
   'select-player-class': PlayerClassId;
   'equip-item': string; // instanceId

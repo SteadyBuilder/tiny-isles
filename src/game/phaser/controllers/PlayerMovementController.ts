@@ -19,6 +19,7 @@ import { setDepthIfChanged, ySortDepth } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
+import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { resolveSafeSpawnPosition } from '../../utils/playerSpawnUtils';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
@@ -82,6 +83,7 @@ export class PlayerMovementController {
   private lastGridPos = { gridX: 0, gridY: 0 };
   private lastNearIsland: Island | null = null;
   private lastNearJobHall = false;
+  private lastNearToolShop = false;
   private lastInteractTime = 0;
   private unbindInputs: Array<() => void> = [];
 
@@ -612,14 +614,17 @@ export class PlayerMovementController {
       GameEvents.emit('player-grid-pos-changed', { gridX, gridY });
     }
 
-    const jobHallStatus = checkJobHallProximity(
-      px,
-      py,
-      this.ctx.getConstructedBuildings?.() ?? []
-    );
+    const buildings = this.ctx.getConstructedBuildings?.() ?? [];
+    const jobHallStatus = checkJobHallProximity(px, py, buildings);
     if (jobHallStatus.isNear !== this.lastNearJobHall) {
       this.lastNearJobHall = jobHallStatus.isNear;
       GameEvents.emit('job-hall-proximity-changed', jobHallStatus.isNear);
+    }
+
+    const toolShopStatus = checkToolShopProximity(px, py, buildings);
+    if (toolShopStatus.isNear !== this.lastNearToolShop) {
+      this.lastNearToolShop = toolShopStatus.isNear;
+      GameEvents.emit('tool-shop-proximity-changed', toolShopStatus.isNear);
     }
   }
 

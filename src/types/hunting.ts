@@ -65,6 +65,36 @@ export interface PlayerClassDefinition {
   passiveDescription: string;
 }
 
+export type PotionId = 'potion_small' | 'potion_medium' | 'potion_large';
+
+export interface PotionDefinition {
+  id: PotionId;
+  name: string;
+  shortName: string;
+  icon: string;
+  hotkey: '1' | '2' | '3';
+  healAmount: number;
+  costGold: number;
+  cooldownMs: number;
+  maxStack: number;
+  description: string;
+}
+
+export type PotionInventory = Record<PotionId, number>;
+
+export interface ResourceBundleDrop {
+  wood: number;
+  stone: number;
+  gold: number;
+  label: string;
+  icon: string;
+}
+
+export type MonsterDropResult =
+  | { kind: 'equipment'; item: EquipmentItem }
+  | { kind: 'potion'; potionId: PotionId; count: number }
+  | { kind: 'resource'; bundle: ResourceBundleDrop };
+
 export interface PlayerProgressionState {
   level: number;
   exp: number;
@@ -75,6 +105,8 @@ export interface PlayerProgressionState {
   skillCooldownMaxMs: number;
   equipped: EquippedItemsMap;
   bagItems: EquipmentItem[];
+  potions: PotionInventory;
+  potionCooldownRemainingMs: number;
   totalAttack: number;
   totalMaxHp: number;
   totalSpeed: number;

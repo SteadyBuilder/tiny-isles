@@ -2,14 +2,18 @@ import React from 'react';
 import { PLAYER_CLASS_DEFINITIONS } from '../data/classes';
 import { GameEvents } from '../game/events/gameEvents';
 import { DashCooldownState, PlayerProgressionState } from '../types/game';
+import { PotionQuickSlot } from './hud/PotionQuickSlot';
 
 interface PlayerProgressionHudProps {
   progression: PlayerProgressionState;
   dashState?: DashCooldownState;
   hasJobHallBuilt: boolean;
   isNearJobHall: boolean;
+  hasToolShopBuilt: boolean;
+  isNearToolShop: boolean;
   onOpenInventory: () => void;
   onOpenJobHall: () => void;
+  onOpenToolShop: () => void;
 }
 
 export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
@@ -17,8 +21,11 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   dashState,
   hasJobHallBuilt,
   isNearJobHall,
+  hasToolShopBuilt,
+  isNearToolShop,
   onOpenInventory,
   onOpenJobHall,
+  onOpenToolShop,
 }) => {
   const classDef = PLAYER_CLASS_DEFINITIONS[progression.classId];
   const expRatio = Math.min(
@@ -89,6 +96,48 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
           <span className="hidden md:flex absolute inset-0 items-center justify-center text-[8px] font-black text-white drop-shadow">
             EXP {progression.exp} / {progression.nextLevelExp} ({expRatio}%)
           </span>
+        </div>
+
+        {/* Potion Quick Slot Row */}
+        <div className="flex items-center justify-between gap-1.5 pt-0.5">
+          <PotionQuickSlot
+            potions={progression.potions}
+            cooldownRemainingMs={progression.potionCooldownRemainingMs ?? 0}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (!hasToolShopBuilt) {
+                GameEvents.emit(
+                  'game-alert',
+                  '🏗️ 먼저 영지 [B]에서 [도구 상점]을 건설한 뒤 상점 앞으로 이동하세요!'
+                );
+                return;
+              }
+              if (!isNearToolShop) {
+                GameEvents.emit(
+                  'game-alert',
+                  '🚶 [도구 상점] 건물 앞으로 직접 이동해야 구매할 수 있습니다! (접근 후 [E] 또는 클릭)'
+                );
+                return;
+              }
+              onOpenToolShop();
+            }}
+            className={`px-1.5 py-0.5 md:px-2 md:py-1 rounded-md border text-[10px] md:text-[11px] font-black flex items-center justify-center gap-1 transition-transform active:scale-95 whitespace-nowrap shrink-0 ${
+              hasToolShopBuilt && isNearToolShop
+                ? 'bg-[#064e3b] border-[#34d399] text-[#d1fae5] hover:brightness-110'
+                : 'bg-[#291d14] border-[#5c422a] text-[#a8a29e]'
+            }`}
+            title={
+              hasToolShopBuilt && isNearToolShop
+                ? '도구 상점 입장 [E]'
+                : hasToolShopBuilt
+                  ? '도구 상점 앞으로 이동하면 물약을 구매할 수 있습니다'
+                  : '마을에 도구 상점 건설 후 방문 시 물약 구매 가능'
+            }
+          >
+            <span>{hasToolShopBuilt && isNearToolShop ? '🧪 상점 [E]' : '🧪 상점'}</span>
+          </button>
         </div>
 
         {/* Action Buttons Row: Skill [Q], Dash [Shift], Inventory [I], Job Advancement */}

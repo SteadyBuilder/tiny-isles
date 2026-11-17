@@ -117,7 +117,8 @@ export type ConstructableType =
   | 'special_barracks'
   | 'special_sanctuary'
   | 'special_goldmine'
-  | 'job_hall';
+  | 'job_hall'
+  | 'tool_shop';
 
 export interface ConstructableBlueprint {
   type: ConstructableType;

@@ -17,6 +17,7 @@ import {
 import { GameEvents } from '../../events/gameEvents';
 import { canClaimTerritory } from '../../territoryAccessRules';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
+import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
@@ -179,12 +180,19 @@ export class PlayerInteractionController {
       }
     }
 
-    // 2. 건설된 '왕국 전직소(job_hall)' 앞에서 상호작용 시 전직 창 열기
+    // 2. 건설된 '왕국 전직소(job_hall)' 또는 '도구 상점(tool_shop)' 앞에서 상호작용 시 모달 열기
     const buildings = this.ctx.getConstructedBuildings?.() ?? [];
     const jobHallStatus = checkJobHallProximity(px, py, buildings);
     if (jobHallStatus.isNear) {
       sound.playUnlock();
       GameEvents.emit('open-job-hall-modal');
+      return;
+    }
+
+    const toolShopStatus = checkToolShopProximity(px, py, buildings);
+    if (toolShopStatus.isNear) {
+      sound.playUnlock();
+      GameEvents.emit('open-tool-shop-modal');
       return;
     }
 

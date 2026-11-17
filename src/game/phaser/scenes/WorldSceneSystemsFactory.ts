@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
 import { FIELD_MONSTER_CONFIG } from '../../../data/fieldMonsters';
-import { rollMonsterDropItem } from '../../../data/items';
+import { POTION_DEFINITIONS, rollMonsterLoot } from '../../../data/potions';
 import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import {
@@ -25,6 +25,7 @@ import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
+import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 import { CombatFeedbackRenderer } from '../renderers/CombatFeedbackRenderer';
@@ -174,21 +175,23 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
           waveSystem.addThreat(fieldGain, true);
           host.effectsRenderer.emitThreatOrbFromWorld(x, y, fieldGain);
         }
-        // 사냥 특화 모드: 일반·정예·보스 처치 시 디아블로식 필드 장비 드랍
-        if (host.isHuntingMode()) {
-          const difficultyId = host.getDifficultyConfig?.().id ?? 'normal';
-          const dropItem = rollMonsterDropItem({
-            ring: meta?.campRing ?? 2,
-            isElite: Boolean(meta?.isElite),
-            isBoss,
-            difficultyId,
-            eliteTier: meta?.eliteTier,
-          });
-          if (dropItem) {
+        // 몬스터 처치 시 밸런스 테이블 기반 장비·물약·자원 꾸러미 드랍
+        const difficultyId = host.getDifficultyConfig?.().id ?? 'normal';
+        const lootResults = rollMonsterLoot({
+          ring: meta?.campRing ?? 2,
+          isElite: Boolean(meta?.isElite),
+          isBoss,
+          isHuntingMode: host.isHuntingMode(),
+          difficultyId,
+          eliteTier: meta?.eliteTier,
+        });
+
+        for (const loot of lootResults) {
+          if (loot.kind === 'equipment') {
             host.lootChestRenderer.playDropAnimation({
               x,
               y,
-              item: dropItem,
+              item: loot.item,
               onOpened: (openedItem) => {
                 playerProgressionSystem?.grantRewardItem(openedItem);
                 GameEvents.emit(
@@ -197,6 +200,40 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
                 );
               },
             });
+          } else if (loot.kind === 'potion') {
+            const added = playerProgressionSystem?.grantPotion(loot.potionId, loot.count) ?? 0;
+            const def = POTION_DEFINITIONS[loot.potionId];
+            if (added > 0 && def) {
+              sound.playGemDrop();
+              host.effectsRenderer.showFloatingText(
+                x,
+                y - 26,
+                `${def.icon} ${def.name} +${added}`,
+                '#4ade80'
+              );
+              GameEvents.emit(
+                'game-alert',
+                `${def.icon} 몬스터가 [${def.name}]을(를) 드랍했습니다!`
+              );
+            }
+          } else if (loot.kind === 'resource') {
+            const { wood, stone, gold, label, icon } = loot.bundle;
+            host.addResources(wood, stone, gold);
+            const parts: string[] = [];
+            if (wood > 0) parts.push(`🪵+${wood}`);
+            if (stone > 0) parts.push(`🪨+${stone}`);
+            if (gold > 0) parts.push(`🪙+${gold}`);
+            if (parts.length > 0) {
+              host.effectsRenderer.showFloatingText(
+                x,
+                y - 12,
+                `${icon} ${parts.join(' ')}`,
+                '#fde047'
+              );
+              if (isBoss || meta?.isElite) {
+                GameEvents.emit('game-alert', `${icon} ${label} 획득! (${parts.join(' ')})`);
+              }
+            }
           }
         }
       },
@@ -270,6 +307,12 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       const status = checkJobHallProximity(pos.x, pos.y, host.getConstructedBuildings());
       return { hasBuilt: status.hasBuilt, isNear: status.isNear };
     },
+    getToolShopStatus: () => {
+      const pos = host.getPlayerPosition();
+      const status = checkToolShopProximity(pos.x, pos.y, host.getConstructedBuildings());
+      return { hasBuilt: status.hasBuilt, isNear: status.isNear };
+    },
+    getPlayerHpState: () => playerHealthSystem.getState(),
     playLevelUpEffect: (x, y, level, delayMs) =>
       host.celebrationEffects.playLevelUpEffect(x, y, level, delayMs),
     playClassAdvancementEffect: (x, y, classId) =>

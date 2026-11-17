@@ -21,6 +21,7 @@ import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 import { WaterRect } from '../../world/MapTerrainGenerator';
+import { checkSanctuaryPlayerHeal } from '../../utils/sanctuaryHealUtils';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
 
 export interface IWorldControllersHost {
@@ -270,6 +271,8 @@ export function createWorldControllersBundle(
     unequipSlot: (slot) => host.systems.playerProgressionSystem.unequipSlot(slot),
     salvageItem: (instanceId) => host.systems.playerProgressionSystem.salvageItem(instanceId),
     castActiveSkill: () => host.systems.playerProgressionSystem.castActiveSkill(),
+    buyPotion: (potionId) => host.systems.playerProgressionSystem.buyPotion(potionId),
+    usePotion: (potionId) => host.systems.playerProgressionSystem.usePotion(potionId),
     onWindowUnload: () => {},
   });
 
