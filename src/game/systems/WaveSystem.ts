@@ -264,7 +264,7 @@ export class WaveSystem {
       this.warningIssuedForCurrentCycle = true;
       const warnMsg = '⚠️ 마물 위협도가 80%에 도달했습니다! 곧 마물 대군이 몰려옵니다!';
       this.waveState.lastWaveMessage = warnMsg;
-      sound.playBreak();
+      sound.playWaveHorn();
       GameEvents.emit('game-alert', warnMsg);
     }
 
@@ -279,7 +279,7 @@ export class WaveSystem {
         isBossWave ? '보스 군단' : '마물 웨이브'
       }이 침공합니다!`;
       this.waveState.lastWaveMessage = warnMsg;
-      sound.playBreak();
+      sound.playWaveHorn();
       GameEvents.emit('game-alert', warnMsg);
       this.emitWaveState();
       this.ctx.broadcastThreatSync?.(
@@ -495,7 +495,7 @@ export class WaveSystem {
 
       const dngMsg = `🌀 [${dng.scalingLabel}] ${dng.directionLabel}에 심연의 던전 게이트가 열렸습니다! 마물 ${dng.totalSpawns}마리와 수문장이 중앙 마을로 총진격합니다!${bonusSuffix}`;
       this.waveState.lastWaveMessage = dngMsg;
-      sound.playBreak();
+      sound.playBossRoar();
       GameEvents.emit('game-alert', dngMsg);
       this.emitWaveState();
       if (isLocalTrigger && this.ctx.broadcastWaveSpawn) {
@@ -521,7 +521,11 @@ export class WaveSystem {
       : `🧟 [${result.scalingLabel}] 지도 외곽(동·서·남·북)에서 마물 웨이브가 진격을 시작했습니다!${bonusSuffix}`;
 
     this.waveState.lastWaveMessage = alertMsg;
-    sound.playBreak();
+    if (isBossWave) {
+      sound.playBossRoar();
+    } else {
+      sound.playWaveHorn();
+    }
     GameEvents.emit('game-alert', alertMsg);
     this.emitWaveState();
 

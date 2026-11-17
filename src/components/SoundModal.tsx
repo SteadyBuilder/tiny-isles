@@ -20,6 +20,12 @@ const SFX_PREVIEW_ITEMS: ReadonlyArray<{
   { label: '영지 해금', iconSrc: '/assets/ui/Icons/Icon_06.png', play: () => sound.playUnlock() },
   { label: '건물 파괴', iconSrc: '/assets/ui/Icons/Icon_09.png', play: () => sound.playBreak() },
   { label: '타워 발사', iconSrc: '/assets/ui/Icons/Icon_05.png', play: () => sound.playTowerShoot() },
+  { label: '치명타 타격', iconSrc: '/assets/ui/Icons/Icon_01.png', play: () => sound.playHitCrit() },
+  { label: '스킬 발동', iconSrc: '/assets/ui/Icons/Icon_02.png', play: () => sound.playSkillCast('archmage') },
+  { label: '레벨업', iconSrc: '/assets/ui/Icons/Icon_04.png', play: () => sound.playLevelUp() },
+  { label: '전직 팡파레', iconSrc: '/assets/ui/Icons/Icon_07.png', play: () => sound.playClassAdvance() },
+  { label: '웨이브 나팔', iconSrc: '/assets/ui/Icons/Icon_08.png', play: () => sound.playWaveHorn() },
+  { label: '보스 포효', iconSrc: '/assets/ui/Icons/Icon_10.png', play: () => sound.playBossRoar() },
 ];
 
 export const SoundModal: React.FC<SoundModalProps> = ({ isOpen, onClose }) => {

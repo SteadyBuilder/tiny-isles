@@ -76,7 +76,15 @@ export class PlayerCelebrationEffects {
     });
     this.activeTimers.add(ringTimer);
 
-    // 3. 스프라이트 성광/폭발 애니메이션 결합
+    // 3. 스프라이트 성광/폭발/빛기둥 애니메이션 결합
+    if (scene.textures.exists('levelUpPillarFx') && scene.anims.exists('levelup_pillar_anim')) {
+      const pillarSprite = scene.add.sprite(x, y - 92, 'levelUpPillarFx');
+      pillarSprite.setDepth(DEPTH.EXPLOSION + 2);
+      pillarSprite.setDisplaySize(210, 280);
+      pillarSprite.setTint(palette.primary);
+      pillarSprite.play('levelup_pillar_anim');
+      pillarSprite.once('animationcomplete', () => pillarSprite.destroy());
+    }
     if (scene.textures.exists('healFx') && scene.anims.exists('heal_anim')) {
       const healFx = scene.add.sprite(x, y - 10, 'healFx');
       healFx.setDepth(DEPTH.EXPLOSION + 1);
@@ -84,6 +92,14 @@ export class PlayerCelebrationEffects {
       healFx.setTint(palette.primary);
       healFx.play('heal_anim');
       healFx.once('animationcomplete', () => healFx.destroy());
+    }
+    if (scene.textures.exists('critStarBurstFx') && scene.anims.exists('crit_star_burst_anim')) {
+      const burst = scene.add.sprite(x, y - 22, 'critStarBurstFx');
+      burst.setDepth(DEPTH.EXPLOSION + 3);
+      burst.setDisplaySize(180, 180);
+      burst.setTint(palette.secondary);
+      burst.play('crit_star_burst_anim');
+      burst.once('animationcomplete', () => burst.destroy());
     }
 
     // 4. 방사형 빛 파편 파티클 16개
@@ -144,6 +160,13 @@ export class PlayerCelebrationEffects {
     this.spawnExpandingRing(x, y, 0xfde047, 82, 460, 3.5);
     this.spawnRadialParticles(x, y - 12, 0xfde047, 0xfbbf24, 10, 74);
 
+    if (scene.textures.exists('levelUpPillarFx') && scene.anims.exists('levelup_pillar_anim')) {
+      const pillarSprite = scene.add.sprite(x, y - 74, 'levelUpPillarFx');
+      pillarSprite.setDepth(DEPTH.EXPLOSION + 2);
+      pillarSprite.setDisplaySize(160, 210);
+      pillarSprite.play('levelup_pillar_anim');
+      pillarSprite.once('animationcomplete', () => pillarSprite.destroy());
+    }
     if (scene.textures.exists('healFx') && scene.anims.exists('heal_anim')) {
       const fx = scene.add.sprite(x, y - 6, 'healFx');
       fx.setDepth(DEPTH.EXPLOSION + 1);

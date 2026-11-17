@@ -76,12 +76,57 @@ export class WorldEffectsRenderer {
   }
 
   public playExplosionAt(x: number, y: number): void {
+    if (!this.isSceneAlive()) return;
     if (this.scene.textures.exists('explosionFx') && this.scene.anims.exists('explosion_anim')) {
       const exp = this.scene.add.sprite(x, y, 'explosionFx');
       exp.setDepth(DEPTH.EXPLOSION);
       exp.setDisplaySize(140, 140);
       exp.play('explosion_anim');
       exp.once('animationcomplete', () => exp.destroy());
+    }
+    if (this.scene.textures.exists('shockwaveRingFx') && this.scene.anims.exists('shockwave_ring_anim')) {
+      const ring = this.scene.add.sprite(x, y + 6, 'shockwaveRingFx');
+      ring.setDepth(DEPTH.EXPLOSION - 1);
+      ring.setDisplaySize(128, 128);
+      ring.setTint(0xfbbf24);
+      ring.setAlpha(0.75);
+      ring.play('shockwave_ring_anim');
+      ring.once('animationcomplete', () => ring.destroy());
+    }
+  }
+
+  public playWaterSplashAt(x: number, y: number, size = 110): void {
+    if (!this.isSceneAlive()) return;
+    if (this.scene.textures.exists('waterSplashFx') && this.scene.anims.exists('water_splash_anim')) {
+      const splash = this.scene.add.sprite(x, y, 'waterSplashFx');
+      splash.setDepth(DEPTH.EXPLOSION);
+      splash.setDisplaySize(size, size);
+      splash.play('water_splash_anim');
+      splash.once('animationcomplete', () => splash.destroy());
+    }
+  }
+
+  public playVoidSlashAt(x: number, y: number, tint = 0xc084fc, size = 128): void {
+    if (!this.isSceneAlive()) return;
+    if (this.scene.textures.exists('voidSlashFx') && this.scene.anims.exists('void_slash_anim')) {
+      const fx = this.scene.add.sprite(x, y, 'voidSlashFx');
+      fx.setDepth(DEPTH.EXPLOSION + 1);
+      fx.setDisplaySize(size, size);
+      fx.setTint(tint);
+      fx.play('void_slash_anim');
+      fx.once('animationcomplete', () => fx.destroy());
+    }
+  }
+
+  public playLightningAt(x: number, y: number, tint = 0x38bdf8): void {
+    if (!this.isSceneAlive()) return;
+    if (this.scene.textures.exists('lightningStrikeFx') && this.scene.anims.exists('lightning_strike_anim')) {
+      const bolt = this.scene.add.sprite(x, y - 90, 'lightningStrikeFx');
+      bolt.setDepth(DEPTH.EXPLOSION + 2);
+      bolt.setDisplaySize(136, 250);
+      bolt.setTint(tint);
+      bolt.play('lightning_strike_anim');
+      bolt.once('animationcomplete', () => bolt.destroy());
     }
   }
 

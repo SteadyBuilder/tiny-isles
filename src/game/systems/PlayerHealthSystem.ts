@@ -88,7 +88,7 @@ export class PlayerHealthSystem {
     this.ctx.onPlayerHitVisual();
     this.ctx.onPlayerDamagedShake?.();
     this.ctx.showFloatingText(x, y - 35, `💔 -${damage}`, '#f87171');
-    sound.playBreak();
+    sound.playPlayerHurt();
 
     const dmgRatio = damage / Math.max(1, this.maxHp);
     const intensity = Math.max(
@@ -147,7 +147,7 @@ export class PlayerHealthSystem {
     this.ctx.onPlayerFaintedVisual(false);
     this.ctx.respawnPlayerAt(x, y);
     this.ctx.showFloatingText(x, y - 50, '✨ 중심 마을에서 부활!', '#4ade80');
-    sound.playUnlock();
+    sound.playHeal();
 
     this.emitState();
     GameEvents.emit('player-respawned');

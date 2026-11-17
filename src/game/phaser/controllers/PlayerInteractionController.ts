@@ -114,7 +114,8 @@ export class PlayerInteractionController {
 
       const primary = targetsInRange[0].mv;
       if (classDef?.isRanged && this.ctx.projectileSystem) {
-        sound.playTowerShoot();
+        if (classDef.id === 'archmage') sound.playMagicCast();
+        else sound.playBowRelease();
         const targetId = primary.monster.id;
         const hitX = primary.monster.x;
         const hitY = primary.monster.y;
@@ -152,7 +153,8 @@ export class PlayerInteractionController {
           },
         });
       } else {
-        sound.playChop();
+        if (classDef?.id === 'lancer') sound.playLanceThrust();
+        else sound.playSwordSlash();
         const maxTargets = classDef?.isSplash || classDef?.isPiercing ? 4 : 1;
         for (let i = 0; i < Math.min(maxTargets, targetsInRange.length); i++) {
           this.ctx.damageMonster(

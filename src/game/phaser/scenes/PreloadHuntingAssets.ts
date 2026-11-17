@@ -123,6 +123,34 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
     frameWidth: 96,
     frameHeight: 96,
   });
+  scene.load.spritesheet('hitSparkFx', '/assets/fx/Hit_Spark.png', {
+    frameWidth: 96,
+    frameHeight: 96,
+  });
+  scene.load.spritesheet('critStarBurstFx', '/assets/fx/Crit_Star_Burst.png', {
+    frameWidth: 128,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet('lightningStrikeFx', '/assets/fx/Lightning_Strike.png', {
+    frameWidth: 128,
+    frameHeight: 256,
+  });
+  scene.load.spritesheet('frostNovaFx', '/assets/fx/Frost_Nova.png', {
+    frameWidth: 192,
+    frameHeight: 192,
+  });
+  scene.load.spritesheet('levelUpPillarFx', '/assets/fx/LevelUp_Pillar.png', {
+    frameWidth: 192,
+    frameHeight: 256,
+  });
+  scene.load.spritesheet('voidSlashFx', '/assets/fx/Void_Slash.png', {
+    frameWidth: 128,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet('waterSplashFx', '/assets/fx/Water_Splash.png', {
+    frameWidth: 192,
+    frameHeight: 192,
+  });
 
   // 몬스터 부락 본진 건물
   scene.load.image('blackCastle', '/assets/buildings/Black_Castle.png');
@@ -303,6 +331,13 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
     { tex: 'meteorRockFx', key: 'meteor_rock_anim', end: 3, frameRate: 16, repeat: -1 },
     { tex: 'shockwaveRingFx', key: 'shockwave_ring_anim', end: 5, frameRate: 20, repeat: 0 },
     { tex: 'arrowStormFx', key: 'arrow_storm_anim', end: 3, frameRate: 16, repeat: -1 },
+    { tex: 'hitSparkFx', key: 'hit_spark_anim', end: 5, frameRate: 24, repeat: 0 },
+    { tex: 'critStarBurstFx', key: 'crit_star_burst_anim', end: 5, frameRate: 22, repeat: 0 },
+    { tex: 'lightningStrikeFx', key: 'lightning_strike_anim', end: 5, frameRate: 20, repeat: 0 },
+    { tex: 'frostNovaFx', key: 'frost_nova_anim', end: 5, frameRate: 20, repeat: 0 },
+    { tex: 'levelUpPillarFx', key: 'levelup_pillar_anim', end: 7, frameRate: 16, repeat: 0 },
+    { tex: 'voidSlashFx', key: 'void_slash_anim', end: 5, frameRate: 22, repeat: 0 },
+    { tex: 'waterSplashFx', key: 'water_splash_anim', end: 8, frameRate: 18, repeat: 0 },
   ];
 
   for (const spec of fxAnimSpecs) {

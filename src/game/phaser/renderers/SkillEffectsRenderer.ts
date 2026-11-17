@@ -58,6 +58,7 @@ export class SkillEffectsRenderer {
     this.schedule(style.chargeDurationMs, () => {
       this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', x, y, radius * 1.9, style.primaryHex);
       this.playSpriteAnim('explosionFx', 'explosion_anim', x, y - 8, 150, style.primaryHex);
+      this.playSpriteAnim('critStarBurstFx', 'crit_star_burst_anim', x, y - 10, 145, style.primaryHex);
       this.spawnBurstSparks(x, y, style.primaryHex, style.secondaryHex, 12, radius * 0.7);
       ctx.onImpact?.();
     });
@@ -72,6 +73,7 @@ export class SkillEffectsRenderer {
 
     this.schedule(style.chargeDurationMs, () => {
       this.playSpriteAnim('whirlwindSlashFx', 'whirlwind_slash_anim', x, y - 8, radius * 2.35, style.secondaryHex, 1.1);
+      this.playSpriteAnim('frostNovaFx', 'frost_nova_anim', x, y, radius * 2.1, style.primaryHex);
       this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', x, y, radius * 2.05, style.secondaryHex);
       this.playSpriteAnim('healFx', 'heal_anim', x, y - 12, 165, style.primaryHex);
       this.spawnBurstSparks(x, y, style.primaryHex, style.secondaryHex, 16, radius * 0.8);
@@ -102,6 +104,7 @@ export class SkillEffectsRenderer {
     this.schedule(style.chargeDurationMs, () => {
       const tipX = x + Math.cos(angle) * 145;
       const tipY = y + Math.sin(angle) * 145;
+      this.playSpriteAnim('lightningStrikeFx', 'lightning_strike_anim', tipX, tipY - 82, 132, style.primaryHex, 0, 240);
       this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', tipX, tipY, radius * 1.4, style.primaryHex);
       this.playSpriteAnim('explosionFx2', 'explosion2_anim', tipX, tipY - 10, 175, style.primaryHex);
       this.spawnBurstSparks(tipX, tipY, style.primaryHex, style.accentHex, 16, radius * 0.65);
@@ -132,6 +135,7 @@ export class SkillEffectsRenderer {
     });
 
     this.schedule(style.chargeDurationMs, () => {
+      this.playSpriteAnim('critStarBurstFx', 'crit_star_burst_anim', x, y - 14, 150, style.primaryHex);
       ctx.onImpact?.();
     });
   }
@@ -144,8 +148,11 @@ export class SkillEffectsRenderer {
     this.dropMeteor(x, y, style.chargeDurationMs);
 
     this.schedule(style.chargeDurationMs, () => {
+      this.playSpriteAnim('lightningStrikeFx', 'lightning_strike_anim', x, y - 96, 156, style.primaryHex, 0, 280);
       this.playSpriteAnim('explosionFx2', 'explosion2_anim', x, y - 16, radius * 1.65, 0xffffff);
+      this.playSpriteAnim('frostNovaFx', 'frost_nova_anim', x, y, radius * 2.0, style.primaryHex);
       this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', x, y, radius * 2.1, style.secondaryHex);
+      this.playSpriteAnim('voidSlashFx', 'void_slash_anim', x, y - 12, radius * 1.35, style.primaryHex);
       this.playSpriteAnim('healFx', 'heal_anim', x, y - 14, 185, style.primaryHex);
 
       for (let i = 0; i < 6; i++) {

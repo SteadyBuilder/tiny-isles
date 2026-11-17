@@ -399,6 +399,10 @@ export class MonsterCombatAI {
       this.ctx.shakeObject(mv.container);
       MonsterVisualManager.updateHpBar(mv, true);
       triggerHitFeedback(true);
+      if (!params.fromRemote) {
+        if (params.hitMeta?.isCrit) sound.playHitCrit();
+        else sound.playHitBasic();
+      }
       this.ctx.onMonsterDamaged?.();
       return false;
     }
@@ -440,7 +444,7 @@ export class MonsterCombatAI {
     const expReward = deadM.expReward ?? (deadM.isBoss ? 120 : 16);
 
     this.ctx.addRewardResources(rewardWood, rewardStone, rewardGold);
-    sound.playUnlock();
+    sound.playMonsterDeath();
     const rewardText = deadM.isBoss
       ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} +✨${expReward}EXP)`
       : `⚔️ +🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} (+${expReward}EXP)`;

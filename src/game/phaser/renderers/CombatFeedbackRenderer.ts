@@ -163,11 +163,41 @@ export class CombatFeedbackRenderer {
     const slashColor = isSkill ? 0x38bdf8 : isCrit ? 0xfde047 : 0xffffff;
     const sparkColor = isSkill ? 0x67e8f9 : isCrit ? 0xf97316 : 0xfde047;
 
-    // 1. 타격 방향 미니 참격 호/선
+    // 1. 타격 방향 미니 참격 호/선 + 픽셀아트 타격 스파크 스프라이트
     const baseAngle =
       attackerX !== undefined && attackerY !== undefined
         ? Math.atan2(y - attackerY, x - attackerX)
         : Math.random() * Math.PI * 2;
+
+    if (scene.textures.exists('hitSparkFx') && scene.anims.exists('hit_spark_anim')) {
+      const hitSprite = scene.add.sprite(x, hitY, 'hitSparkFx');
+      hitSprite.setDepth(DEPTH.SPARK + 1);
+      const sz = isSkill ? 96 : isCrit ? 84 : 64;
+      hitSprite.setDisplaySize(sz, sz);
+      hitSprite.setRotation(baseAngle + (Math.random() - 0.5) * 0.5);
+      if (isSkill) hitSprite.setTint(0x67e8f9);
+      else if (isCrit) hitSprite.setTint(0xfde047);
+      hitSprite.play('hit_spark_anim');
+      hitSprite.once('animationcomplete', () => {
+        if (hitSprite.scene) hitSprite.destroy();
+      });
+    }
+
+    if (
+      (isCrit || isSkill) &&
+      scene.textures.exists('critStarBurstFx') &&
+      scene.anims.exists('crit_star_burst_anim')
+    ) {
+      const star = scene.add.sprite(x, hitY, 'critStarBurstFx');
+      star.setDepth(DEPTH.SPARK + 2);
+      const starSize = isSkill ? 116 : 98;
+      star.setDisplaySize(starSize, starSize);
+      star.setTint(isSkill ? 0x38bdf8 : 0xfbbf24);
+      star.play('crit_star_burst_anim');
+      star.once('animationcomplete', () => {
+        if (star.scene) star.destroy();
+      });
+    }
 
     const slash = scene.add.graphics();
     slash.setPosition(x, hitY);

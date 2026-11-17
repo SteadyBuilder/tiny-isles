@@ -201,7 +201,7 @@ export class PlayerProgressionSystem {
     }
 
     if (gainedLevels.length > 0) {
-      sound.playUnlock();
+      sound.playLevelUp();
       const pos = this.ctx.getPlayerPosition();
       this.ctx.onMaxHpChanged(this.getTotalMaxHp(), hpGainTotal + 35);
       gainedLevels.forEach((lv, idx) => {
@@ -339,7 +339,7 @@ export class PlayerProgressionSystem {
     this.ctx.onMaxHpChanged(newMaxHp, Math.max(20, newMaxHp - prevMaxHp));
     this.ctx.onClassChangedVisual(targetClassId);
 
-    sound.playUnlock();
+    sound.playClassAdvance();
     const pos = this.ctx.getPlayerPosition();
     if (this.ctx.playClassAdvancementEffect) {
       this.ctx.playClassAdvancementEffect(pos.x, pos.y, targetClassId);
@@ -371,8 +371,7 @@ export class PlayerProgressionSystem {
     const baseSkillDmg = Math.round(this.getTotalAttack() * cls.skillDamageMultiplier);
     const monsters = this.ctx.getMonsterVisuals();
 
-    sound.playUnlock();
-    sound.playSkillImpact();
+    sound.playSkillCast(this.classId);
     this.ctx.showFloatingText(pos.x, pos.y - 58, `${cls.skillIcon} ${cls.skillName}!`, '#38bdf8');
 
     const dealSkillHit = (targetId: string, tx: number, ty: number) => {

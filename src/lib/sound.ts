@@ -1,4 +1,8 @@
 // Web Audio API & BGM Sound Engine for Tiny Isles
+import { SfxRecipeId } from '../data/sfxConfig';
+import { SfxSynthesizer } from './sfxSynthesizer';
+import { PlayerClassId } from '../types/hunting';
+
 export type BgmTrackId = 'adventure' | 'peaceful' | 'ocean';
 export interface BgmTrackInfo { id: BgmTrackId; name: string; artist: string; description: string; src: string; }
 
@@ -15,6 +19,7 @@ export interface SoundSettings {
 
 class SoundSystem {
   private ctx: AudioContext | null = null;
+  private synth = new SfxSynthesizer();
   private sfxBuffers = new Map<string, AudioBuffer>();
   private bgmAudio: HTMLAudioElement | null = null;
   private listeners = new Set<(s: SoundSettings) => void>();
@@ -197,9 +202,41 @@ class SoundSystem {
     this.playTone('sine', 960, 320, 0.09, 0.16);
   }
   public playSkillImpact() {
-    this.playTone('sawtooth', 260, 65, 0.22, 0.28);
-    this.playTone('triangle', 520, 140, 0.18, 0.24);
+    this.playRecipe('hitCrit', 0.05);
   }
+  public playRecipe(id: SfxRecipeId, pitchJitter = 0.04) {
+    if (this.settings.muted || !this.settings.sfxEnabled) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+    this.synth.playRecipe(ctx, id, this.settings.sfxVolume, pitchJitter);
+  }
+  public playSwordSlash() { this.playRecipe('swordSlash', 0.06); }
+  public playLanceThrust() { this.playRecipe('lanceThrust', 0.05); }
+  public playBowRelease() { this.playRecipe('bowRelease', 0.05); }
+  public playMagicCast() { this.playRecipe('magicCast', 0.04); }
+  public playHitBasic() { this.playRecipe('hitBasic', 0.07); }
+  public playHitCrit() { this.playRecipe('hitCrit', 0.04); }
+  public playPlayerHurt() { this.playRecipe('playerHurt', 0.04); }
+  public playSkillCast(classId: PlayerClassId) {
+    switch (classId) {
+      case 'guardian': this.playRecipe('skillWhirlwind', 0.03); break;
+      case 'lancer': this.playRecipe('skillDragonCharge', 0.03); break;
+      case 'ranger': this.playRecipe('skillArrowStorm', 0.03); break;
+      case 'archmage': this.playRecipe('skillMeteorNova', 0.02); break;
+      case 'pawn':
+      default:
+        this.playRecipe('swordSlash', 0.04);
+        this.playRecipe('hitCrit', 0.03);
+        break;
+    }
+  }
+  public playLevelUp() { this.playRecipe('levelUp', 0); }
+  public playClassAdvance() { this.playRecipe('classAdvance', 0); }
+  public playWaveHorn() { this.playRecipe('waveHorn', 0); }
+  public playBossRoar() { this.playRecipe('bossRoar', 0.02); }
+  public playMonsterDeath() { this.playRecipe('monsterDeath', 0.08); }
+  public playHeal() { this.playRecipe('heal', 0); }
+  public playBuildComplete() { this.playRecipe('buildComplete', 0.02); }
   public playClick() { if (!this.playBuffer('click', 0.6)) this.playTone('sine', 800, 400, 0.04, 0.2); }
 }
 
