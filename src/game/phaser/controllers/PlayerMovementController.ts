@@ -59,6 +59,9 @@ export class PlayerMovementController {
   private playerNameTag!: Phaser.GameObjects.Text;
   private playerIndicator!: Phaser.GameObjects.Text;
   private playerHpBar!: Phaser.GameObjects.Graphics;
+  private playerCastBar!: Phaser.GameObjects.Graphics;
+  private castBarDurationMs = 0;
+  private castBarElapsedMs = 0;
   private currentAction: PlayerAction = 'idle';
   private currentDirection: 'left' | 'right' = 'right';
   private currentClassId: PlayerClassId = 'pawn';
@@ -296,10 +299,36 @@ export class PlayerMovementController {
       .setOrigin(0.5);
 
     this.playerHpBar = scene.add.graphics();
+    this.playerCastBar = scene.add.graphics();
     this.updateHpBar(this.currentHp, this.currentMaxHp);
 
     this.playAnimation('idle');
     this.checkTerritoryAndGridUpdates();
+  }
+
+  private clearCastBar(): void {
+    this.castBarDurationMs = 0;
+    this.castBarElapsedMs = 0;
+    this.playerCastBar?.clear();
+  }
+
+  private updateCastBar(px: number, py: number): void {
+    if (!this.playerCastBar || this.castBarDurationMs <= 0) return;
+
+    const barW = 42;
+    const barH = 4;
+    const ratio = Math.max(0, Math.min(1, this.castBarElapsedMs / this.castBarDurationMs));
+
+    this.playerCastBar.clear();
+    this.playerCastBar.setPosition(px, py - 64);
+    setDepthIfChanged(this.playerCastBar, ySortDepth(py, 31));
+
+    this.playerCastBar.fillStyle(0x0f172a, 0.85);
+    this.playerCastBar.fillRect(-barW / 2 - 1, -1, barW + 2, barH + 2);
+    if (ratio > 0) {
+      this.playerCastBar.fillStyle(0xffffff, 1);
+      this.playerCastBar.fillRect(-barW / 2, 0, Math.max(2, barW * ratio), barH);
+    }
   }
 
   public updateHpBar(hp: number, maxHp: number): void {
@@ -330,6 +359,7 @@ export class PlayerMovementController {
     this.isFainted = fainted;
     if (!this.playerSprite) return;
     if (fainted) {
+      this.clearCastBar();
       this.dashController.cancelDash(this.playerSprite);
       this.pointerController.clearTarget();
       this.playerSprite.setVelocity(0, 0);
@@ -361,16 +391,30 @@ export class PlayerMovementController {
 
   public playCastVisual(durationMs = 520): void {
     if (!this.playerSprite || this.isFainted) return;
-    this.playAnimation('cast');
-    this.ctx.scene.time.delayedCall(durationMs, () => {
-      if (!this.isFainted && this.playerSprite?.active && this.currentAction === 'cast') {
-        this.playAnimation('idle');
-      }
-    });
+    if (durationMs > 0) {
+      this.castBarDurationMs = durationMs;
+      this.castBarElapsedMs = 0;
+      this.updateCastBar(this.playerSprite.x, this.playerSprite.y);
+    }
+
+    const color = this.ctx.getPlayerColor();
+    const classCastKey =
+      this.currentClassId !== 'pawn'
+        ? `${color}_${this.currentClassId}_cast`
+        : `${color}_cast`;
+    if (this.ctx.scene.anims.exists(classCastKey)) {
+      this.playAnimation('cast');
+      this.ctx.scene.time.delayedCall(durationMs, () => {
+        if (!this.isFainted && this.playerSprite?.active && this.currentAction === 'cast') {
+          this.playAnimation('idle');
+        }
+      });
+    }
   }
 
   public respawnAt(x: number, y: number): void {
     if (!this.playerSprite) return;
+    this.clearCastBar();
     this.dashController.cancelDash(this.playerSprite);
     this.pointerController.clearTarget();
     this.playerSprite.setPosition(x, y);
@@ -520,6 +564,15 @@ export class PlayerMovementController {
     setDepthIfChanged(this.playerIndicator, ySortDepth(py, 30));
     this.playerHpBar.setPosition(px, py - 31);
     setDepthIfChanged(this.playerHpBar, ySortDepth(py, 30));
+
+    if (this.castBarDurationMs > 0) {
+      this.castBarElapsedMs += delta;
+      if (this.castBarElapsedMs >= this.castBarDurationMs) {
+        this.clearCastBar();
+      } else {
+        this.updateCastBar(px, py);
+      }
+    }
 
     const isHoldInput = this.spaceKey?.isDown || this.eKey?.isDown || this.isActionHolding;
     if (isHoldInput && time - this.lastInteractTime >= 240) {

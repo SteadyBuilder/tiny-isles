@@ -25,6 +25,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
   const [isSkillPressed, setIsSkillPressed] = useState(false);
   const [isDashPressed, setIsDashPressed] = useState(false);
   const actionPointerIdRef = useRef<number | null>(null);
+  const actionTouchIdRef = useRef<number | null>(null);
   const actionZoneRef = useRef<HTMLDivElement | null>(null);
 
   const classDef = progression ? PLAYER_CLASS_DEFINITIONS[progression.classId] : null;
@@ -45,21 +46,73 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
 
   const stopActionHold = useCallback(() => {
     actionPointerIdRef.current = null;
+    actionTouchIdRef.current = null;
     setIsActionActive(false);
     GameEvents.emit('player-action-stop');
   }, []);
 
+  const triggerActionHold = useCallback(() => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
+    setIsActionActive(true);
+    onAction();
+    GameEvents.emit('player-action-start');
+  }, [onAction]);
+
   const startActionHold = useCallback(
     (e: React.PointerEvent) => {
+      if (e.pointerType === 'touch') return;
       e.preventDefault();
       actionPointerIdRef.current = e.pointerId;
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
-      setIsActionActive(true);
-      onAction();
-      GameEvents.emit('player-action-start');
+      triggerActionHold();
     },
-    [onAction]
+    [triggerActionHold]
   );
+
+  const handleActionTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      actionTouchIdRef.current = touch.identifier;
+      triggerActionHold();
+    },
+    [triggerActionHold]
+  );
+
+  const handleActionTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const activeId = actionTouchIdRef.current;
+      if (activeId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeId) {
+          stopActionHold();
+          break;
+        }
+      }
+    },
+    [stopActionHold]
+  );
+
+  const triggerBuildPress = useCallback(() => {
+    if (!canBuild || !onOpenVillageModal) return;
+    setIsBuildPressed(true);
+    sound.playClick();
+    onOpenVillageModal();
+  }, [canBuild, onOpenVillageModal]);
+
+  const triggerSkillPress = useCallback(() => {
+    if (isSkillOnCooldown) return;
+    setIsSkillPressed(true);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+    sound.playClick();
+    GameEvents.emit('cast-active-skill');
+  }, [isSkillOnCooldown]);
+
+  const triggerDashPress = useCallback(() => {
+    if (isDashDisabled) return;
+    setIsDashPressed(true);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(18);
+    GameEvents.emit('trigger-dash');
+  }, [isDashDisabled]);
 
   useEffect(() => {
     const handleBlur = () => stopActionHold();
@@ -68,13 +121,27 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
         stopActionHold();
       }
     };
+    const handleTouchRelease = (e: TouchEvent) => {
+      const activeId = actionTouchIdRef.current;
+      if (activeId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeId) {
+          stopActionHold();
+          break;
+        }
+      }
+    };
     window.addEventListener('blur', handleBlur);
     window.addEventListener('pointerup', handlePointerRelease);
     window.addEventListener('pointercancel', handlePointerRelease);
+    window.addEventListener('touchend', handleTouchRelease);
+    window.addEventListener('touchcancel', handleTouchRelease);
     return () => {
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('pointerup', handlePointerRelease);
       window.removeEventListener('pointercancel', handlePointerRelease);
+      window.removeEventListener('touchend', handleTouchRelease);
+      window.removeEventListener('touchcancel', handleTouchRelease);
       stopActionHold();
     };
   }, [stopActionHold]);
@@ -90,27 +157,37 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
       }}
     >
       <div className="flex flex-col items-center gap-1.5 mr-3">
-        {canBuild && onOpenVillageModal && (
+        {onOpenVillageModal && (
           <button
             id="mobile-build-btn"
             type="button"
+            disabled={!canBuild}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              triggerBuildPress();
+            }}
+            onTouchEnd={() => setIsBuildPressed(false)}
+            onTouchCancel={() => setIsBuildPressed(false)}
             onPointerDown={(e) => {
+              if (e.pointerType === 'touch') return;
               e.preventDefault();
               e.stopPropagation();
-              setIsBuildPressed(true);
-              sound.playClick();
-              onOpenVillageModal();
+              triggerBuildPress();
             }}
             onPointerUp={() => setIsBuildPressed(false)}
             onPointerLeave={() => setIsBuildPressed(false)}
             onPointerCancel={() => setIsBuildPressed(false)}
-            className="relative w-9 h-9 flex items-center justify-center select-none hover:brightness-110"
+            className={`relative w-9 h-9 flex items-center justify-center select-none touch-none transition-[filter] ${
+              canBuild
+                ? 'hover:brightness-110'
+                : 'cursor-not-allowed grayscale opacity-60'
+            }`}
             aria-label="마을 건설 버튼"
-            title="마을 발전 및 건설"
+            title={canBuild ? '마을 발전 및 건설' : '내 영지 안에서만 건설할 수 있습니다'}
           >
             <img
               src={
-                isBuildPressed
+                isBuildPressed && canBuild
                   ? '/assets/ui/square_red_pressed.png'
                   : '/assets/ui/square_red.png'
               }
@@ -121,7 +198,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
               src="/assets/ui/Icons/Tool_Hammer.png"
               alt="건설"
               className={`absolute w-4 h-4 pixel-art drop-shadow-[0_1px_0_rgba(0,0,0,0.7)] transition-transform duration-75 ${
-                isBuildPressed ? 'translate-y-[2px]' : '-translate-y-[1px]'
+                isBuildPressed && canBuild ? 'translate-y-[2px]' : '-translate-y-[1px]'
               }`}
             />
           </button>
@@ -132,19 +209,22 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
             id="mobile-skill-btn"
             type="button"
             disabled={isSkillOnCooldown}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              triggerSkillPress();
+            }}
+            onTouchEnd={() => setIsSkillPressed(false)}
+            onTouchCancel={() => setIsSkillPressed(false)}
             onPointerDown={(e) => {
+              if (e.pointerType === 'touch') return;
               e.preventDefault();
               e.stopPropagation();
-              if (isSkillOnCooldown) return;
-              setIsSkillPressed(true);
-              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
-              sound.playClick();
-              GameEvents.emit('cast-active-skill');
+              triggerSkillPress();
             }}
             onPointerUp={() => setIsSkillPressed(false)}
             onPointerLeave={() => setIsSkillPressed(false)}
             onPointerCancel={() => setIsSkillPressed(false)}
-            className={`relative w-10 h-10 rounded-full flex items-center justify-center select-none transition-[filter] ${
+            className={`relative w-10 h-10 rounded-full flex items-center justify-center select-none touch-none transition-[filter] ${
               isSkillOnCooldown
                 ? 'cursor-not-allowed grayscale opacity-75'
                 : 'hover:brightness-110'
@@ -184,18 +264,22 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           id="mobile-dash-btn"
           type="button"
           disabled={isDashDisabled}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            triggerDashPress();
+          }}
+          onTouchEnd={() => setIsDashPressed(false)}
+          onTouchCancel={() => setIsDashPressed(false)}
           onPointerDown={(e) => {
+            if (e.pointerType === 'touch') return;
             e.preventDefault();
             e.stopPropagation();
-            if (isDashDisabled) return;
-            setIsDashPressed(true);
-            if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(18);
-            GameEvents.emit('trigger-dash');
+            triggerDashPress();
           }}
           onPointerUp={() => setIsDashPressed(false)}
           onPointerLeave={() => setIsDashPressed(false)}
           onPointerCancel={() => setIsDashPressed(false)}
-          className={`relative w-11 h-11 rounded-full flex items-center justify-center select-none transition-[filter] mb-1 ${
+          className={`relative w-11 h-11 rounded-full flex items-center justify-center select-none touch-none transition-[filter] mb-1 ${
             isDashDisabled
               ? 'cursor-not-allowed grayscale opacity-75'
               : 'hover:brightness-110'
@@ -230,11 +314,14 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
 
         <button
           type="button"
+          onTouchStart={handleActionTouchStart}
+          onTouchEnd={handleActionTouchEnd}
+          onTouchCancel={handleActionTouchEnd}
           onPointerDown={startActionHold}
           onPointerUp={stopActionHold}
           onPointerLeave={stopActionHold}
           onPointerCancel={stopActionHold}
-          className="relative w-16 h-16 flex flex-col items-center justify-center select-none hover:brightness-110"
+          className="relative w-16 h-16 flex flex-col items-center justify-center select-none touch-none hover:brightness-110"
           aria-label="채집 및 공격 액션 버튼"
         >
           <img

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
 import { FIELD_MONSTER_CONFIG } from '../../../data/fieldMonsters';
 import { rollMonsterDropItem } from '../../../data/items';
 import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
@@ -257,8 +258,9 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     playSkillEffect: (fxCtx) => {
-      if (fxCtx.classId === 'archmage') {
-        host.onPlayerCastVisual?.(650);
+      const chargeMs = SKILL_FX_STYLE_CONFIG[fxCtx.classId].chargeDurationMs;
+      if (chargeMs > 0) {
+        host.onPlayerCastVisual?.(chargeMs);
       }
       host.skillEffectsRenderer.playClassSkill(fxCtx);
     },
