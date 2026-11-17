@@ -3,6 +3,7 @@ import { HUNTING_AI_CONFIG } from '../../data/monsterCamps';
 import { PERFORMANCE_CONFIG } from '../../data/performanceConfig';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
 import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
+import { CombatHitFeedbackOptions } from '../../types/combat';
 import { ConstructedBuilding, Island } from '../../types/game';
 import { sound } from '../../lib/sound';
 import {
@@ -38,6 +39,7 @@ export interface IMonsterCombatContext {
   healCampCore?: (territoryId: number, amount: number) => void;
   projectileSystem?: ProjectileSystem;
   onMonsterDamaged?: () => void;
+  onMonsterHitImpact?: (opts: CombatHitFeedbackOptions, restoreTint?: number | null) => void;
   onMonsterKilled?: (
     x: number,
     y: number,
@@ -308,10 +310,16 @@ export class MonsterCombatAI {
     fromRemote: boolean;
     isHost: boolean;
     bonusMultiplier: number;
+    hitMeta?: { isSkill?: boolean; isCrit?: boolean };
   }): boolean {
     const monsters = this.ctx.getMonsters();
     const mv = monsters.get(params.monsterId);
     if (!mv) return false;
+
+    const isLocalPlayerAttack = Boolean(
+      !params.fromRemote && params.attackerId && params.attackerId === this.ctx.getLocalPlayerId()
+    );
+    const playerPos = this.ctx.getLocalPlayerPosition();
 
     if (params.attackerId) {
       this.aggroTargets.set(params.monsterId, {
@@ -323,9 +331,27 @@ export class MonsterCombatAI {
       }
     }
 
+    const triggerHitFeedback = () => {
+      this.ctx.onMonsterHitImpact?.(
+        {
+          x: mv.monster.x,
+          y: mv.monster.y,
+          damage: params.damage,
+          isCrit: params.hitMeta?.isCrit,
+          isSkill: params.hitMeta?.isSkill,
+          isLocalPlayerAttack,
+          attackerX: playerPos.x,
+          attackerY: playerPos.y,
+          targetSprite: mv.sprite,
+          targetContainer: mv.container,
+        },
+        mv.baseTint
+      );
+    };
+
     if (!params.isHost && !params.fromRemote) {
       mv.monster.hp = Math.max(1, mv.monster.hp - params.damage);
-      MonsterVisualManager.updateHpBar(mv);
+      MonsterVisualManager.updateHpBar(mv, true);
       this.ctx.showFloatingText(
         mv.monster.x,
         mv.monster.y - 25,
@@ -333,6 +359,7 @@ export class MonsterCombatAI {
         mv.monster.isBoss ? '#f43f5e' : '#fbbf24'
       );
       this.ctx.shakeObject(mv.container);
+      triggerHitFeedback();
       this.ctx.broadcastMonsterHit?.(params.monsterId, params.damage, params.sourceName);
       return false;
     }
@@ -347,11 +374,13 @@ export class MonsterCombatAI {
 
     if (mv.monster.hp > 0) {
       this.ctx.shakeObject(mv.container);
-      MonsterVisualManager.updateHpBar(mv);
+      MonsterVisualManager.updateHpBar(mv, true);
+      triggerHitFeedback();
       this.ctx.onMonsterDamaged?.();
       return false;
     }
 
+    triggerHitFeedback();
     const deadM = mv.monster;
     this.ctx.playExplosionAt(deadM.x, deadM.y);
     mv.container.destroy();

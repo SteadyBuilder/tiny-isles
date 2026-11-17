@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PLAYER_DAMAGED_OVERLAY_CONFIG } from '../../data/combatFeedbackConfig';
 import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { sound } from '../../lib/sound';
 import { PlayerHpState } from '../../types/game';
@@ -11,6 +12,7 @@ export interface IPlayerHealthContext {
   respawnPlayerAt: (x: number, y: number) => void;
   onPlayerFaintedVisual: (fainted: boolean) => void;
   onPlayerHitVisual: () => void;
+  onPlayerDamagedShake?: () => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
 }
 
@@ -63,6 +65,14 @@ export class PlayerHealthSystem {
     return now < this.invincibleUntil;
   }
 
+  public grantTemporaryInvincibility(durationMs: number): void {
+    if (!this.ctx.isSceneAlive() || durationMs <= 0) return;
+    const targetUntil = this.ctx.scene.time.now + durationMs;
+    if (targetUntil > this.invincibleUntil) {
+      this.invincibleUntil = targetUntil;
+    }
+  }
+
   public emitState(): void {
     GameEvents.emit('player-hp-updated', this.getState());
   }
@@ -76,8 +86,24 @@ export class PlayerHealthSystem {
     const { x, y } = this.ctx.getPlayerPosition();
 
     this.ctx.onPlayerHitVisual();
+    this.ctx.onPlayerDamagedShake?.();
     this.ctx.showFloatingText(x, y - 35, `💔 -${damage}`, '#f87171');
     sound.playBreak();
+
+    const dmgRatio = damage / Math.max(1, this.maxHp);
+    const intensity = Math.max(
+      0.45,
+      Math.min(1, dmgRatio / PLAYER_DAMAGED_OVERLAY_CONFIG.heavyDamageRatioThreshold)
+    );
+    GameEvents.emit('player-damaged-fx', {
+      damage,
+      intensity,
+      timestamp: now,
+    });
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+
     this.emitState();
 
     if (this.hp <= 0) {

@@ -1,3 +1,4 @@
+import { MONSTER_HIT_FEEDBACK_CONFIG } from '../../data/combatFeedbackConfig';
 import { ELITE_AFFIXES } from '../../data/elites';
 import { Monster } from '../../types/game';
 import { ySortDepth } from '../depthLayers';
@@ -7,6 +8,9 @@ export interface MonsterVisual {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
   hpBar: Phaser.GameObjects.Graphics;
+  baseTint: number | null;
+  hpTrailRatio: number;
+  hpFlashUntil: number;
   lastAttackTime: number;
   lastHealTime?: number;
 }
@@ -71,18 +75,22 @@ export class MonsterVisualManager {
     const sprite = scene.add.sprite(0, 0, texKey);
     sprite.setDisplaySize(displaySize, displaySize);
 
+    let baseTint: number | null = null;
     if (monster.isElite && eliteDef) {
-      sprite.setTint(eliteDef.auraColorHex);
+      baseTint = eliteDef.auraColorHex;
     } else if (monster.type === 'zombie') {
-      sprite.setTint(0x86efac);
+      baseTint = 0x86efac;
     } else if (monster.type === 'skeleton' || monster.role === 'ranged') {
-      sprite.setTint(0xe2e8f0);
+      baseTint = 0xe2e8f0;
     } else if (monster.type === 'lancer' || monster.role === 'lancer') {
-      sprite.setTint(0xfbbf24);
+      baseTint = 0xfbbf24;
     } else if (monster.type === 'archmage' || monster.role === 'mage') {
-      sprite.setTint(0xd8b4fe);
+      baseTint = 0xd8b4fe;
     } else if (monster.isBoss) {
-      sprite.setTint(0xfca5a5);
+      baseTint = 0xfca5a5;
+    }
+    if (baseTint !== null) {
+      sprite.setTint(baseTint);
     }
 
     if (scene.anims.exists(animKey)) {
@@ -107,25 +115,39 @@ export class MonsterVisualManager {
       container.add(badgeText);
     }
 
+    const initialRatio = Math.max(0, Math.min(1, monster.hp / Math.max(1, monster.maxHp)));
     const visual: MonsterVisual = {
       monster,
       container,
       sprite,
       hpBar,
+      baseTint,
+      hpTrailRatio: initialRatio,
+      hpFlashUntil: 0,
       lastAttackTime: 0,
       lastHealTime: 0,
     };
 
-    this.updateHpBar(visual);
+    this.updateHpBar(visual, false);
     return visual;
   }
 
-  public static updateHpBar(mv: MonsterVisual) {
+  public static updateHpBar(mv: MonsterVisual, isDamageEvent = true): void {
     const m = mv.monster;
     const ratio = Math.max(0, Math.min(1, m.hp / Math.max(1, m.maxHp)));
 
+    if (ratio > mv.hpTrailRatio) {
+      mv.hpTrailRatio = ratio;
+    } else if (isDamageEvent && ratio < mv.hpTrailRatio) {
+      mv.hpFlashUntil = performance.now() + MONSTER_HIT_FEEDBACK_CONFIG.hpBarFlashDurationMs;
+    }
+
+    const now = performance.now();
+    const isFlashing = now < mv.hpFlashUntil;
+    const hasTrail = mv.hpTrailRatio > ratio + 0.002;
+
     // 100마리 대군/부락 환경에서 아직 피격되지 않은 일반 몬스터는 HP바 드로우콜 생략
-    if (!m.isBoss && ratio >= 0.999) {
+    if (!m.isBoss && ratio >= 0.999 && !hasTrail && !isFlashing) {
       mv.hpBar.clear();
       mv.hpBar.setVisible(false);
       return;
@@ -135,11 +157,30 @@ export class MonsterVisualManager {
     const barW = m.isBoss ? 110 : 52;
     const barH = m.isBoss ? 8 : 5;
     const barX = -barW / 2;
-    const barY = m.isBoss ? -54 : -32;
+
+    let popOffset = 0;
+    if (isFlashing) {
+      const flashRatio =
+        (mv.hpFlashUntil - now) / MONSTER_HIT_FEEDBACK_CONFIG.hpBarFlashDurationMs;
+      popOffset = Math.sin(flashRatio * Math.PI) * MONSTER_HIT_FEEDBACK_CONFIG.hpBarPopOffsetY;
+    }
+    const barY = (m.isBoss ? -54 : -32) - popOffset;
 
     mv.hpBar.clear();
-    mv.hpBar.fillStyle(0x0f172a, 0.9);
+    mv.hpBar.fillStyle(0x0f172a, 0.92);
     mv.hpBar.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+
+    if (isFlashing) {
+      mv.hpBar.lineStyle(1.5, 0xfef08a, 0.95);
+      mv.hpBar.strokeRect(barX - 1.5, barY - 1.5, barW + 3, barH + 3);
+    }
+
+    // 지연 감소 트레일 바 (흰색-황금빛 잔상)
+    if (hasTrail) {
+      mv.hpBar.fillStyle(0xfef08a, 0.95);
+      mv.hpBar.fillRect(barX, barY, Math.max(2, barW * mv.hpTrailRatio), barH);
+    }
+
     const barColor = m.isBoss
       ? 0xdc2626
       : m.role === 'mage'
@@ -147,7 +188,32 @@ export class MonsterVisualManager {
       : m.role === 'ranged'
       ? 0x38bdf8
       : 0xef4444;
-    mv.hpBar.fillStyle(barColor, 1);
-    mv.hpBar.fillRect(barX, barY, Math.max(2, barW * ratio), barH);
+    mv.hpBar.fillStyle(isFlashing ? 0xffffff : barColor, isFlashing ? 0.92 : 1);
+    if (ratio > 0) {
+      mv.hpBar.fillRect(barX, barY, Math.max(2, barW * ratio), barH);
+    }
+  }
+
+  public static updateHpTrails(monsters: Map<string, MonsterVisual>, deltaMs: number): void {
+    if (monsters.size === 0) return;
+    const now = performance.now();
+    const drainStep = (MONSTER_HIT_FEEDBACK_CONFIG.hpTrailDrainPerSec * deltaMs) / 1000;
+
+    for (const mv of monsters.values()) {
+      const ratio = Math.max(0, Math.min(1, mv.monster.hp / Math.max(1, mv.monster.maxHp)));
+      const wasFlashing = mv.hpFlashUntil > 0 && now >= mv.hpFlashUntil;
+      const needsTrailUpdate = mv.hpTrailRatio > ratio + 0.002;
+      const isFlashing = now < mv.hpFlashUntil;
+
+      if (!needsTrailUpdate && !isFlashing && !wasFlashing) continue;
+
+      if (needsTrailUpdate) {
+        mv.hpTrailRatio = Math.max(ratio, mv.hpTrailRatio - drainStep);
+      }
+      if (wasFlashing) {
+        mv.hpFlashUntil = 0;
+      }
+      this.updateHpBar(mv, false);
+    }
   }
 }

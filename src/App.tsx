@@ -13,6 +13,7 @@ import { JobAdvancementModal } from './components/JobAdvancementModal';
 import { HudSettingsModal } from './components/HudSettingsModal';
 import { HudHelpModal } from './components/HudHelpModal';
 import { SoundModal } from './components/SoundModal';
+import { CombatDamageOverlay } from './components/CombatDamageOverlay';
 import { LobbyScreen } from './components/lobby/LobbyScreen';
 import { RoomWaitingModal } from './components/lobby/RoomWaitingModal';
 import { MetaProgressionModal } from './components/lobby/MetaProgressionModal';
@@ -48,6 +49,7 @@ export function App() {
     setShowJobHallModal,
     isNearJobHall,
     playerProgression,
+    dashState,
     alertMessage,
     zoom,
     nearIsland,
@@ -226,6 +228,7 @@ export function App() {
         onZoomChange={handleZoomChange}
         currentZoom={zoom}
         progression={playerProgression}
+        dashState={dashState}
       />
 
       <MinimapModal
@@ -264,6 +267,7 @@ export function App() {
 
       <PlayerProgressionHud
         progression={playerProgression}
+        dashState={dashState}
         hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall' && b.hp > 0)}
         isNearJobHall={isNearJobHall}
         onOpenInventory={() => setShowInventoryModal(true)}
@@ -317,6 +321,7 @@ export function App() {
       )}
 
       <MissionResultModal result={missionResult} onReturnToLobby={handleLeaveToLobby} />
+      <CombatDamageOverlay />
     </div>
   );
 }

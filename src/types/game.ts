@@ -1,4 +1,5 @@
 export * from './hunting';
+export * from './combat';
 import { MonsterCombatRole, PlayerClassId } from './hunting';
 
 export type ResourceType = 'wood' | 'stone' | 'gold';

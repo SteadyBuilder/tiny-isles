@@ -22,10 +22,12 @@ import { checkJobHallProximity } from '../../utils/jobHallUtils';
 import { resolveSafeSpawnPosition } from '../../utils/playerSpawnUtils';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
+import { PlayerDashController } from './PlayerDashController';
 import { PlayerPointerController } from './PlayerPointerController';
 
 export interface IPlayerMovementContext {
   scene: Phaser.Scene;
+  isSceneAlive: () => boolean;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
   getInitialZoom: () => number;
@@ -43,6 +45,7 @@ export interface IPlayerMovementContext {
   getMoveSpeed?: () => number;
   getAttackRange?: (isBoss: boolean) => number;
   getConstructedBuildings?: () => ConstructedBuilding[];
+  grantDashInvincibility?: (durationMs: number) => void;
 }
 
 /**
@@ -51,6 +54,7 @@ export interface IPlayerMovementContext {
 export class PlayerMovementController {
   private ctx: IPlayerMovementContext;
   private pointerController: PlayerPointerController;
+  private dashController: PlayerDashController;
   private playerSprite!: Phaser.Physics.Arcade.Sprite;
   private playerNameTag!: Phaser.GameObjects.Text;
   private playerIndicator!: Phaser.GameObjects.Text;
@@ -68,6 +72,7 @@ export class PlayerMovementController {
   private eKey!: Phaser.Input.Keyboard.Key;
   private qKey!: Phaser.Input.Keyboard.Key;
   private iKey!: Phaser.Input.Keyboard.Key;
+  private shiftKey!: Phaser.Input.Keyboard.Key;
   private joystickVector = { x: 0, y: 0 };
   private isActionHolding = false;
 
@@ -92,6 +97,57 @@ export class PlayerMovementController {
       isPlacementActive: ctx.isPlacementActive,
       getAttackRange: ctx.getAttackRange,
     });
+    this.dashController = new PlayerDashController({
+      scene: ctx.scene,
+      isSceneAlive: ctx.isSceneAlive,
+      isPlayerFainted: () => this.isFainted,
+      grantDashInvincibility: (durationMs) => ctx.grantDashInvincibility?.(durationMs),
+    });
+  }
+
+  public getDirection(): 'left' | 'right' {
+    return this.currentDirection;
+  }
+
+  public triggerDash(): void {
+    if (!this.playerSprite || this.isFainted) return;
+    const { vx, vy } = this.readDirectionalInput();
+    this.pointerController.clearTarget();
+    this.dashController.tryStartDash({
+      inputDirX: vx,
+      inputDirY: vy,
+      facing: this.currentDirection,
+      moveSpeed: this.ctx.getMoveSpeed?.() ?? 250,
+      playerSprite: this.playerSprite,
+    });
+  }
+
+  public triggerSkillSurge(dirX: number, dirY: number, speedPx: number, durationMs: number): void {
+    if (!this.playerSprite || this.isFainted) return;
+    this.pointerController.clearTarget();
+    this.dashController.startForcedSurge({
+      dirX,
+      dirY,
+      speedPx,
+      durationMs,
+      playerSprite: this.playerSprite,
+    });
+  }
+
+  private readDirectionalInput(): { vx: number; vy: number; usingJoystick: boolean } {
+    let vx = 0;
+    let vy = 0;
+    if (this.cursors?.left.isDown || this.wasdKeys?.A?.isDown) vx -= 1;
+    if (this.cursors?.right.isDown || this.wasdKeys?.D?.isDown) vx += 1;
+    if (this.cursors?.up.isDown || this.wasdKeys?.W?.isDown) vy -= 1;
+    if (this.cursors?.down.isDown || this.wasdKeys?.S?.isDown) vy += 1;
+    const joyMag = Math.hypot(this.joystickVector.x, this.joystickVector.y);
+    const usingJoystick = joyMag > 0.12;
+    if (usingJoystick) {
+      vx += this.joystickVector.x;
+      vy += this.joystickVector.y;
+    }
+    return { vx, vy, usingJoystick };
   }
 
   public getPosition(): { x: number; y: number } {
@@ -264,6 +320,7 @@ export class PlayerMovementController {
     this.isFainted = fainted;
     if (!this.playerSprite) return;
     if (fainted) {
+      this.dashController.cancelDash(this.playerSprite);
       this.pointerController.clearTarget();
       this.playerSprite.setVelocity(0, 0);
       this.playerSprite.setAlpha(0.45);
@@ -279,7 +336,7 @@ export class PlayerMovementController {
     if (!this.playerSprite || this.isFainted) return;
     this.playerSprite.setTint(0xf87171);
     this.ctx.scene.time.delayedCall(140, () => {
-      if (!this.isFainted && this.playerSprite?.active) {
+      if (!this.isFainted && this.playerSprite?.active && !this.dashController.getIsDashing()) {
         this.playerSprite.clearTint();
       }
     });
@@ -287,6 +344,7 @@ export class PlayerMovementController {
 
   public respawnAt(x: number, y: number): void {
     if (!this.playerSprite) return;
+    this.dashController.cancelDash(this.playerSprite);
     this.pointerController.clearTarget();
     this.playerSprite.setPosition(x, y);
     this.playerSprite.setVelocity(0, 0);
@@ -327,11 +385,13 @@ export class PlayerMovementController {
       this.eKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
       this.qKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
       this.iKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
+      this.shiftKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
 
       this.spaceKey.on('down', () => this.ctx.onInteract());
       this.eKey.on('down', () => this.ctx.onInteract());
       this.qKey.on('down', () => GameEvents.emit('cast-active-skill'));
       this.iKey.on('down', () => GameEvents.emit('open-inventory-modal'));
+      this.shiftKey.on('down', () => this.triggerDash());
     }
 
     const handleActionStart = () => {
@@ -343,16 +403,23 @@ export class PlayerMovementController {
     const handleHpUpdated = (hpState: PlayerHpState) => {
       this.updateHpBar(hpState.hp, hpState.maxHp);
     };
+    const handleTriggerDash = () => {
+      this.triggerDash();
+    };
 
     GameEvents.on('player-action-start', handleActionStart);
     GameEvents.on('player-action-stop', handleActionStop);
     GameEvents.on('player-hp-updated', handleHpUpdated);
+    GameEvents.on('trigger-dash', handleTriggerDash);
 
     this.unbindInputs.push(() => {
       GameEvents.off('player-action-start', handleActionStart);
       GameEvents.off('player-action-stop', handleActionStop);
       GameEvents.off('player-hp-updated', handleHpUpdated);
+      GameEvents.off('trigger-dash', handleTriggerDash);
     });
+
+    this.dashController.emitState();
   }
 
   public update(time: number, delta: number = 16.6667): void {
@@ -362,52 +429,52 @@ export class PlayerMovementController {
       return;
     }
 
-    const speed = this.ctx.getMoveSpeed?.() ?? 250;
-    let vx = 0;
-    let vy = 0;
+    const isDashing = this.dashController.update(delta, this.playerSprite);
 
-    if (this.cursors.left.isDown || this.wasdKeys.A?.isDown) vx -= 1;
-    if (this.cursors.right.isDown || this.wasdKeys.D?.isDown) vx += 1;
-    if (this.cursors.up.isDown || this.wasdKeys.W?.isDown) vy -= 1;
-    if (this.cursors.down.isDown || this.wasdKeys.S?.isDown) vy += 1;
+    if (!isDashing) {
+      const speed = this.ctx.getMoveSpeed?.() ?? 250;
+      const dirInput = this.readDirectionalInput();
+      let vx = dirInput.vx;
+      let vy = dirInput.vy;
 
-    const joyMag = Math.hypot(this.joystickVector.x, this.joystickVector.y);
-    const usingJoystick = joyMag > 0.12;
-    if (usingJoystick) {
-      vx += this.joystickVector.x;
-      vy += this.joystickVector.y;
-      this.pointerController.clearTarget();
-    }
-
-    if (vx !== 0 || vy !== 0) {
-      this.pointerController.clearTarget();
-    } else {
-      const pointerDir = this.pointerController.resolvePointerMovement(
-        this.playerSprite.x,
-        this.playerSprite.y
-      );
-      if (pointerDir) {
-        vx = pointerDir.vx;
-        vy = pointerDir.vy;
+      if (dirInput.usingJoystick) {
+        this.pointerController.clearTarget();
       }
-    }
 
-    if (vx !== 0 || vy !== 0) {
-      const len = Math.hypot(vx, vy);
-      const factor = usingJoystick ? (len >= 0.45 ? 1 : len / 0.45) : Math.min(1, len);
-      this.playerSprite.setVelocity((vx / len) * speed * factor, (vy / len) * speed * factor);
-
-      if (vx < 0) this.currentDirection = 'left';
-      else if (vx > 0) this.currentDirection = 'right';
-      this.playerSprite.setFlipX(this.currentDirection === 'left');
-
-      if (this.currentAction !== 'axe' && this.currentAction !== 'pickaxe') {
-        this.playAnimation('run');
+      if (vx !== 0 || vy !== 0) {
+        this.pointerController.clearTarget();
+      } else {
+        const pointerDir = this.pointerController.resolvePointerMovement(
+          this.playerSprite.x,
+          this.playerSprite.y
+        );
+        if (pointerDir) {
+          vx = pointerDir.vx;
+          vy = pointerDir.vy;
+        }
       }
-    } else {
-      this.playerSprite.setVelocity(0, 0);
-      if (this.currentAction === 'run') {
-        this.playAnimation('idle');
+
+      if (vx !== 0 || vy !== 0) {
+        const len = Math.hypot(vx, vy);
+        const factor = dirInput.usingJoystick
+          ? len >= 0.45
+            ? 1
+            : len / 0.45
+          : Math.min(1, len);
+        this.playerSprite.setVelocity((vx / len) * speed * factor, (vy / len) * speed * factor);
+
+        if (vx < 0) this.currentDirection = 'left';
+        else if (vx > 0) this.currentDirection = 'right';
+        this.playerSprite.setFlipX(this.currentDirection === 'left');
+
+        if (this.currentAction !== 'axe' && this.currentAction !== 'pickaxe') {
+          this.playAnimation('run');
+        }
+      } else {
+        this.playerSprite.setVelocity(0, 0);
+        if (this.currentAction === 'run') {
+          this.playAnimation('idle');
+        }
       }
     }
 

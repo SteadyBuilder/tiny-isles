@@ -33,6 +33,8 @@ interface CampVisualNode {
   hpBar: Phaser.GameObjects.Graphics;
   titleText: Phaser.GameObjects.Text;
   statusText: Phaser.GameObjects.Text;
+  hpTrailRatio: number;
+  hpFlashUntil: number;
 }
 
 export interface IMonsterCampContext {
@@ -52,6 +54,7 @@ export interface IMonsterCampContext {
     onOpened: (item: EquipmentItem) => void
   ) => void;
   onCampCoreDamaged?: (territoryId: number) => void;
+  onCampCoreHitFeedback?: (x: number, y: number, isSkill: boolean) => void;
   playExplosionAt: (x: number, y: number) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
@@ -178,12 +181,14 @@ export class MonsterCampSystem {
       hpBar,
       titleText,
       statusText,
+      hpTrailRatio: 1,
+      hpFlashUntil: 0,
     };
-    this.updateCampHpVisual(node);
+    this.updateCampHpVisual(node, false);
     return node;
   }
 
-  private updateCampHpVisual(node: CampVisualNode): void {
+  private updateCampHpVisual(node: CampVisualNode, isDamageEvent = false): void {
     const { camp, hpBar, titleText, statusText, sprite } = node;
     titleText.setText(
       camp.destroyed
@@ -206,13 +211,33 @@ export class MonsterCampSystem {
     statusText.setColor('#fde047');
 
     const ratio = Math.max(0, Math.min(1, camp.coreHp / Math.max(1, camp.coreMaxHp)));
+    if (ratio > node.hpTrailRatio) {
+      node.hpTrailRatio = ratio;
+    } else if (isDamageEvent && ratio < node.hpTrailRatio) {
+      node.hpFlashUntil = performance.now() + 240;
+    }
+
+    const now = performance.now();
+    const isFlashing = now < node.hpFlashUntil;
     const barW = 104;
     const barH = 8;
+    const barY = -83 - (isFlashing ? 3 : 0);
+
     hpBar.clear();
     hpBar.fillStyle(0x0f172a, 0.92);
-    hpBar.fillRect(-barW / 2 - 1, -84, barW + 2, barH + 2);
-    hpBar.fillStyle(0xe11d48, 1);
-    hpBar.fillRect(-barW / 2, -83, Math.max(2, barW * ratio), barH);
+    hpBar.fillRect(-barW / 2 - 1, barY - 1, barW + 2, barH + 2);
+    if (isFlashing) {
+      hpBar.lineStyle(1.5, 0xfef08a, 0.95);
+      hpBar.strokeRect(-barW / 2 - 1.5, barY - 1.5, barW + 3, barH + 3);
+    }
+    if (node.hpTrailRatio > ratio + 0.002) {
+      hpBar.fillStyle(0xfef08a, 0.92);
+      hpBar.fillRect(-barW / 2, barY, Math.max(2, barW * node.hpTrailRatio), barH);
+    }
+    hpBar.fillStyle(isFlashing ? 0xffffff : 0xe11d48, 1);
+    if (ratio > 0) {
+      hpBar.fillRect(-barW / 2, barY, Math.max(2, barW * ratio), barH);
+    }
   }
 
   private spawnCampGarrison(camp: MonsterCampState): void {
@@ -289,30 +314,34 @@ export class MonsterCampSystem {
       if (node.camp.destroyed) continue;
       const d = Math.hypot(px - node.container.x, py - node.container.y);
       if (d <= rangePx + 55) {
-        this.damageCampCore(node, damage);
+        this.damageCampCore(node, damage, false);
         return true;
       }
     }
     return false;
   }
 
-  public damageCampCoresInRadius(x: number, y: number, radiusPx: number, damage: number): void {
-    if (!this.ctx.isHuntingMode()) return;
+  public damageCampCoresInRadius(x: number, y: number, radiusPx: number, damage: number, isSkill = true): boolean {
+    if (!this.ctx.isHuntingMode()) return false;
+    let hitAny = false;
     for (const node of this.campNodes.values()) {
       if (node.camp.destroyed) continue;
       const d = Math.hypot(x - node.container.x, y - node.container.y);
       if (d <= radiusPx + 45) {
-        this.damageCampCore(node, damage);
+        this.damageCampCore(node, damage, isSkill);
+        hitAny = true;
       }
     }
+    return hitAny;
   }
 
-  private damageCampCore(node: CampVisualNode, damage: number): void {
+  private damageCampCore(node: CampVisualNode, damage: number, isSkill = false): void {
     const { camp, container } = node;
     camp.coreHp = Math.max(0, camp.coreHp - damage);
     this.ctx.shakeObject(container);
+    this.ctx.onCampCoreHitFeedback?.(container.x, container.y, isSkill);
     this.ctx.showFloatingText(container.x, container.y - 60, `💥 -${damage}`, '#fbbf24');
-    this.updateCampHpVisual(node);
+    this.updateCampHpVisual(node, true);
     this.ctx.onCampCoreDamaged?.(camp.territoryId);
 
     if (camp.coreHp <= 0) {
@@ -409,6 +438,21 @@ export class MonsterCampSystem {
   public update(deltaMs: number): void {
     if (!this.ctx.isHuntingMode() || this.campNodes.size === 0) return;
 
+    const now = performance.now();
+    const drainStep = (1.35 * deltaMs) / 1000;
+    for (const node of this.campNodes.values()) {
+      if (node.camp.destroyed) continue;
+      const ratio = Math.max(0, Math.min(1, node.camp.coreHp / Math.max(1, node.camp.coreMaxHp)));
+      const wasFlashing = node.hpFlashUntil > 0 && now >= node.hpFlashUntil;
+      if (node.hpTrailRatio > ratio + 0.002 || now < node.hpFlashUntil || wasFlashing) {
+        if (node.hpTrailRatio > ratio + 0.002) {
+          node.hpTrailRatio = Math.max(ratio, node.hpTrailRatio - drainStep);
+        }
+        if (wasFlashing) node.hpFlashUntil = 0;
+        this.updateCampHpVisual(node, false);
+      }
+    }
+
     this.respawnAccumMs += deltaMs;
     if (this.respawnAccumMs < 1000) return;
     this.respawnAccumMs -= 1000;
@@ -427,6 +471,8 @@ export class MonsterCampSystem {
         camp.level += 2;
         camp.coreMaxHp = Math.round(tpl.coreMaxHp * (1 + camp.clearCount * 0.25) * hpMult);
         camp.coreHp = camp.coreMaxHp;
+        node.hpTrailRatio = 1;
+        node.hpFlashUntil = 0;
 
         const isl = this.ctx.getIslands().find((i) => i.id === camp.territoryId);
         if (isl) {

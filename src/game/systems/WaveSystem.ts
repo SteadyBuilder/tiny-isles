@@ -1,3 +1,4 @@
+import { CombatHitFeedbackOptions } from '../../types/combat';
 import {
   ConstructedBuilding,
   DungeonPortalState,
@@ -13,7 +14,7 @@ import { getDynamicScalingProfile } from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
 import { DungeonInvasionSpawner } from './DungeonInvasionSpawner';
 import { MonsterCombatAI } from './MonsterCombatAI';
-import { MonsterVisual } from './MonsterVisualManager';
+import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
 import { WaveSpawner } from './WaveSpawner';
 
@@ -25,6 +26,7 @@ export interface IWaveSystemContext {
   getDifficultyConfig?: () => MissionDifficultyConfig;
   projectileSystem?: ProjectileSystem;
   healCampCore?: (territoryId: number, amount: number) => void;
+  onMonsterHitImpact?: (opts: CombatHitFeedbackOptions, restoreTint?: number | null) => void;
   onMonsterKilledReward?: (
     x: number,
     y: number,
@@ -131,6 +133,7 @@ export class WaveSystem {
           );
         }
       },
+      onMonsterHitImpact: (opts, restoreTint) => this.ctx.onMonsterHitImpact?.(opts, restoreTint),
       onMonsterKilled: (x, y, isBoss, expReward, isCampMonster, meta) => {
         this.ctx.onMonsterKilledReward?.(x, y, isBoss, expReward, isCampMonster, meta);
       },
@@ -548,7 +551,8 @@ export class WaveSystem {
     damage: number,
     sourceName = '타워',
     fromRemote = false,
-    attackerId?: string
+    attackerId?: string,
+    hitMeta?: { isSkill?: boolean; isCrit?: boolean }
   ): void {
     const killed = this.combatAI.damageMonster({
       monsterId,
@@ -558,6 +562,7 @@ export class WaveSystem {
       fromRemote,
       isHost: this.isHost,
       bonusMultiplier: this.activeBonusMultiplier,
+      hitMeta,
     });
     if (killed) {
       this.emitWaveState();

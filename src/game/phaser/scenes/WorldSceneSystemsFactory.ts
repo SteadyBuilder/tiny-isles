@@ -22,10 +22,12 @@ import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
+import { CombatFeedbackRenderer } from '../renderers/CombatFeedbackRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { LootChestDropRenderer } from '../renderers/LootChestDropRenderer';
 import { PlayerCelebrationEffects } from '../renderers/PlayerCelebrationEffects';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
+import { SkillEffectsRenderer } from '../renderers/SkillEffectsRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 
@@ -41,6 +43,8 @@ export interface IWorldSystemsHost {
   getRoomMode?: () => RoomMode;
   onCoreDestroyed?: () => void;
   getPlayerPosition: () => { x: number; y: number };
+  getPlayerDirection?: () => 'left' | 'right';
+  triggerSkillSurge?: (dirX: number, dirY: number, speedPx: number, durationMs: number) => void;
   respawnPlayerAt: (x: number, y: number) => void;
   onPlayerFaintedVisual: (fainted: boolean) => void;
   onPlayerHitVisual: () => void;
@@ -77,6 +81,8 @@ export interface IWorldSystemsHost {
   onRemoteBuildingDestroyed?: (buildingId: string) => void;
   onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
   effectsRenderer: WorldEffectsRenderer;
+  combatFeedbackRenderer: CombatFeedbackRenderer;
+  skillEffectsRenderer: SkillEffectsRenderer;
   lootChestRenderer: LootChestDropRenderer;
   celebrationEffects: PlayerCelebrationEffects;
   territoryStructureRenderer: TerritoryStructureRenderer;
@@ -113,6 +119,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     respawnPlayerAt: host.respawnPlayerAt,
     onPlayerFaintedVisual: host.onPlayerFaintedVisual,
     onPlayerHitVisual: host.onPlayerHitVisual,
+    onPlayerDamagedShake: () => host.combatFeedbackRenderer.triggerPlayerDamagedShake(),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
   });
 
@@ -144,6 +151,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       getDifficultyConfig: host.getDifficultyConfig,
       projectileSystem,
       healCampCore: (territoryId, amount) => monsterCampSystem?.healCampCore(territoryId, amount),
+      onMonsterHitImpact: (opts, restoreTint) =>
+        host.combatFeedbackRenderer.playHitImpact(opts, restoreTint),
       onMonsterKilledReward: (x, y, isBoss, expReward, isCampMonster, meta) => {
         playerProgressionSystem?.gainExp(expReward);
         // 사냥 특화 모드에서는 몬스터 웨이브(던전 침공) 처치 시 위협도 미증가, 부락 주둔 마물만 증가
@@ -217,6 +226,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getPlayerId: host.getPlayerId,
     getPlayerName: host.getPlayerName,
     getPlayerPosition: host.getPlayerPosition,
+    getPlayerDirection: host.getPlayerDirection,
+    isPlayerFainted: () => playerHealthSystem.isFainted(),
     getGold: () => host.getInventory().gold,
     spendGold: (amount) => host.spendResources(0, 0, amount),
     addGold: (amount) => host.addResources(0, 0, amount),
@@ -224,13 +235,15 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     healPlayer: (amount) => playerHealthSystem.healPlayer(amount),
     onClassChangedVisual: (classId) => host.onPlayerClassVisualChanged?.(classId),
     getMonsterVisuals: () => waveSystem.getMonsterVisuals(),
-    damageMonster: (id, dmg, attacker, attackerId) =>
-      waveSystem.damageMonster(id, dmg, attacker, false, attackerId),
+    damageMonster: (id, dmg, attacker, attackerId, hitMeta) =>
+      waveSystem.damageMonster(id, dmg, attacker, false, attackerId, hitMeta),
     tryDamageCampCoreInRadius: (x, y, r, dmg) =>
-      monsterCampSystem?.damageCampCoresInRadius(x, y, r, dmg),
+      monsterCampSystem?.damageCampCoresInRadius(x, y, r, dmg, true) ?? false,
     projectileSystem,
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
+    playSkillEffect: (fxCtx) => host.skillEffectsRenderer.playClassSkill(fxCtx),
+    triggerSkillSurge: host.triggerSkillSurge,
     getJobHallStatus: () => {
       const pos = host.getPlayerPosition();
       const status = checkJobHallProximity(pos.x, pos.y, host.getConstructedBuildings());
@@ -256,6 +269,14 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       host.lootChestRenderer.playDropAnimation({ x, y, item, onOpened }),
     onCampCoreDamaged: (territoryId) =>
       waveSystem.aggroCampMonsters(territoryId, host.getPlayerId()),
+    onCampCoreHitFeedback: (x, y, isSkill) =>
+      host.combatFeedbackRenderer.playHitImpact({
+        x,
+        y,
+        damage: 0,
+        isSkill,
+        isLocalPlayerAttack: true,
+      }),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     shakeObject: (target) => host.effectsRenderer.shakeObject(target),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),

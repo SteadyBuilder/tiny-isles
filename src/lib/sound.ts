@@ -192,6 +192,14 @@ class SoundSystem {
       osc.stop(startTime + n.dur + 0.01);
     }
   }
+  public playDash() {
+    this.playTone('triangle', 520, 170, 0.14, 0.28);
+    this.playTone('sine', 960, 320, 0.09, 0.16);
+  }
+  public playSkillImpact() {
+    this.playTone('sawtooth', 260, 65, 0.22, 0.28);
+    this.playTone('triangle', 520, 140, 0.18, 0.24);
+  }
   public playClick() { if (!this.playBuffer('click', 0.6)) this.playTone('sine', 800, 400, 0.04, 0.2); }
 }
 

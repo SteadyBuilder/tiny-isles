@@ -7,6 +7,7 @@ import {
 import { RARITY_META } from '../../data/items';
 import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { sound } from '../../lib/sound';
+import { SkillEffectContext } from '../../types/combat';
 import {
   EquipmentItem,
   EquipmentSlot,
@@ -24,6 +25,8 @@ export interface IPlayerProgressionContext {
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerPosition: () => { x: number; y: number };
+  getPlayerDirection?: () => 'left' | 'right';
+  isPlayerFainted?: () => boolean;
   getGold: () => number;
   spendGold: (amount: number) => void;
   addGold: (amount: number) => void;
@@ -35,12 +38,15 @@ export interface IPlayerProgressionContext {
     monsterId: string,
     damage: number,
     attackerName: string,
-    attackerId: string
+    attackerId: string,
+    hitMeta?: { isSkill?: boolean; isCrit?: boolean }
   ) => void;
-  tryDamageCampCoreInRadius?: (x: number, y: number, radius: number, damage: number) => void;
+  tryDamageCampCoreInRadius?: (x: number, y: number, radius: number, damage: number) => boolean;
   projectileSystem: ProjectileSystem;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   playExplosionAt: (x: number, y: number) => void;
+  playSkillEffect?: (ctx: SkillEffectContext) => void;
+  triggerSkillSurge?: (dirX: number, dirY: number, speedPx: number, durationMs: number) => void;
   getJobHallStatus?: () => { hasBuilt: boolean; isNear: boolean };
   playLevelUpEffect?: (x: number, y: number, level: number, delayMs?: number) => void;
   playClassAdvancementEffect?: (x: number, y: number, classId: PlayerClassId) => void;
@@ -355,16 +361,18 @@ export class PlayerProgressionSystem {
   }
 
   public castActiveSkill(): void {
-    if (this.skillCooldownRemainingMs > 0) return;
+    if (this.skillCooldownRemainingMs > 0 || this.ctx.isPlayerFainted?.()) return;
     const cls = this.getClassDef();
     const cdrRatio = 1 - this.getTotalCooldownReductionPercent() / 100;
     this.skillCooldownRemainingMs = Math.round(cls.skillCooldownMs * cdrRatio);
 
     const pos = this.ctx.getPlayerPosition();
+    const facingDir = this.ctx.getPlayerDirection?.() ?? 'right';
     const baseSkillDmg = Math.round(this.getTotalAttack() * cls.skillDamageMultiplier);
     const monsters = this.ctx.getMonsterVisuals();
 
     sound.playUnlock();
+    sound.playSkillImpact();
     this.ctx.showFloatingText(pos.x, pos.y - 58, `${cls.skillIcon} ${cls.skillName}!`, '#38bdf8');
 
     const dealSkillHit = (targetId: string, tx: number, ty: number) => {
@@ -373,7 +381,8 @@ export class PlayerProgressionSystem {
         targetId,
         rolled.finalDamage,
         this.ctx.getPlayerName(),
-        this.ctx.getPlayerId()
+        this.ctx.getPlayerId(),
+        { isSkill: true, isCrit: rolled.isCrit }
       );
       if (rolled.isCrit) {
         this.ctx.showFloatingText(tx, ty - 42, '💥 치명타!', '#fde047');
@@ -383,53 +392,60 @@ export class PlayerProgressionSystem {
       }
     };
 
-    if (cls.id === 'ranger') {
-      let fired = 0;
+    const targetsInRange = Array.from(monsters.values())
+      .map((mv) => ({ mv, dist: Math.hypot(mv.monster.x - pos.x, mv.monster.y - pos.y) }))
+      .filter((item) => item.dist <= cls.skillRadius)
+      .sort((a, b) => a.dist - b.dist);
+
+    if (cls.id === 'lancer') {
+      const primary = targetsInRange[0]?.mv;
+      const dirX = primary ? primary.monster.x - pos.x : facingDir === 'left' ? -1 : 1;
+      const dirY = primary ? primary.monster.y - pos.y : 0;
+      this.ctx.triggerSkillSurge?.(dirX, dirY, 920, 150);
+    }
+
+    const executeImpact = () => {
+      const latestPos = this.ctx.getPlayerPosition();
+      if (cls.id === 'ranger') {
+        const chosen = targetsInRange.slice(0, 10);
+        for (const { mv } of chosen) {
+          dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);
+        }
+        this.ctx.tryDamageCampCoreInRadius?.(latestPos.x, latestPos.y, cls.skillRadius, baseSkillDmg);
+        return;
+      }
+
       for (const mv of monsters.values()) {
-        if (fired >= 10) break;
-        const d = Math.hypot(mv.monster.x - pos.x, mv.monster.y - pos.y);
+        const d = Math.hypot(mv.monster.x - latestPos.x, mv.monster.y - latestPos.y);
         if (d <= cls.skillRadius) {
-          fired++;
-          const targetId = mv.monster.id;
-          const mx = mv.monster.x;
-          const my = mv.monster.y;
-          this.ctx.projectileSystem.fireProjectile({
-            startX: pos.x,
-            startY: pos.y - 20,
-            targetX: mx,
-            targetY: my,
-            durationMs: 170,
-            tint: 0x38bdf8,
-            size: 40,
-            onArrive: () => dealSkillHit(targetId, mx, my),
-          });
+          dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);
         }
       }
-      this.ctx.tryDamageCampCoreInRadius?.(pos.x, pos.y, cls.skillRadius, baseSkillDmg);
-    } else {
-      this.ctx.projectileSystem.spawnTelegraphZone({
-        x: pos.x,
-        y: pos.y,
-        radius: cls.skillRadius,
-        durationMs: 220,
-        color: cls.id === 'archmage' ? 0xc084fc : 0xfbbf24,
-        onDetonate: () => {
-          this.ctx.playExplosionAt(pos.x, pos.y);
-          for (const mv of monsters.values()) {
-            const d = Math.hypot(mv.monster.x - pos.x, mv.monster.y - pos.y);
-            if (d <= cls.skillRadius) {
-              dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);
-            }
-          }
-          this.ctx.tryDamageCampCoreInRadius?.(pos.x, pos.y, cls.skillRadius, baseSkillDmg);
-        },
-      });
+      this.ctx.tryDamageCampCoreInRadius?.(latestPos.x, latestPos.y, cls.skillRadius, baseSkillDmg);
+    };
 
-      if (cls.id === 'guardian') {
-        this.ctx.healPlayer(25);
-      } else if (cls.id === 'archmage') {
-        this.ctx.healPlayer(40);
-      }
+    if (this.ctx.playSkillEffect) {
+      this.ctx.playSkillEffect({
+        classId: cls.id,
+        casterX: pos.x,
+        casterY: pos.y,
+        facingDir,
+        radius: cls.skillRadius,
+        targetPoints: targetsInRange.slice(0, 10).map((t) => ({
+          x: t.mv.monster.x,
+          y: t.mv.monster.y,
+        })),
+        onImpact: executeImpact,
+      });
+    } else {
+      this.ctx.playExplosionAt(pos.x, pos.y);
+      executeImpact();
+    }
+
+    if (cls.id === 'guardian') {
+      this.ctx.healPlayer(25);
+    } else if (cls.id === 'archmage') {
+      this.ctx.healPlayer(40);
     }
 
     this.emitState();

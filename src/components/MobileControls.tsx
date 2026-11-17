@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Island, PlayerProgressionState } from '../types/game';
+import { DashCooldownState, Island, PlayerProgressionState } from '../types/game';
 import { GameEvents } from '../game/events/gameEvents';
 import { getPinchEligibleTouches, getTouchDistance } from '../lib/touchGestureGuard';
 import { PixelVirtualJoystick } from './mobile/PixelVirtualJoystick';
@@ -14,6 +14,7 @@ interface MobileControlsProps {
   onZoomChange?: (zoom: number) => void;
   currentZoom?: number;
   progression?: PlayerProgressionState;
+  dashState?: DashCooldownState;
 }
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
@@ -25,6 +26,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   onZoomChange,
   currentZoom = 1.0,
   progression,
+  dashState,
 }) => {
   const zoomRef = useRef(currentZoom);
   zoomRef.current = currentZoom;
@@ -112,6 +114,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         onOpenVillageModal={onOpenVillageModal}
         canBuild={canBuild}
         progression={progression}
+        dashState={dashState}
       />
     </div>
   );

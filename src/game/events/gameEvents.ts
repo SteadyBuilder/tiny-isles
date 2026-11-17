@@ -1,6 +1,7 @@
 import {
   ConstructableType,
   ConstructedBuilding,
+  DashCooldownState,
   DungeonPortalState,
   EquipmentSlot,
   GarrisonUnit,
@@ -8,6 +9,7 @@ import {
   Island,
   PlayerClassId,
   PlayerColor,
+  PlayerDamagedFxPayload,
   PlayerHpState,
   PlayerProgressionState,
   ThreatOrbFxPayload,
@@ -87,6 +89,9 @@ export interface GameEventPayloads {
   'unequip-slot': EquipmentSlot;
   'salvage-item': string; // instanceId
   'cast-active-skill': void;
+  'trigger-dash': void;
+  'dash-state-updated': DashCooldownState;
+  'player-damaged-fx': PlayerDamagedFxPayload;
   'camp-conquered': { territoryId: number; campName: string; firstClearedCount: number };
   'dungeon-portal-updated': DungeonPortalState | null;
 

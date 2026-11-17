@@ -192,6 +192,7 @@ export function createWorldControllersBundle(
 
   playerMovement = new PlayerMovementController({
     scene: host.scene,
+    isSceneAlive: host.isSceneAlive,
     getPlayerName: host.getPlayerName,
     getPlayerColor: host.getPlayerColor,
     getMoveSpeed: () => host.systems.playerProgressionSystem.getTotalSpeed(),
@@ -214,6 +215,8 @@ export function createWorldControllersBundle(
       return isBoss ? Math.max(baseRange, PLAYER_COMBAT_CONFIG.meleeRangeBoss) : baseRange;
     },
     getConstructedBuildings: host.getConstructedBuildings,
+    grantDashInvincibility: (durationMs) =>
+      host.systems.playerHealthSystem.grantTemporaryInvincibility(durationMs),
   });
 
   const eventBus = new WorldEventBusController({

@@ -1,10 +1,11 @@
 import React from 'react';
 import { PLAYER_CLASS_DEFINITIONS } from '../data/classes';
 import { GameEvents } from '../game/events/gameEvents';
-import { PlayerProgressionState } from '../types/game';
+import { DashCooldownState, PlayerProgressionState } from '../types/game';
 
 interface PlayerProgressionHudProps {
   progression: PlayerProgressionState;
+  dashState?: DashCooldownState;
   hasJobHallBuilt: boolean;
   isNearJobHall: boolean;
   onOpenInventory: () => void;
@@ -13,6 +14,7 @@ interface PlayerProgressionHudProps {
 
 export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   progression,
+  dashState,
   hasJobHallBuilt,
   isNearJobHall,
   onOpenInventory,
@@ -27,6 +29,9 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
     0,
     Math.ceil(progression.skillCooldownRemainingMs / 1000)
   );
+  const dashRemainingMs = dashState?.cooldownRemainingMs ?? 0;
+  const dashRemainingSec = dashRemainingMs > 0 ? (dashRemainingMs / 1000).toFixed(1) : null;
+  const isDashDisabled = dashRemainingMs > 0 || Boolean(dashState?.isDashing);
 
   const equippedCount = Object.values(progression.equipped).filter(Boolean).length;
   const canEnterJobHall = hasJobHallBuilt && isNearJobHall;
@@ -50,7 +55,7 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   };
 
   return (
-    <div className="fixed bottom-[6.5rem] left-2 md:bottom-3 md:left-3 z-30 flex flex-col gap-1 pointer-events-auto max-w-[180px] sm:max-w-[330px] md:max-w-[380px]">
+    <div className="fixed bottom-[6.5rem] left-2 md:bottom-3 md:left-3 z-30 flex flex-col gap-1 pointer-events-auto max-w-[180px] sm:max-w-[330px] md:max-w-[440px]">
       <div className="ts-hud-pill px-2 py-1 md:px-2.5 md:py-2 flex flex-col gap-1 md:gap-1.5 shadow-lg">
         {/* Top Row: Level + Class Badge + Combat Stats (desktop) / EXP% (mobile) */}
         <div className="flex items-center justify-between gap-1.5 md:gap-2">
@@ -86,7 +91,7 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
           </span>
         </div>
 
-        {/* Action Buttons Row: Skill [Q] (desktop/tablet), Inventory [I], Job Advancement */}
+        {/* Action Buttons Row: Skill [Q], Dash [Shift], Inventory [I], Job Advancement */}
         <div className="flex items-center gap-1 md:gap-1.5 pt-0.5">
           <button
             type="button"
@@ -104,6 +109,25 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
             <span className="truncate">{classDef.skillName}</span>
             {cooldownRemainingSec > 0 && (
               <span className="text-[#fca5a5] font-extrabold">{cooldownRemainingSec}s</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => GameEvents.emit('trigger-dash')}
+            disabled={isDashDisabled}
+            className={`hidden md:flex px-2 py-1 rounded-md border text-[11px] font-black items-center justify-center gap-1 transition-transform active:scale-95 shrink-0 ${
+              isDashDisabled
+                ? 'bg-[#291d14] border-[#5c422a] text-[#9ca3af] cursor-not-allowed'
+                : 'bg-[#0f4c5c] border-[#22d3ee] text-[#ecfeff] hover:brightness-110'
+            }`}
+            title="순간 대시 회피기 (단축키 Shift · 무적 판정 및 몬스터 통과)"
+          >
+            <span className="px-1 rounded bg-black/40 text-[9px] text-[#67e8f9]">Shift</span>
+            <span>💨</span>
+            <span>대시</span>
+            {dashRemainingSec && (
+              <span className="text-[#fca5a5] font-extrabold tabular-nums">{dashRemainingSec}s</span>
             )}
           </button>
 

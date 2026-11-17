@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getRequiredExpForLevel } from '../data/classes';
+import { PLAYER_DASH_CONFIG } from '../data/combatFeedbackConfig';
 import { PLAYER_COMBAT_CONFIG, THREAT_WAVE_CONFIG } from '../data/worldRules';
 import { getInitialConstructedBuildings, INITIAL_ISLANDS } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
@@ -7,6 +8,7 @@ import { storage } from '../lib/storage';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
 import {
   ConstructedBuilding,
+  DashCooldownState,
   Inventory,
   Island,
   PlayerColor,
@@ -41,6 +43,12 @@ const INITIAL_PLAYER_PROGRESSION: PlayerProgressionState = {
   totalCritChance: 5,
   totalLifestealPercent: 0,
   totalCooldownReductionPercent: 0,
+};
+
+const INITIAL_DASH_STATE: DashCooldownState = {
+  cooldownRemainingMs: 0,
+  cooldownMaxMs: PLAYER_DASH_CONFIG.cooldownMs,
+  isDashing: false,
 };
 
 function createInitialWaveState(): WaveState {
@@ -86,6 +94,7 @@ export function useGameShellState() {
   const [playerProgression, setPlayerProgression] = useState<PlayerProgressionState>(
     INITIAL_PLAYER_PROGRESSION
   );
+  const [dashState, setDashState] = useState<DashCooldownState>(INITIAL_DASH_STATE);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const alertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -110,6 +119,9 @@ export function useGameShellState() {
     const handleProgressionUpdated = (next: PlayerProgressionState) => {
       setPlayerProgression(next);
     };
+    const handleDashStateUpdated = (next: DashCooldownState) => {
+      setDashState(next);
+    };
     const handleOpenJobHall = () => {
       setShowJobHallModal(true);
     };
@@ -121,12 +133,14 @@ export function useGameShellState() {
     };
     GameEvents.on('player-hp-updated', handleHpUpdated);
     GameEvents.on('player-progression-updated', handleProgressionUpdated);
+    GameEvents.on('dash-state-updated', handleDashStateUpdated);
     GameEvents.on('open-job-hall-modal', handleOpenJobHall);
     GameEvents.on('job-hall-proximity-changed', handleJobHallProximity);
     GameEvents.on('open-inventory-modal', handleOpenInventory);
     return () => {
       GameEvents.off('player-hp-updated', handleHpUpdated);
       GameEvents.off('player-progression-updated', handleProgressionUpdated);
+      GameEvents.off('dash-state-updated', handleDashStateUpdated);
       GameEvents.off('open-job-hall-modal', handleOpenJobHall);
       GameEvents.off('job-hall-proximity-changed', handleJobHallProximity);
       GameEvents.off('open-inventory-modal', handleOpenInventory);
@@ -247,6 +261,7 @@ export function useGameShellState() {
     setShowJobHallModal(false);
     setIsNearJobHall(false);
     setPlayerProgression(INITIAL_PLAYER_PROGRESSION);
+    setDashState(INITIAL_DASH_STATE);
     setShowMinimapModal(false);
     setNearIsland(null);
     setPlayerGridPos({ gridX: 0, gridY: 0 });
@@ -283,6 +298,7 @@ export function useGameShellState() {
     setShowJobHallModal,
     isNearJobHall,
     playerProgression,
+    dashState,
     alertMessage,
     zoom,
     nearIsland,

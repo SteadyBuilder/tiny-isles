@@ -81,14 +81,47 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
     frameHeight: 192,
   });
 
-  // 스킬 및 마법 이펙트
-  scene.load.spritesheet('fireFx', '/assets/fx/Fire_01.png', {
-    frameWidth: 64,
-    frameHeight: 64,
+  // 스킬, 회피 대시 및 마법 이펙트
+  scene.load.spritesheet('fireFx', '/assets/fx/Fire_01.png', { frameWidth: 64, frameHeight: 64 });
+  scene.load.spritesheet('fireFx2', '/assets/fx/Fire_02.png', { frameWidth: 64, frameHeight: 64 });
+  scene.load.spritesheet('fireFx3', '/assets/fx/Fire_03.png', { frameWidth: 64, frameHeight: 64 });
+  scene.load.spritesheet('explosionFx2', '/assets/fx/Explosion_02.png', {
+    frameWidth: 192,
+    frameHeight: 192,
   });
+  scene.load.spritesheet('dustFx1', '/assets/fx/Dust_01.png', { frameWidth: 64, frameHeight: 64 });
+  scene.load.spritesheet('dustFx2', '/assets/fx/Dust_02.png', { frameWidth: 64, frameHeight: 64 });
   scene.load.spritesheet('healFx', '/assets/fx/Heal_Effect.png', {
     frameWidth: 192,
     frameHeight: 192,
+  });
+  scene.load.spritesheet('slashArcFx', '/assets/fx/Slash_Arc.png', {
+    frameWidth: 192,
+    frameHeight: 192,
+  });
+  scene.load.spritesheet('whirlwindSlashFx', '/assets/fx/Whirlwind_Slash.png', {
+    frameWidth: 256,
+    frameHeight: 256,
+  });
+  scene.load.spritesheet('lanceBeamFx', '/assets/fx/Lance_Beam.png', {
+    frameWidth: 256,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet('magicCircleFx', '/assets/fx/Magic_Circle.png', {
+    frameWidth: 256,
+    frameHeight: 256,
+  });
+  scene.load.spritesheet('meteorRockFx', '/assets/fx/Meteor_Rock.png', {
+    frameWidth: 128,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet('shockwaveRingFx', '/assets/fx/Shockwave_Ring.png', {
+    frameWidth: 192,
+    frameHeight: 192,
+  });
+  scene.load.spritesheet('arrowStormFx', '/assets/fx/Arrow_Storm.png', {
+    frameWidth: 96,
+    frameHeight: 96,
   });
 
   // 몬스터 부락 본진 건물
@@ -249,20 +282,37 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
       repeat: -1,
     });
   }
-  if (scene.textures.exists('fireFx')) {
-    scene.anims.create({
-      key: 'fire_anim',
-      frames: scene.anims.generateFrameNumbers('fireFx', { start: 0, end: 7 }),
-      frameRate: 16,
-      repeat: 0,
-    });
-  }
-  if (scene.textures.exists('healFx')) {
-    scene.anims.create({
-      key: 'heal_anim',
-      frames: scene.anims.generateFrameNumbers('healFx', { start: 0, end: 10 }),
-      frameRate: 16,
-      repeat: 0,
-    });
+  const fxAnimSpecs: ReadonlyArray<{
+    tex: string;
+    key: string;
+    end: number;
+    frameRate: number;
+    repeat: number;
+  }> = [
+    { tex: 'fireFx', key: 'fire_anim', end: 7, frameRate: 16, repeat: 0 },
+    { tex: 'fireFx2', key: 'fire2_anim', end: 9, frameRate: 18, repeat: 0 },
+    { tex: 'fireFx3', key: 'fire3_anim', end: 11, frameRate: 20, repeat: 0 },
+    { tex: 'explosionFx2', key: 'explosion2_anim', end: 9, frameRate: 20, repeat: 0 },
+    { tex: 'dustFx1', key: 'dust1_anim', end: 7, frameRate: 18, repeat: 0 },
+    { tex: 'dustFx2', key: 'dust2_anim', end: 9, frameRate: 20, repeat: 0 },
+    { tex: 'healFx', key: 'heal_anim', end: 10, frameRate: 16, repeat: 0 },
+    { tex: 'slashArcFx', key: 'slash_arc_anim', end: 5, frameRate: 22, repeat: 0 },
+    { tex: 'whirlwindSlashFx', key: 'whirlwind_slash_anim', end: 5, frameRate: 20, repeat: 0 },
+    { tex: 'lanceBeamFx', key: 'lance_beam_anim', end: 5, frameRate: 22, repeat: 0 },
+    { tex: 'magicCircleFx', key: 'magic_circle_anim', end: 3, frameRate: 12, repeat: -1 },
+    { tex: 'meteorRockFx', key: 'meteor_rock_anim', end: 3, frameRate: 16, repeat: -1 },
+    { tex: 'shockwaveRingFx', key: 'shockwave_ring_anim', end: 5, frameRate: 20, repeat: 0 },
+    { tex: 'arrowStormFx', key: 'arrow_storm_anim', end: 3, frameRate: 16, repeat: -1 },
+  ];
+
+  for (const spec of fxAnimSpecs) {
+    if (scene.textures.exists(spec.tex) && !scene.anims.exists(spec.key)) {
+      scene.anims.create({
+        key: spec.key,
+        frames: scene.anims.generateFrameNumbers(spec.tex, { start: 0, end: spec.end }),
+        frameRate: spec.frameRate,
+        repeat: spec.repeat,
+      });
+    }
   }
 }

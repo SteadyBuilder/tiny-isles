@@ -16,12 +16,14 @@ import { MissionSystem } from '../../systems/MissionSystem';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { WorldPersistenceController } from '../controllers/WorldPersistenceController';
+import { CombatFeedbackRenderer } from '../renderers/CombatFeedbackRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
 import { LootChestDropRenderer } from '../renderers/LootChestDropRenderer';
 import { MonsterTargetIndicatorRenderer } from '../renderers/MonsterTargetIndicatorRenderer';
 import { PlayerCelebrationEffects } from '../renderers/PlayerCelebrationEffects';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
+import { SkillEffectsRenderer } from '../renderers/SkillEffectsRenderer';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
@@ -67,6 +69,8 @@ export class WorldScene extends Phaser.Scene {
   private terrainRenderer!: TerrainRenderer;
   private altarRenderer!: ExpansionAltarRenderer;
   private effectsRenderer!: WorldEffectsRenderer;
+  private combatFeedbackRenderer!: CombatFeedbackRenderer;
+  private skillEffectsRenderer!: SkillEffectsRenderer;
   private lootChestRenderer!: LootChestDropRenderer;
   private celebrationEffects!: PlayerCelebrationEffects;
   private territoryStructureRenderer!: TerritoryStructureRenderer;
@@ -206,6 +210,9 @@ export class WorldScene extends Phaser.Scene {
       getRoomMode: () => this.roomConfig.mode,
       onCoreDestroyed: () => this.missionSystem?.failByCoreDestroyed(),
       getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
+      getPlayerDirection: () => this.controllers?.playerMovement.getDirection() ?? 'right',
+      triggerSkillSurge: (dirX, dirY, speedPx, durationMs) =>
+        this.controllers?.playerMovement.triggerSkillSurge(dirX, dirY, speedPx, durationMs),
       respawnPlayerAt: (x, y) => this.controllers?.playerMovement.respawnAt(x, y),
       onPlayerFaintedVisual: (fainted) => this.controllers?.playerMovement.setFaintedVisual(fainted),
       onPlayerHitVisual: () => this.controllers?.playerMovement.playHitVisual(),
@@ -265,6 +272,8 @@ export class WorldScene extends Phaser.Scene {
       onRemoteRepairTerritoryRequest: (territoryId) =>
         this.controllers?.territoryAction.handleRemoteRepairTerritoryRequest(territoryId),
       effectsRenderer: this.effectsRenderer,
+      combatFeedbackRenderer: this.combatFeedbackRenderer,
+      skillEffectsRenderer: this.skillEffectsRenderer,
       lootChestRenderer: this.lootChestRenderer,
       celebrationEffects: this.celebrationEffects,
       territoryStructureRenderer: this.territoryStructureRenderer,
@@ -429,6 +438,7 @@ export class WorldScene extends Phaser.Scene {
     this.altarRenderer?.destroy();
     this.terrainRenderer?.destroy();
     this.effectsRenderer?.destroy();
+    this.skillEffectsRenderer?.destroy();
     this.lootChestRenderer?.destroy();
     this.celebrationEffects?.destroy();
     this.monsterIndicatorRenderer?.destroy();
