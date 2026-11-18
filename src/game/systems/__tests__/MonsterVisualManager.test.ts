@@ -238,13 +238,13 @@ test('MonsterVisualManager playAttackAnimation faces target, plays attack anim, 
   MonsterVisualManager.playAttackAnimation(mv, 120);
   assert.equal(mv.monster.direction, 'left');
   assert.equal(flipped, true);
-  assert.deepEqual(played, [{ key: 'monster_lancer_attack', ignoreIfPlaying: true }]);
+  assert.deepEqual(played, [{ key: 'monster_lancer_attack', ignoreIfPlaying: false }]);
 
   const completeCbs = listeners.get('animationcomplete') ?? [];
   assert.equal(completeCbs.length, 1);
   completeCbs[0]();
   assert.deepEqual(played, [
-    { key: 'monster_lancer_attack', ignoreIfPlaying: true },
+    { key: 'monster_lancer_attack', ignoreIfPlaying: false },
     { key: 'monster_lancer_run', ignoreIfPlaying: true },
   ]);
 });

@@ -229,7 +229,7 @@ export class MonsterVisualManager {
       once?: (event: string, fn: () => void) => void;
     };
     spriteEvents.off?.('animationcomplete');
-    sprite.play(resolvedAttackKey, true);
+    sprite.play(resolvedAttackKey, false);
     spriteEvents.once?.('animationcomplete', () => {
       const currentAnims = sprite.scene?.anims;
       if (sprite.active && currentAnims?.exists(runAnimKey)) {
