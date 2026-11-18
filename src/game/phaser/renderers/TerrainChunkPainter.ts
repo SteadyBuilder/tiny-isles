@@ -4,7 +4,19 @@ import { DEPTH } from '../../depthLayers';
 import { TerrainCell, WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { hash2D } from '../../world/TerrainNoise';
 
-const CHUNK_TILES = 20; // 20 * 64 = 1280px (safe within mobile/WebGL 2048px texture limits)
+const bridgeOrientationCache = new WeakMap<WorldTerrainMap, Map<string, 'h' | 'v'>>();
+
+function getBridgeOrientationMap(terrain: WorldTerrainMap): Map<string, 'h' | 'v'> {
+  let map = bridgeOrientationCache.get(terrain);
+  if (!map) {
+    map = new Map<string, 'h' | 'v'>();
+    for (const b of terrain.bridges) {
+      map.set(`${b.gx},${b.gy}`, b.orientation);
+    }
+    bridgeOrientationCache.set(terrain, map);
+  }
+  return map;
+}
 
 function getSourceImage(scene: Phaser.Scene, key: string): CanvasImageSource | null {
   if (!scene.textures.exists(key)) return null;
@@ -138,6 +150,8 @@ export function bakeSingleTerrainChunk(
   const rock4Img = getSourceImage(scene, 'rock4');
   const waterRock1Img = getSourceImage(scene, 'waterRock1');
   const waterRock2Img = getSourceImage(scene, 'waterRock2');
+  const bridgeMap = terrain.bridges.length > 0 ? getBridgeOrientationMap(terrain) : null;
+  const tilemapImageCache = new Map<string, CanvasImageSource | null>();
 
   const w = chunkCols * tileSize;
   const h = chunkRows * tileSize;
@@ -175,14 +189,16 @@ export function bakeSingleTerrainChunk(
             }
 
             if (cell.isBridge) {
-              const bridgeSeg = terrain.bridges.find(
-                (b) => b.gx === cell.gx && b.gy === cell.gy
-              );
-              drawBridgeTile(ctx, lx, ly, tileSize, bridgeSeg?.orientation || 'h');
+              const orientation = bridgeMap?.get(`${cell.gx},${cell.gy}`) ?? 'h';
+              drawBridgeTile(ctx, lx, ly, tileSize, orientation);
             }
           } else {
             const cfg = BIOME_CONFIGS[cell.biome];
-            const sheetImg = getSourceImage(scene, cfg.tilemapKey);
+            let sheetImg = tilemapImageCache.get(cfg.tilemapKey);
+            if (sheetImg === undefined) {
+              sheetImg = getSourceImage(scene, cfg.tilemapKey);
+              tilemapImageCache.set(cfg.tilemapKey, sheetImg);
+            }
 
             const wLeft = isWaterTile(terrain, cell.gx - 1, cell.gy);
             const wRight = isWaterTile(terrain, cell.gx + 1, cell.gy);

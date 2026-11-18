@@ -293,6 +293,7 @@ export class WorldScene extends Phaser.Scene {
       constructedBuildingRenderer: this.constructedBuildingRenderer,
       resourceEntityRenderer: this.resourceEntityRenderer,
       wallColliders: this.wallColliders,
+      onMonstersChanged: () => this.controllers?.viewportCulling.cullMonstersNow(),
     });
 
     // 3. Spawn World Cores, Monster Camps & Field Monsters (Hunting Mode) & Resource Entities
@@ -327,6 +328,7 @@ export class WorldScene extends Phaser.Scene {
       addHarvestedResource: (resKey, amount) => {
         this.inventory = { ...this.inventory, [resKey]: this.inventory[resKey] + amount };
         GameEvents.emit('inventory-updated', this.inventory);
+        this.refreshTerritoryDecorations();
       },
       refreshTerritoryDecorations: () => this.refreshTerritoryDecorations(),
       drawTerrainDecorations: () => this.drawTerrainDecorations(),
@@ -407,6 +409,7 @@ export class WorldScene extends Phaser.Scene {
       gold: this.inventory.gold + gold,
     };
     GameEvents.emit('inventory-updated', this.inventory);
+    this.refreshTerritoryDecorations();
   }
 
   private spendResources(wood: number, stone: number, gold: number): void {
@@ -416,6 +419,7 @@ export class WorldScene extends Phaser.Scene {
       gold: this.inventory.gold - gold,
     };
     GameEvents.emit('inventory-updated', this.inventory);
+    this.refreshTerritoryDecorations();
   }
 
   private drawTerrainDecorations(): void {
@@ -450,6 +454,7 @@ export class WorldScene extends Phaser.Scene {
     this.controllers?.towerPlacement?.destroy();
     this.systems?.playerHealthSystem?.destroy();
     this.systems?.projectileSystem?.destroy();
+    this.systems?.towerDefenseSystem?.destroy();
     this.systems?.monsterCampSystem?.destroy();
     this.systems?.fieldMonsterSystem?.destroy();
     this.systems?.waveSystem?.destroy();
@@ -460,6 +465,7 @@ export class WorldScene extends Phaser.Scene {
     this.altarRenderer?.destroy();
     this.terrainRenderer?.destroy();
     this.effectsRenderer?.destroy();
+    this.combatFeedbackRenderer?.destroy();
     this.skillEffectsRenderer?.destroy();
     this.lootChestRenderer?.destroy();
     this.resourceDropEffectsRenderer?.destroy();

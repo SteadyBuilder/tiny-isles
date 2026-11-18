@@ -45,6 +45,7 @@ export interface IPlayerProgressionContext {
   healPlayer: (amount: number) => void;
   onClassChangedVisual: (classId: PlayerClassId) => void;
   getMonsterVisuals: () => Map<string, MonsterVisual>;
+  queryMonstersInRadius?: (x: number, y: number, radiusPx: number) => MonsterVisual[];
   damageMonster: (
     monsterId: string,
     damage: number,
@@ -85,9 +86,14 @@ export class PlayerProgressionSystem {
   private potions: PotionInventory = { ...INITIAL_POTION_INVENTORY };
   private potionCooldownRemainingMs = 0;
   private hpRegenAccumulatorMs = 0;
+  private cachedStats: ComputedProgressionStats | null = null;
 
   constructor(ctx: IPlayerProgressionContext) {
     this.ctx = ctx;
+  }
+
+  private invalidateStatsCache(): void {
+    this.cachedStats = null;
   }
 
   public getClassDef(): PlayerClassDefinition {
@@ -103,7 +109,10 @@ export class PlayerProgressionSystem {
   }
 
   public getComputedStats(): ComputedProgressionStats {
-    return computeProgressionStats(this.level, this.getClassDef(), this.equipped);
+    if (!this.cachedStats) {
+      this.cachedStats = computeProgressionStats(this.level, this.getClassDef(), this.equipped);
+    }
+    return this.cachedStats;
   }
 
   public getTotalAttack(): number {
@@ -200,6 +209,7 @@ export class PlayerProgressionSystem {
     }
 
     if (gainedLevels.length > 0) {
+      this.invalidateStatsCache();
       sound.playLevelUp();
       const pos = this.ctx.getPlayerPosition();
       this.ctx.onMaxHpChanged(this.getTotalMaxHp(), hpGainTotal + 35);
@@ -255,6 +265,7 @@ export class PlayerProgressionSystem {
       this.bagItems.push(currentlyEquipped);
     }
     this.equipped[item.slot] = item;
+    this.invalidateStatsCache();
 
     const newMaxHp = this.getTotalMaxHp();
     this.ctx.onMaxHpChanged(newMaxHp, Math.max(0, newMaxHp - prevMaxHp));
@@ -270,6 +281,7 @@ export class PlayerProgressionSystem {
       return;
     }
     this.equipped[slot] = null;
+    this.invalidateStatsCache();
     this.bagItems.push(current);
     this.ctx.onMaxHpChanged(this.getTotalMaxHp(), 0);
     sound.playClick();
@@ -390,6 +402,7 @@ export class PlayerProgressionSystem {
 
     const prevMaxHp = this.getTotalMaxHp();
     this.classId = targetClassId;
+    this.invalidateStatsCache();
     const newMaxHp = this.getTotalMaxHp();
     this.ctx.onMaxHpChanged(newMaxHp, Math.max(20, newMaxHp - prevMaxHp));
     this.ctx.onClassChangedVisual(targetClassId);
@@ -426,7 +439,6 @@ export class PlayerProgressionSystem {
     const facingDir = this.ctx.getPlayerDirection?.() ?? 'right';
     const skillAmp = 1 + stats.totalSkillDamagePercent / 100;
     const baseSkillDmg = Math.round(stats.totalAttack * cls.skillDamageMultiplier * skillAmp);
-    const monsters = this.ctx.getMonsterVisuals();
 
     sound.playSkillCast(this.classId);
     this.ctx.showFloatingText(pos.x, pos.y - 58, `${cls.skillIcon} ${cls.skillName}!`, '#38bdf8');
@@ -448,7 +460,11 @@ export class PlayerProgressionSystem {
       }
     };
 
-    const targetsInRange = Array.from(monsters.values())
+    const initialCandidates =
+      this.ctx.queryMonstersInRadius?.(pos.x, pos.y, cls.skillRadius) ??
+      this.ctx.getMonsterVisuals().values();
+    const targetsInRange = Array.from(initialCandidates)
+      .filter((mv) => mv.monster.hp > 0)
       .map((mv) => ({ mv, dist: Math.hypot(mv.monster.x - pos.x, mv.monster.y - pos.y) }))
       .filter((item) => item.dist <= cls.skillRadius)
       .sort((a, b) => a.dist - b.dist);
@@ -465,13 +481,18 @@ export class PlayerProgressionSystem {
       if (cls.id === 'ranger') {
         const chosen = targetsInRange.slice(0, 10);
         for (const { mv } of chosen) {
+          if (mv.monster.hp <= 0) continue;
           dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);
         }
         this.ctx.tryDamageCampCoreInRadius?.(latestPos.x, latestPos.y, cls.skillRadius, baseSkillDmg);
         return;
       }
 
-      for (const mv of monsters.values()) {
+      const impactCandidates =
+        this.ctx.queryMonstersInRadius?.(latestPos.x, latestPos.y, cls.skillRadius) ??
+        this.ctx.getMonsterVisuals().values();
+      for (const mv of impactCandidates) {
+        if (mv.monster.hp <= 0) continue;
         const d = Math.hypot(mv.monster.x - latestPos.x, mv.monster.y - latestPos.y);
         if (d <= cls.skillRadius) {
           dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);

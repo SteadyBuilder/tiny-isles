@@ -68,7 +68,8 @@ export class MonsterRangedMageAI {
     aliveWalls: ConstructedBuilding[],
     sepX: number,
     sepY: number,
-    activeAggroPlayerId?: string | null
+    activeAggroPlayerId?: string | null,
+    activePlayers?: ReadonlyArray<ActivePlayerTarget>
   ): boolean {
     const m = mv.monster;
     if (!m.isCampMonster) return false;
@@ -113,7 +114,7 @@ export class MonsterRangedMageAI {
     const targetMatch = findTargetPlayerForMonster(
       m.x,
       m.y,
-      this.resolveActivePlayers(),
+      activePlayers ?? this.resolveActivePlayers(),
       aggroDetectRadius,
       activeAggroPlayerId ?? undefined
     );

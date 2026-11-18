@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PLAYER_SYNC_CONFIG } from '../../../data/worldRules';
 import {
   ConstructedBuilding,
   Entity,
@@ -32,7 +33,7 @@ export interface IMultiplayerSyncContext {
     direction: 'left' | 'right';
     action: PlayerAction;
   };
-  onOnlineCountChanged: (count: number) => void;
+  onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
   onHostStatusChanged?: (isHost: boolean) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteEntityRespawned?: (entity: Entity) => void;
@@ -66,6 +67,16 @@ export interface IMultiplayerSyncContext {
   onRemoteWorldDefenseFailed?: (resetAt: string, attackerName: string) => void;
 }
 
+interface LastSentMoveSnapshot {
+  x: number;
+  y: number;
+  direction: 'left' | 'right';
+  action: PlayerAction;
+  isFainted: boolean;
+  name: string;
+  color: PlayerColor;
+}
+
 /**
  * 실시간 멀티플레이(채널 라우터 + 원격 플레이어 렌더러) 조율 컨트롤러
  */
@@ -74,6 +85,8 @@ export class MultiplayerSyncController {
   private remoteRenderer: RemotePlayerRenderer;
   private router: MultiplayerChannelRouter;
   private lastBroadcastTime = 0;
+  private lastHeartbeatTime = 0;
+  private lastSentState: LastSentMoveSnapshot | null = null;
 
   constructor(ctx: IMultiplayerSyncContext) {
     this.ctx = ctx;
@@ -84,7 +97,7 @@ export class MultiplayerSyncController {
       getPlayerColor: () => this.ctx.getPlayerColor(),
       getRoomId: () => this.ctx.getRoomId?.() || 'default_room',
       getRoomMode: () => this.ctx.getRoomMode?.() || 'solo',
-      onOnlineCountChanged: (count) => this.ctx.onOnlineCountChanged(count),
+      onOnlineCountChanged: (count, hasNewPeer) => this.ctx.onOnlineCountChanged(count, hasNewPeer),
       onHostStatusChanged: (isHost) => this.ctx.onHostStatusChanged?.(isHost),
       onRemotePlayerMove: (player) =>
         this.remoteRenderer.updatePlayer(player, this.ctx.getPlayerId()),
@@ -146,24 +159,58 @@ export class MultiplayerSyncController {
   }
 
   public destroy(): void {
+    this.lastSentState = null;
     this.remoteRenderer.clear();
     this.router.destroy();
   }
 
   public maybeBroadcastPlayerMove(time: number): void {
-    if (time - this.lastBroadcastTime <= 60) return;
-    this.lastBroadcastTime = time;
+    if (this.ctx.getRoomMode?.() === 'solo') return;
+    if (time - this.lastBroadcastTime <= PLAYER_SYNC_CONFIG.moveBroadcastIntervalMs) return;
 
     const state = this.ctx.getLocalPlayerState();
-    const payload: Player = {
-      id: this.ctx.getPlayerId(),
-      name: this.ctx.getPlayerName(),
-      x: Math.round(state.x),
-      y: Math.round(state.y),
+    const rx = Math.round(state.x);
+    const ry = Math.round(state.y);
+    const isFainted = this.ctx.isLocalPlayerFainted?.() ?? false;
+    const name = this.ctx.getPlayerName();
+    const color = this.ctx.getPlayerColor();
+
+    const prev = this.lastSentState;
+    const changed =
+      !prev ||
+      prev.x !== rx ||
+      prev.y !== ry ||
+      prev.direction !== state.direction ||
+      prev.action !== state.action ||
+      prev.isFainted !== isFainted ||
+      prev.name !== name ||
+      prev.color !== color;
+
+    if (!changed && time - this.lastHeartbeatTime < PLAYER_SYNC_CONFIG.idleHeartbeatMs) {
+      return;
+    }
+
+    this.lastBroadcastTime = time;
+    this.lastHeartbeatTime = time;
+    this.lastSentState = {
+      x: rx,
+      y: ry,
       direction: state.direction,
       action: state.action,
-      color: this.ctx.getPlayerColor(),
-      isFainted: this.ctx.isLocalPlayerFainted?.() ?? false,
+      isFainted,
+      name,
+      color,
+    };
+
+    const payload: Player = {
+      id: this.ctx.getPlayerId(),
+      name,
+      x: rx,
+      y: ry,
+      direction: state.direction,
+      action: state.action,
+      color,
+      isFainted,
       lastUpdated: Date.now(),
     };
     this.router.emit('player_move', 'player_move', payload);

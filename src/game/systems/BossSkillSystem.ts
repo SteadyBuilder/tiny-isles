@@ -3,6 +3,7 @@ import { BossSkillId, Monster } from '../../types/game';
 import { ActivePlayerTarget, MonsterPlayerAttackPayload } from '../../types/monsterSync';
 import { sound } from '../../lib/sound';
 import { DEPTH } from '../depthLayers';
+import { PhaserFxPool, isPointInSceneViewport } from '../phaser/utils/fxObjectPool';
 import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
@@ -31,9 +32,14 @@ const BOSS_SKILL_TRIGGER_RANGE_PX = 500;
 export class BossSkillSystem {
   private ctx: IBossSkillContext;
   private lastSkillTimeMap = new Map<string, number>();
+  private fxPool: PhaserFxPool;
 
   constructor(ctx: IBossSkillContext) {
     this.ctx = ctx;
+    this.fxPool = new PhaserFxPool(
+      ctx.scene,
+      () => Boolean(ctx.scene.sys && ctx.scene.scene?.isActive())
+    );
   }
 
   private resolveActivePlayers(): ActivePlayerTarget[] {
@@ -51,14 +57,35 @@ export class BossSkillSystem {
     ];
   }
 
-  public tryCastSkill(mv: MonsterVisual, time: number): void {
+  public pruneStaleState(validIds: Set<string>): void {
+    for (const id of this.lastSkillTimeMap.keys()) {
+      if (!validIds.has(id)) {
+        this.lastSkillTimeMap.delete(id);
+      }
+    }
+  }
+
+  public deleteState(monsterId: string): void {
+    this.lastSkillTimeMap.delete(monsterId);
+  }
+
+  public destroy(): void {
+    this.lastSkillTimeMap.clear();
+    this.fxPool.destroy();
+  }
+
+  public tryCastSkill(
+    mv: MonsterVisual,
+    time: number,
+    activePlayers?: ReadonlyArray<ActivePlayerTarget>
+  ): void {
     const m = mv.monster;
     if (!m.isBoss || m.hp <= 0) return;
 
     const lastCast = this.lastSkillTimeMap.get(m.id) ?? 0;
     if (time - lastCast < BOSS_SKILL_COOLDOWN_MS) return;
 
-    const players = this.resolveActivePlayers();
+    const players = activePlayers ?? this.resolveActivePlayers();
     const targetMatch = findTargetPlayerForMonster(m.x, m.y, players, BOSS_SKILL_TRIGGER_RANGE_PX);
     if (!targetMatch) return;
 
@@ -316,8 +343,9 @@ export class BossSkillSystem {
       this.ctx.playExplosionAt(x, y);
       return;
     }
-    const img = scene.add.image(x, y, texKey, 0);
-    img.setDepth(DEPTH.PROJECTILE + 2);
+    if (!isPointInSceneViewport(scene, x, y)) return;
+    const img = this.fxPool.acquireImage(texKey, x, y, DEPTH.PROJECTILE + 2, 0);
+    if (!img) return;
     img.setDisplaySize(size * 0.6, size * 0.6);
     img.setTint(tint);
     scene.tweens.add({
@@ -327,7 +355,7 @@ export class BossSkillSystem {
       alpha: 0,
       duration: 380,
       ease: 'Cubic.easeOut',
-      onComplete: () => img.destroy(),
+      onComplete: () => this.fxPool.releaseImage(img),
     });
   }
 

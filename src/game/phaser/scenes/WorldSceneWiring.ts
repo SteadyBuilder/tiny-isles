@@ -23,6 +23,7 @@ import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 import { WaterRect } from '../../world/MapTerrainGenerator';
+import { isSameInventory } from '../../utils/inventoryUtils';
 import { checkSanctuaryPlayerHeal } from '../../utils/sanctuaryHealUtils';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
 
@@ -191,6 +192,7 @@ export function createWorldControllersBundle(
     addHarvestedResource: host.addHarvestedResource,
     tryRepairNearestWall: (px, py) => buildingRepair.repairNearestDamagedWall(px, py),
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
+    queryMonstersInRadius: (x, y, r) => host.systems.waveSystem.getSpatialGrid().queryRadius(x, y, r),
     damageMonster: (id, dmg, attacker, attackerId, hitMeta) =>
       host.systems.waveSystem.damageMonster(id, dmg, attacker, false, attackerId, hitMeta),
     getPlayerClassDef: () => host.systems.playerProgressionSystem.getClassDef(),
@@ -252,6 +254,8 @@ export function createWorldControllersBundle(
     getWaterBodies: host.getWaterBodies,
     getIslands: host.getIslands,
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
+    findNearestMonster: (x, y, r) =>
+      host.systems.waveSystem.getSpatialGrid().findNearestInRadius(x, y, r),
     findTappedEntityVisual: (wx, wy) => host.resourceEntityRenderer.findTappedVisual(wx, wy),
     isWithinEntityGatherRange: (px, py, visual) =>
       host.resourceEntityRenderer.isWithinGatherRange(px, py, visual),
@@ -278,6 +282,7 @@ export function createWorldControllersBundle(
     },
     setTargetZoom: (zoom) => playerMovement.setTargetZoom(zoom),
     setInventory: (inv) => {
+      if (isSameInventory(host.getInventory(), inv)) return;
       host.setInventory(inv);
       host.refreshTerritoryDecorations();
     },
@@ -334,6 +339,8 @@ export function createWorldControllersBundle(
     getConstructedVisuals: () => host.constructedBuildingRenderer.getVisuals(),
     getAltarCardContainers: () => host.altarRenderer.getCardContainers(),
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
+    getCampVisuals: () => host.systems.monsterCampSystem.getCampVisuals(),
+    getCampStructures: () => host.systems.campFortification.getStructures(),
   });
 
   return {

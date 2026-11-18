@@ -12,9 +12,37 @@ function cellKey(cx: number, cy: number): string {
  */
 export class MonsterSpatialGrid {
   private cells = new Map<string, MonsterVisual[]>();
+  private bucketPool: MonsterVisual[][] = [];
+  private lastFrameStamp = -1;
 
-  public rebuild(monsters: ReadonlyMap<string, MonsterVisual>): void {
+  private clearCells(): void {
+    for (const bucket of this.cells.values()) {
+      bucket.length = 0;
+      if (this.bucketPool.length < 256) {
+        this.bucketPool.push(bucket);
+      }
+    }
     this.cells.clear();
+  }
+
+  public ensureFresh(
+    monsters: ReadonlyMap<string, MonsterVisual>,
+    frameStamp: number
+  ): void {
+    if (monsters.size === 0) {
+      if (this.cells.size > 0) this.clearCells();
+      this.lastFrameStamp = frameStamp;
+      return;
+    }
+    if (this.lastFrameStamp === frameStamp && frameStamp >= 0) {
+      return;
+    }
+    this.rebuild(monsters, frameStamp);
+  }
+
+  public rebuild(monsters: ReadonlyMap<string, MonsterVisual>, frameStamp = -1): void {
+    this.clearCells();
+    this.lastFrameStamp = frameStamp;
     for (const mv of monsters.values()) {
       if (mv.monster.hp <= 0) continue;
       const cx = Math.floor(mv.monster.x / CELL_SIZE_PX);
@@ -24,7 +52,9 @@ export class MonsterSpatialGrid {
       if (bucket) {
         bucket.push(mv);
       } else {
-        this.cells.set(key, [mv]);
+        const fresh = this.bucketPool.pop() ?? [];
+        fresh.push(mv);
+        this.cells.set(key, fresh);
       }
     }
   }
@@ -42,6 +72,7 @@ export class MonsterSpatialGrid {
         const bucket = this.cells.get(cellKey(cx, cy));
         if (!bucket) continue;
         for (const mv of bucket) {
+          if (mv.monster.hp <= 0) continue;
           const dx = mv.monster.x - x;
           const dy = mv.monster.y - y;
           if (dx * dx + dy * dy <= rSq) {
@@ -51,6 +82,37 @@ export class MonsterSpatialGrid {
       }
     }
     return result;
+  }
+
+  public findNearestInRadius(
+    x: number,
+    y: number,
+    radiusPx: number
+  ): MonsterVisual | null {
+    const minCx = Math.floor((x - radiusPx) / CELL_SIZE_PX);
+    const maxCx = Math.floor((x + radiusPx) / CELL_SIZE_PX);
+    const minCy = Math.floor((y - radiusPx) / CELL_SIZE_PX);
+    const maxCy = Math.floor((y + radiusPx) / CELL_SIZE_PX);
+    let bestDistSq = radiusPx * radiusPx;
+    let best: MonsterVisual | null = null;
+
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cy = minCy; cy <= maxCy; cy++) {
+        const bucket = this.cells.get(cellKey(cx, cy));
+        if (!bucket) continue;
+        for (const mv of bucket) {
+          if (mv.monster.hp <= 0) continue;
+          const dx = mv.monster.x - x;
+          const dy = mv.monster.y - y;
+          const dSq = dx * dx + dy * dy;
+          if (dSq <= bestDistSq) {
+            bestDistSq = dSq;
+            best = mv;
+          }
+        }
+      }
+    }
+    return best;
   }
 
   /**

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
 import { SkillEffectContext } from '../../../types/combat';
 import { DEPTH } from '../../depthLayers';
+import { PhaserFxPool, isPointInSceneViewport } from '../utils/fxObjectPool';
 
 /**
  * 5대 클래스별 화려한 픽셀아트 다층 스킬 이펙트 전담 렌더러
@@ -10,10 +11,12 @@ export class SkillEffectsRenderer {
   private scene: Phaser.Scene;
   private isSceneAlive: () => boolean;
   private activeTimers = new Set<Phaser.Time.TimerEvent>();
+  private fxPool: PhaserFxPool;
 
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
     this.isSceneAlive = isSceneAlive;
+    this.fxPool = new PhaserFxPool(scene, isSceneAlive);
   }
 
   public playClassSkill(ctx: SkillEffectContext): void {
@@ -77,7 +80,7 @@ export class SkillEffectsRenderer {
       this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', x, y, radius * 2.05, style.secondaryHex);
       this.playSpriteAnim('healFx', 'heal_anim', x, y - 12, 165, style.primaryHex);
       this.spawnBurstSparks(x, y, style.primaryHex, style.secondaryHex, 16, radius * 0.8);
-      if (circle && circle.scene) circle.setAlpha(0.75);
+      if (circle && circle.scene && circle.active) circle.setAlpha(0.75);
       ctx.onImpact?.();
     });
   }
@@ -172,9 +175,9 @@ export class SkillEffectsRenderer {
   }
 
   private dropSkyArrow(tx: number, ty: number, colorA: number, colorB: number): void {
-    if (!this.isSceneAlive() || !this.scene.textures.exists('arrowStormFx')) return;
-    const arrow = this.scene.add.sprite(tx - 85, ty - 220, 'arrowStormFx');
-    arrow.setDepth(DEPTH.EXPLOSION + 2);
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, tx, ty)) return;
+    const arrow = this.fxPool.acquireSprite('arrowStormFx', tx - 85, ty - 220, DEPTH.EXPLOSION + 2);
+    if (!arrow) return;
     arrow.setDisplaySize(84, 84);
     arrow.setTint(colorA);
     if (this.scene.anims.exists('arrow_storm_anim')) {
@@ -188,7 +191,7 @@ export class SkillEffectsRenderer {
       duration: 145,
       ease: 'Cubic.easeIn',
       onComplete: () => {
-        if (arrow.scene) arrow.destroy();
+        this.fxPool.releaseSprite(arrow);
         if (!this.isSceneAlive()) return;
         this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', tx, ty, 78, colorB);
         this.spawnBurstSparks(tx, ty, colorA, colorB, 5, 36);
@@ -197,9 +200,9 @@ export class SkillEffectsRenderer {
   }
 
   private dropMeteor(tx: number, ty: number, durationMs: number): void {
-    if (!this.isSceneAlive() || !this.scene.textures.exists('meteorRockFx')) return;
-    const meteor = this.scene.add.sprite(tx - 110, ty - 340, 'meteorRockFx');
-    meteor.setDepth(DEPTH.EXPLOSION + 4);
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, tx, ty)) return;
+    const meteor = this.fxPool.acquireSprite('meteorRockFx', tx - 110, ty - 340, DEPTH.EXPLOSION + 4);
+    if (!meteor) return;
     meteor.setDisplaySize(136, 136);
     if (this.scene.anims.exists('meteor_rock_anim')) {
       meteor.play('meteor_rock_anim');
@@ -214,7 +217,7 @@ export class SkillEffectsRenderer {
       duration: durationMs,
       ease: 'Quad.easeIn',
       onComplete: () => {
-        if (meteor.scene) meteor.destroy();
+        this.fxPool.releaseSprite(meteor);
       },
     });
   }
@@ -226,9 +229,9 @@ export class SkillEffectsRenderer {
     tint: number,
     lifeMs: number
   ): Phaser.GameObjects.Sprite | null {
-    if (!this.isSceneAlive() || !this.scene.textures.exists('magicCircleFx')) return null;
-    const circle = this.scene.add.sprite(x, y, 'magicCircleFx');
-    circle.setDepth(DEPTH.SLASH - 5);
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return null;
+    const circle = this.fxPool.acquireSprite('magicCircleFx', x, y, DEPTH.SLASH - 5);
+    if (!circle) return null;
     circle.setDisplaySize(sizePx * 0.5, sizePx * 0.5);
     circle.setTint(tint);
     circle.setAlpha(0.9);
@@ -244,14 +247,14 @@ export class SkillEffectsRenderer {
       duration: lifeMs * 0.55,
       ease: 'Cubic.easeOut',
       onComplete: () => {
-        if (!circle.scene) return;
+        if (!circle.scene || !circle.active) return;
         this.scene.tweens.add({
           targets: circle,
           alpha: 0,
           angle: 190,
           duration: lifeMs * 0.45,
           onComplete: () => {
-            if (circle.scene) circle.destroy();
+            this.fxPool.releaseSprite(circle);
           },
         });
       },
@@ -269,19 +272,16 @@ export class SkillEffectsRenderer {
     rotationRad = 0,
     sizeH = sizeW
   ): void {
-    if (!this.isSceneAlive()) return;
-    if (!this.scene.textures.exists(texKey) || !this.scene.anims.exists(animKey)) return;
-
-    const fx = this.scene.add.sprite(x, y, texKey);
-    fx.setDepth(DEPTH.EXPLOSION + 1);
-    fx.setDisplaySize(sizeW, sizeH);
-    fx.setRotation(rotationRad);
-    if (tint !== 0xffffff) {
-      fx.setTint(tint);
-    }
-    fx.play(animKey);
-    fx.once('animationcomplete', () => {
-      if (fx.scene) fx.destroy();
+    this.fxPool.playSpriteAnim({
+      texKey,
+      animKey,
+      x,
+      y,
+      width: sizeW,
+      height: sizeH,
+      depth: DEPTH.EXPLOSION + 1,
+      tint,
+      rotationRad,
     });
   }
 
@@ -293,13 +293,12 @@ export class SkillEffectsRenderer {
     count: number,
     maxDist: number
   ): void {
-    if (!this.isSceneAlive()) return;
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return;
     for (let i = 0; i < count; i++) {
+      const spark = this.fxPool.acquireGraphics(x, y - 10, DEPTH.SPARK + 2);
+      if (!spark) break;
       const ang = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.35;
       const dist = maxDist * (0.45 + Math.random() * 0.65);
-      const spark = this.scene.add.graphics();
-      spark.setPosition(x, y - 10);
-      spark.setDepth(DEPTH.SPARK + 2);
       spark.fillStyle(i % 2 === 0 ? colorA : colorB, 1);
       spark.fillRect(-3.5, -3.5, 7, 7);
 
@@ -312,7 +311,7 @@ export class SkillEffectsRenderer {
         duration: 380,
         ease: 'Cubic.easeOut',
         onComplete: () => {
-          if (spark.scene) spark.destroy();
+          this.fxPool.releaseGraphics(spark);
         },
       });
     }
@@ -335,5 +334,6 @@ export class SkillEffectsRenderer {
       timer.remove(false);
     }
     this.activeTimers.clear();
+    this.fxPool.destroy();
   }
 }

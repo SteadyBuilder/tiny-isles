@@ -7,6 +7,7 @@ import { getInitialConstructedBuildings, INITIAL_ISLANDS } from '../game/constan
 import { GameEvents } from '../game/events/gameEvents';
 import { storage } from '../lib/storage';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
+import { isSameInventory } from '../game/utils/inventoryUtils';
 import {
   ConstructedBuilding,
   DashCooldownState,
@@ -201,7 +202,10 @@ export function useGameShellState() {
   };
 
   const handleUpdateInventory = (updater: (prev: Inventory) => Inventory) => {
-    setInventory((prev) => updater(prev));
+    setInventory((prev) => {
+      const next = updater(prev);
+      return isSameInventory(prev, next) ? prev : next;
+    });
   };
 
   const handleUnlockedCountChange = (unlocked: number, total: number) => {

@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { WORLD_CLOUD_BOUNDS, WORLD_CLOUD_CONFIGS } from '../../../data/cloudConfig';
+import { PERFORMANCE_CONFIG } from '../../../data/performanceConfig';
 import { Island } from '../../../types/game';
 import { DEPTH } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
 import { getOuterPerimeterSpawns } from '../../utils/waveUtils';
+import { PhaserFxPool, isPointInSceneViewport } from '../utils/fxObjectPool';
 
 const MAX_ACTIVE_FLOATING_TEXTS = 24;
 
@@ -23,12 +25,15 @@ export class WorldEffectsRenderer {
   private clouds: CloudItem[] = [];
   private activeFloatingTexts: Phaser.GameObjects.Text[] = [];
   private lastHealFxTime = 0;
+  private fxPool: PhaserFxPool;
+  private activeExplosionCount = 0;
 
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
     this.isSceneAlive = isSceneAlive;
     this.invasionGraphics = this.scene.add.graphics();
     this.invasionGraphics.setDepth(DEPTH.INVASION_OVERLAY);
+    this.fxPool = new PhaserFxPool(scene, isSceneAlive);
   }
 
   public createClouds(): void {
@@ -77,81 +82,99 @@ export class WorldEffectsRenderer {
   }
 
   public playExplosionAt(x: number, y: number): void {
-    if (!this.isSceneAlive()) return;
-    if (this.scene.textures.exists('explosionFx') && this.scene.anims.exists('explosion_anim')) {
-      const exp = this.scene.add.sprite(x, y, 'explosionFx');
-      exp.setDepth(DEPTH.EXPLOSION);
-      exp.setDisplaySize(140, 140);
-      exp.play('explosion_anim');
-      exp.once('animationcomplete', () => exp.destroy());
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return;
+    if (this.activeExplosionCount >= PERFORMANCE_CONFIG.maxConcurrentExplosions) return;
+
+    const exp = this.fxPool.playSpriteAnim({
+      texKey: 'explosionFx',
+      animKey: 'explosion_anim',
+      x,
+      y,
+      width: 140,
+      depth: DEPTH.EXPLOSION,
+      skipIfOffscreen: false,
+      onComplete: () => {
+        this.activeExplosionCount = Math.max(0, this.activeExplosionCount - 1);
+      },
+    });
+    if (exp) {
+      this.activeExplosionCount += 1;
     }
-    if (this.scene.textures.exists('shockwaveRingFx') && this.scene.anims.exists('shockwave_ring_anim')) {
-      const ring = this.scene.add.sprite(x, y + 6, 'shockwaveRingFx');
-      ring.setDepth(DEPTH.EXPLOSION - 1);
-      ring.setDisplaySize(128, 128);
-      ring.setTint(0xfbbf24);
-      ring.setAlpha(0.75);
-      ring.play('shockwave_ring_anim');
-      ring.once('animationcomplete', () => ring.destroy());
-    }
+
+    this.fxPool.playSpriteAnim({
+      texKey: 'shockwaveRingFx',
+      animKey: 'shockwave_ring_anim',
+      x,
+      y: y + 6,
+      width: 128,
+      depth: DEPTH.EXPLOSION - 1,
+      tint: 0xfbbf24,
+      alpha: 0.75,
+      skipIfOffscreen: false,
+    });
   }
 
   public playWaterSplashAt(x: number, y: number, size = 110): void {
     if (!this.isSceneAlive()) return;
-    if (this.scene.textures.exists('waterSplashFx') && this.scene.anims.exists('water_splash_anim')) {
-      const splash = this.scene.add.sprite(x, y, 'waterSplashFx');
-      splash.setDepth(DEPTH.EXPLOSION);
-      splash.setDisplaySize(size, size);
-      splash.play('water_splash_anim');
-      splash.once('animationcomplete', () => splash.destroy());
-    }
+    this.fxPool.playSpriteAnim({
+      texKey: 'waterSplashFx',
+      animKey: 'water_splash_anim',
+      x,
+      y,
+      width: size,
+      depth: DEPTH.EXPLOSION,
+    });
   }
 
   public playVoidSlashAt(x: number, y: number, tint = 0xc084fc, size = 128): void {
     if (!this.isSceneAlive()) return;
-    if (this.scene.textures.exists('voidSlashFx') && this.scene.anims.exists('void_slash_anim')) {
-      const fx = this.scene.add.sprite(x, y, 'voidSlashFx');
-      fx.setDepth(DEPTH.EXPLOSION + 1);
-      fx.setDisplaySize(size, size);
-      fx.setTint(tint);
-      fx.play('void_slash_anim');
-      fx.once('animationcomplete', () => fx.destroy());
-    }
+    this.fxPool.playSpriteAnim({
+      texKey: 'voidSlashFx',
+      animKey: 'void_slash_anim',
+      x,
+      y,
+      width: size,
+      depth: DEPTH.EXPLOSION + 1,
+      tint,
+    });
   }
 
   public playLightningAt(x: number, y: number, tint = 0x38bdf8): void {
-    if (!this.isSceneAlive()) return;
-    if (this.scene.textures.exists('lightningStrikeFx') && this.scene.anims.exists('lightning_strike_anim')) {
-      const bolt = this.scene.add.sprite(x, y - 90, 'lightningStrikeFx');
-      bolt.setDepth(DEPTH.EXPLOSION + 2);
-      bolt.setDisplaySize(136, 250);
-      bolt.setTint(tint);
-      bolt.play('lightning_strike_anim');
-      bolt.once('animationcomplete', () => bolt.destroy());
-    }
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return;
+    this.fxPool.playSpriteAnim({
+      texKey: 'lightningStrikeFx',
+      animKey: 'lightning_strike_anim',
+      x,
+      y: y - 90,
+      width: 136,
+      height: 250,
+      depth: DEPTH.EXPLOSION + 2,
+      tint,
+      skipIfOffscreen: false,
+    });
   }
 
   public playHealEffectAt(x: number, y: number, tint = 0x86efac, size = 148): void {
-    if (!this.isSceneAlive()) return;
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return;
     const now = this.scene.time?.now ?? 0;
     if (now - this.lastHealFxTime < 450) return;
     this.lastHealFxTime = now;
 
-    if (this.scene.textures.exists('healFx') && this.scene.anims.exists('heal_anim')) {
-      const fx = this.scene.add.sprite(x, y - 10, 'healFx');
-      fx.setDepth(DEPTH.EXPLOSION + 1);
-      fx.setDisplaySize(size, size);
-      fx.setTint(tint);
-      fx.setBlendMode(Phaser.BlendModes.ADD);
-      fx.play('heal_anim');
-      fx.once('animationcomplete', () => {
-        if (fx.scene) fx.destroy();
-      });
-    }
+    this.fxPool.playSpriteAnim({
+      texKey: 'healFx',
+      animKey: 'heal_anim',
+      x,
+      y: y - 10,
+      width: size,
+      depth: DEPTH.EXPLOSION + 1,
+      tint,
+      blendMode: Phaser.BlendModes.ADD,
+      skipIfOffscreen: false,
+    });
   }
 
   public shakeObject(target: Phaser.GameObjects.Container): void {
-    if (!target || !target.scene || !this.isSceneAlive()) return;
+    if (!target || !target.scene || !target.visible || !this.isSceneAlive()) return;
     const wasTweening = this.scene.tweens.isTweening(target);
     const existingBaseX = wasTweening
       ? (target.getData('shakeBaseX') as number | undefined)
@@ -178,7 +201,7 @@ export class WorldEffectsRenderer {
   }
 
   public showFloatingText(x: number, y: number, text: string, color: string): void {
-    if (!this.isSceneAlive()) return;
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return;
 
     while (this.activeFloatingTexts.length >= MAX_ACTIVE_FLOATING_TEXTS) {
       const oldest = this.activeFloatingTexts.shift();
@@ -240,6 +263,8 @@ export class WorldEffectsRenderer {
 
   public destroy(): void {
     this.lastInvasionSignature = '';
+    this.activeExplosionCount = 0;
+    this.fxPool.destroy();
     for (const ft of this.activeFloatingTexts) {
       if (ft.scene) {
         ft.destroy();

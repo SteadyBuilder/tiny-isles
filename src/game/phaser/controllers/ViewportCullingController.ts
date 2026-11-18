@@ -17,11 +17,13 @@ export interface IViewportCullingContext {
   getConstructedVisuals: () => Map<string, ConstructedVisualRef>;
   getAltarCardContainers: () => Phaser.GameObjects.Container[];
   getMonsterVisuals?: () => ReadonlyMap<string, MonsterVisual>;
+  getCampVisuals?: () => ReadonlyMap<number, { container: Phaser.GameObjects.Container }>;
+  getCampStructures?: () => ReadonlyMap<string, { container: Phaser.GameObjects.Container }>;
 }
 
 /**
  * 카메라 뷰포트(worldView) 바깥의 지형 청크 온디맨드 스트리밍(LRU) 및
- * 자원 엔티티, 건물, 개척 제단 카드, 마물 대군(100+마리)의 가시성·애니메이션을 주기적으로 컬링하는 컨트롤러
+ * 자원 엔티티, 건물, 개척 제단 카드, 마물 부락/방어벽, 마물 대군(100+마리)의 가시성·애니메이션을 주기적으로 컬링하는 컨트롤러
  */
 export class ViewportCullingController {
   private ctx: IViewportCullingContext;
@@ -42,6 +44,20 @@ export class ViewportCullingController {
     }
     this.lastCamX = Number.NaN;
     this.cullToCamera(true);
+  }
+
+  public cullMonstersNow(): void {
+    const cam = this.ctx.scene.cameras?.main;
+    if (!cam || !cam.worldView || cam.worldView.width <= 0) return;
+    const wv = cam.worldView;
+    const viewport = expandViewportRect(
+      wv.x,
+      wv.y,
+      wv.width,
+      wv.height,
+      PERFORMANCE_CONFIG.cullingMarginPx
+    );
+    this.cullMonsters(viewport);
   }
 
   public update(time: number): void {
@@ -90,6 +106,8 @@ export class ViewportCullingController {
     this.hasPendingTerrainBakes = this.ctx.syncTerrainChunks(viewport, maxNewBakes);
     this.cullResourceEntities(viewport);
     this.cullMonsters(viewport);
+    this.cullContainerMap(this.ctx.getCampVisuals?.(), viewport, 240);
+    this.cullContainerMap(this.ctx.getCampStructures?.(), viewport, 180);
     this.cullContainers(this.ctx.getTerritoryBuildingVisuals(), viewport, 260);
     this.cullConstructedBuildings(viewport);
     this.cullContainers(this.ctx.getAltarCardContainers(), viewport, 120);
@@ -144,6 +162,22 @@ export class ViewportCullingController {
             if (ev.scene) ev.setVisible(inView);
           }
         }
+      }
+    }
+  }
+
+  private cullContainerMap(
+    map: ReadonlyMap<unknown, { container: Phaser.GameObjects.Container }> | undefined,
+    viewport: ViewportRect,
+    paddingPx: number
+  ): void {
+    if (!map || map.size === 0) return;
+    for (const item of map.values()) {
+      const c = item.container;
+      if (!c.scene) continue;
+      const inView = isPointInViewport(c.x, c.y, viewport, paddingPx);
+      if (c.visible !== inView) {
+        c.setVisible(inView);
       }
     }
   }

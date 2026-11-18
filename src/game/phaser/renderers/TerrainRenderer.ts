@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
-import { PERFORMANCE_CONFIG } from '../../../data/performanceConfig';
+import {
+  PERFORMANCE_CONFIG,
+  resolveTerrainCacheProfile,
+} from '../../../data/performanceConfig';
 import { Inventory, Island } from '../../../types/game';
 import { ViewportRect } from '../../utils/viewportCullingUtils';
 import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
@@ -47,7 +50,8 @@ export class TerrainRenderer {
    */
   public syncChunksToViewport(viewport: ViewportRect, maxNewBakes: number): boolean {
     const grid = this.gridInfo;
-    const margin = PERFORMANCE_CONFIG.terrainChunkPrefetchMarginPx;
+    const cacheProfile = resolveTerrainCacheProfile();
+    const margin = cacheProfile.terrainChunkPrefetchMarginPx;
     const minCx = Math.max(0, Math.floor((viewport.left - margin - grid.worldOriginX) / grid.chunkPx));
     const maxCx = Math.min(
       grid.numChunksX - 1,
@@ -96,7 +100,7 @@ export class TerrainRenderer {
       }
     }
 
-    const maxCached = PERFORMANCE_CONFIG.maxCachedTerrainChunks;
+    const maxCached = cacheProfile.maxCachedTerrainChunks;
     if (this.chunkCache.size > maxCached) {
       for (const [key, chunk] of this.chunkCache.entries()) {
         if (this.chunkCache.size <= maxCached) break;

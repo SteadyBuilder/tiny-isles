@@ -6,7 +6,8 @@ import { MonsterVisual } from '../../systems/MonsterVisualManager';
 import {
   CameraWorldBounds,
   MonsterIndicatorPlacement,
-  computeMonsterIndicatorPlacement,
+  MonsterIndicatorTarget,
+  computeMonsterIndicatorPlacementInto,
 } from '../../utils/monsterIndicatorUtils';
 
 export interface HuntingIndicatorTargets {
@@ -24,6 +25,32 @@ export class MonsterTargetIndicatorRenderer {
   private scene: Phaser.Scene;
   private isSceneAlive: () => boolean;
   private graphics: Phaser.GameObjects.Graphics;
+  private viewBounds: CameraWorldBounds = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    right: 0,
+    bottom: 0,
+    centerX: 0,
+    centerY: 0,
+  };
+  private targetScratch: MonsterIndicatorTarget = {
+    id: '',
+    x: 0,
+    y: 0,
+    isBoss: false,
+    kind: undefined,
+  };
+  private placementScratch: MonsterIndicatorPlacement = {
+    mode: 'overhead',
+    x: 0,
+    y: 0,
+    angle: 0,
+    worldSize: 0,
+    worldStrokeWidth: 0,
+    style: MONSTER_INDICATOR_CONFIG.normalStyle,
+  };
 
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
@@ -44,52 +71,71 @@ export class MonsterTargetIndicatorRenderer {
     if (!cam) return;
 
     const wv = cam.worldView;
-    const view: CameraWorldBounds = {
-      x: wv.x,
-      y: wv.y,
-      width: wv.width,
-      height: wv.height,
-      right: wv.right,
-      bottom: wv.bottom,
-      centerX: wv.centerX,
-      centerY: wv.centerY,
-    };
+    const view = this.viewBounds;
+    view.x = wv.x;
+    view.y = wv.y;
+    view.width = wv.width;
+    view.height = wv.height;
+    view.right = wv.right;
+    view.bottom = wv.bottom;
+    view.centerX = wv.centerX;
+    view.centerY = wv.centerY;
+
+    const target = this.targetScratch;
 
     if (huntingTargets?.isHuntingMode) {
       for (const camp of huntingTargets.campTargets) {
-        const placement = computeMonsterIndicatorPlacement(
-          { id: `camp_${camp.id}`, x: camp.x, y: camp.y, isBoss: false, kind: 'camp' },
+        target.id = '';
+        target.x = camp.x;
+        target.y = camp.y;
+        target.isBoss = false;
+        target.kind = 'camp';
+        computeMonsterIndicatorPlacementInto(
+          target,
           view,
           cam.zoom,
           timeMs,
-          MONSTER_INDICATOR_CONFIG
+          MONSTER_INDICATOR_CONFIG,
+          this.placementScratch
         );
-        this.drawArrow(placement);
+        this.drawArrow(this.placementScratch);
       }
 
       if (huntingTargets.dungeonPortal?.active) {
         const portal = huntingTargets.dungeonPortal;
-        const placement = computeMonsterIndicatorPlacement(
-          { id: 'dungeon_portal', x: portal.x, y: portal.y, isBoss: false, kind: 'dungeon' },
+        target.id = 'dungeon_portal';
+        target.x = portal.x;
+        target.y = portal.y;
+        target.isBoss = false;
+        target.kind = 'dungeon';
+        computeMonsterIndicatorPlacementInto(
+          target,
           view,
           cam.zoom,
           timeMs,
-          MONSTER_INDICATOR_CONFIG
+          MONSTER_INDICATOR_CONFIG,
+          this.placementScratch
         );
-        this.drawArrow(placement);
+        this.drawArrow(this.placementScratch);
       }
 
       for (const mv of monsterVisuals.values()) {
         const m = mv.monster;
         if (m.hp <= 0 || !m.isBoss) continue;
-        const placement = computeMonsterIndicatorPlacement(
-          { id: m.id, x: m.x, y: m.y, isBoss: true, kind: 'dungeon' },
+        target.id = m.id;
+        target.x = m.x;
+        target.y = m.y;
+        target.isBoss = true;
+        target.kind = 'dungeon';
+        computeMonsterIndicatorPlacementInto(
+          target,
           view,
           cam.zoom,
           timeMs,
-          MONSTER_INDICATOR_CONFIG
+          MONSTER_INDICATOR_CONFIG,
+          this.placementScratch
         );
-        this.drawArrow(placement);
+        this.drawArrow(this.placementScratch);
       }
       return;
     }
@@ -100,15 +146,21 @@ export class MonsterTargetIndicatorRenderer {
       const m = mv.monster;
       if (m.hp <= 0) continue;
 
-      const placement = computeMonsterIndicatorPlacement(
-        { id: m.id, x: m.x, y: m.y, isBoss: m.isBoss },
+      target.id = m.id;
+      target.x = m.x;
+      target.y = m.y;
+      target.isBoss = m.isBoss;
+      target.kind = undefined;
+      computeMonsterIndicatorPlacementInto(
+        target,
         view,
         cam.zoom,
         timeMs,
-        MONSTER_INDICATOR_CONFIG
+        MONSTER_INDICATOR_CONFIG,
+        this.placementScratch
       );
 
-      this.drawArrow(placement);
+      this.drawArrow(this.placementScratch);
     }
   }
 
@@ -116,30 +168,26 @@ export class MonsterTargetIndicatorRenderer {
     const { x, y, angle, worldSize: s, worldStrokeWidth, style } = placement;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
+    const tailX = -s * 0.65;
+    const tailY = s * 0.72;
+    const notchX = -s * 0.3;
 
-    // 기준 화살표 모양 (0 rad = 오른쪽 방향)
-    const localPoints: Array<{ lx: number; ly: number }> = [
-      { lx: s, ly: 0 },
-      { lx: -s * 0.65, ly: -s * 0.72 },
-      { lx: -s * 0.3, ly: 0 },
-      { lx: -s * 0.65, ly: s * 0.72 },
-    ];
-
-    const worldPoints = localPoints.map((pt) => ({
-      x: x + pt.lx * cos - pt.ly * sin,
-      y: y + pt.lx * sin + pt.ly * cos,
-    }));
+    const p0x = x + s * cos;
+    const p0y = y + s * sin;
+    const p1x = x + tailX * cos + tailY * sin;
+    const p1y = y + tailX * sin - tailY * cos;
+    const p2x = x + notchX * cos;
+    const p2y = y + notchX * sin;
+    const p3x = x + tailX * cos - tailY * sin;
+    const p3y = y + tailX * sin + tailY * cos;
 
     this.graphics.fillStyle(style.fillColor, 0.94);
     this.graphics.lineStyle(worldStrokeWidth, style.strokeColor, 0.98);
     this.graphics.beginPath();
-    worldPoints.forEach((pt, idx) => {
-      if (idx === 0) {
-        this.graphics.moveTo(pt.x, pt.y);
-      } else {
-        this.graphics.lineTo(pt.x, pt.y);
-      }
-    });
+    this.graphics.moveTo(p0x, p0y);
+    this.graphics.lineTo(p1x, p1y);
+    this.graphics.lineTo(p2x, p2y);
+    this.graphics.lineTo(p3x, p3y);
     this.graphics.closePath();
     this.graphics.fillPath();
     this.graphics.strokePath();

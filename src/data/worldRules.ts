@@ -33,6 +33,18 @@ export const MONSTER_SYNC_CONFIG = {
   remoteLerpSpeedPerSec: 14,
   /** 협동 처치 시 주변 팀원과 보상/경험치 공유 반경 (px) */
   coopKillShareRadiusPx: 550,
+  /** 미완성 분할 전체 동기화 배치를 폐기하는 만료 시간 (ms) */
+  fullSyncBatchTtlMs: 8000,
+} as const;
+
+/**
+ * 실시간 플레이어 이동 동기화(변경 감지 + 정지 시 저빈도 하트비트) 설정
+ */
+export const PLAYER_SYNC_CONFIG = {
+  /** 상태 변경 시 최소 위치 브로드캐스트 간격 (ms) */
+  moveBroadcastIntervalMs: 60,
+  /** 정지/동일 상태 유지 시 keep-alive 하트비트 전송 주기 (ms) */
+  idleHeartbeatMs: 1500,
 } as const;
 
 /**

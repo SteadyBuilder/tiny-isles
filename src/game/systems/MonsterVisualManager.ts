@@ -1,3 +1,4 @@
+import type Phaser from 'phaser';
 import { MONSTER_HIT_FEEDBACK_CONFIG } from '../../data/combatFeedbackConfig';
 import { ELITE_AFFIXES } from '../../data/elites';
 import { Monster } from '../../types/game';
@@ -7,7 +8,7 @@ export interface MonsterVisual {
   monster: Monster;
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
-  hpBar: Phaser.GameObjects.Graphics;
+  hpBar: Phaser.GameObjects.Graphics | null;
   baseTint: number | null;
   hpTrailRatio: number;
   hpFlashUntil: number;
@@ -20,6 +21,56 @@ export interface MonsterVisual {
  * 마물(좀비, 스켈레톤, 고블린, 창병, 흑마법사, 보스) 스프라이트 비주얼 생성 및 경량 HP 바 매니저
  */
 export class MonsterVisualManager {
+  private static activeTrailVisuals = new Set<MonsterVisual>();
+
+  public static clearTrackedVisuals(): void {
+    this.activeTrailVisuals.clear();
+  }
+
+  public static getTrackedTrailCount(): number {
+    return this.activeTrailVisuals.size;
+  }
+
+  public static disposeVisual(mv: MonsterVisual): void {
+    this.activeTrailVisuals.delete(mv);
+    const containerObj = mv.container as {
+      scene?: unknown;
+      destroyed?: boolean;
+      destroy: () => void;
+    };
+    if (!containerObj || containerObj.destroyed) return;
+    if (!('scene' in containerObj) || containerObj.scene) {
+      containerObj.destroy();
+    }
+  }
+
+  private static ensureEliteBadgeTexture(
+    scene: Phaser.Scene,
+    affixId: string,
+    badgeLabel: string
+  ): string | null {
+    const texKey = `elite_badge_${affixId}`;
+    if (scene.textures.exists(texKey)) return texKey;
+    if (typeof scene.textures.createCanvas !== 'function') return null;
+
+    const canvasTex = scene.textures.createCanvas(texKey, 240, 48);
+    if (!canvasTex) return null;
+    const ctx = canvasTex.getContext();
+    ctx.clearRect(0, 0, 240, 48);
+    ctx.font = 'bold 22px Pretendard, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#000000';
+    ctx.fillStyle = '#fde047';
+    const text = `★ ${badgeLabel}`;
+    ctx.strokeText(text, 120, 24);
+    ctx.fillText(text, 120, 24);
+    canvasTex.refresh();
+    return texKey;
+  }
+
   public static create(scene: Phaser.Scene, monster: Monster): MonsterVisual {
     const container = scene.add.container(monster.x, monster.y);
     container.setDepth(ySortDepth(monster.y, 28));
@@ -111,21 +162,25 @@ export class MonsterVisualManager {
     }
     container.add(sprite);
 
-    const hpBar = scene.add.graphics();
-    container.add(hpBar);
-
     if (monster.isElite && eliteDef) {
-      const badgeText = scene.add
-        .text(0, -48, `★ ${eliteDef.badge}`, {
-          fontFamily: 'Pretendard, sans-serif',
-          fontSize: '11px',
-          fontStyle: 'bold',
-          color: '#fde047',
-          stroke: '#000000',
-          strokeThickness: 3,
-        })
-        .setOrigin(0.5);
-      container.add(badgeText);
+      const badgeTexKey = this.ensureEliteBadgeTexture(scene, eliteDef.id, eliteDef.badge);
+      if (badgeTexKey) {
+        const badgeImg = scene.add.image(0, -48, badgeTexKey);
+        badgeImg.setScale(0.5);
+        container.add(badgeImg);
+      } else {
+        const badgeText = scene.add
+          .text(0, -48, `★ ${eliteDef.badge}`, {
+            fontFamily: 'Pretendard, sans-serif',
+            fontSize: '11px',
+            fontStyle: 'bold',
+            color: '#fde047',
+            stroke: '#000000',
+            strokeThickness: 3,
+          })
+          .setOrigin(0.5);
+        container.add(badgeText);
+      }
     }
 
     const initialRatio = Math.max(0, Math.min(1, monster.hp / Math.max(1, monster.maxHp)));
@@ -133,7 +188,7 @@ export class MonsterVisualManager {
       monster,
       container,
       sprite,
-      hpBar,
+      hpBar: null,
       baseTint,
       hpTrailRatio: initialRatio,
       hpFlashUntil: 0,
@@ -162,11 +217,24 @@ export class MonsterVisualManager {
       m.isElite && (m.shieldUntil ?? 0) > now && (m.shieldHp ?? 0) > 0
     );
 
-    // 100마리 대군/부락 환경에서 아직 피격되지 않은 일반 몬스터는 HP바 드로우콜 생략 (보스/엘리트는 항상 표시)
+    if (isFlashing || hasTrail || hasActiveShield) {
+      this.activeTrailVisuals.add(mv);
+    }
+
+    // 100마리 대군/부락 환경에서 아직 피격되지 않은 일반 몬스터는 HP바 Graphics 생성·드로우콜 생략 (보스/엘리트는 항상 표시)
     if (!m.isBoss && !m.isElite && !hasActiveShield && ratio >= 0.999 && !hasTrail && !isFlashing) {
-      mv.hpBar.clear();
-      mv.hpBar.setVisible(false);
+      if (mv.hpBar) {
+        mv.hpBar.clear();
+        mv.hpBar.setVisible(false);
+      }
       return;
+    }
+
+    if (!mv.hpBar) {
+      const containerScene = (mv.container as { scene?: Phaser.Scene }).scene;
+      if (!containerScene?.add) return;
+      mv.hpBar = containerScene.add.graphics();
+      mv.container.add(mv.hpBar);
     }
 
     mv.hpBar.setVisible(true);
@@ -215,20 +283,32 @@ export class MonsterVisualManager {
     }
   }
 
-  public static updateHpTrails(monsters: Map<string, MonsterVisual>, deltaMs: number): void {
-    if (monsters.size === 0) return;
+  public static updateHpTrails(_monsters: Map<string, MonsterVisual>, deltaMs: number): void {
+    if (this.activeTrailVisuals.size === 0) return;
     const now = performance.now();
     const drainStep = (MONSTER_HIT_FEEDBACK_CONFIG.hpTrailDrainPerSec * deltaMs) / 1000;
 
-    for (const mv of monsters.values()) {
+    for (const mv of Array.from(this.activeTrailVisuals)) {
       const m = mv.monster;
+      const containerObj = mv.container as { scene?: unknown; destroyed?: boolean };
+      if (
+        m.hp <= 0 ||
+        !containerObj ||
+        containerObj.destroyed ||
+        ('scene' in containerObj && !containerObj.scene)
+      ) {
+        this.activeTrailVisuals.delete(mv);
+        continue;
+      }
+
       const ratio = Math.max(0, Math.min(1, m.hp / Math.max(1, m.maxHp)));
       const wasFlashing = mv.hpFlashUntil > 0 && now >= mv.hpFlashUntil;
       const shieldExpired = Boolean(m.shieldUntil && m.shieldUntil > 0 && now >= m.shieldUntil);
       const needsTrailUpdate = mv.hpTrailRatio > ratio + 0.002;
       const isFlashing = now < mv.hpFlashUntil;
-
-      if (!needsTrailUpdate && !isFlashing && !wasFlashing && !shieldExpired) continue;
+      const hasActiveShield = Boolean(
+        m.isElite && (m.shieldUntil ?? 0) > now && (m.shieldHp ?? 0) > 0
+      );
 
       if (needsTrailUpdate) {
         mv.hpTrailRatio = Math.max(ratio, mv.hpTrailRatio - drainStep);
@@ -241,7 +321,14 @@ export class MonsterVisualManager {
         m.shieldHp = 0;
         m.shieldMaxHp = 0;
       }
-      this.updateHpBar(mv, false);
+      if (needsTrailUpdate || wasFlashing || shieldExpired) {
+        this.updateHpBar(mv, false);
+      }
+
+      const stillNeedsTrail = mv.hpTrailRatio > ratio + 0.002;
+      if (!stillNeedsTrail && !isFlashing && !hasActiveShield) {
+        this.activeTrailVisuals.delete(mv);
+      }
     }
   }
 }

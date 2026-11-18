@@ -163,26 +163,33 @@ export class MonsterCombatAI {
     return this.spatialGrid;
   }
 
+  public destroy(): void {
+    this.blockerCache.clear();
+    this.aggroTargets.clear();
+    this.bossSkillSystem.destroy();
+  }
+
   public updateMonsters(time: number, delta: number): void {
     const dt = delta / 1000;
     const monstersMap = this.ctx.getMonsters();
     if (monstersMap.size === 0) return;
 
-    this.spatialGrid.rebuild(monstersMap);
+    this.spatialGrid.rebuild(monstersMap, time);
 
     const islands = this.ctx.getIslands();
     const constructedBuildings = this.ctx.getConstructedBuildings();
     const aliveWalls = constructedBuildings.filter(
       (cb) => cb.category === 'wall' && cb.hp > 0
     );
+    const activePlayers = this.resolveActivePlayers();
     const nowPerf = performance.now();
 
     for (const mv of monstersMap.values()) {
       const m = mv.monster;
       if (m.isBoss) {
-        this.bossSkillSystem.tryCastSkill(mv, time);
+        this.bossSkillSystem.tryCastSkill(mv, time, activePlayers);
       } else if (m.isElite && m.eliteAffix === 'fortified') {
-        this.tryActivateEliteShield(mv, time);
+        this.tryActivateEliteShield(mv, time, activePlayers);
       }
       const sep = this.spatialGrid.computeSeparation(m.id, m.x, m.y);
 
@@ -201,7 +208,8 @@ export class MonsterCombatAI {
           aliveWalls,
           sep.pushX,
           sep.pushY,
-          activeAggroPlayerId
+          activeAggroPlayerId,
+          activePlayers
         )
       ) {
         continue;
@@ -216,14 +224,25 @@ export class MonsterCombatAI {
           aliveWalls,
           sep.pushX,
           sep.pushY,
-          activeAggroPlayerId
+          activeAggroPlayerId,
+          activePlayers
         )
       ) {
         continue;
       }
 
       // 0-B순위: 플레이어에게 피격당했거나 근접한 웨이브/던전 몬스터의 플레이어 추격·공격 처리
-      if (this.tryUpdatePlayerAggro(mv, time, dt, aliveWalls, sep.pushX, sep.pushY)) {
+      if (
+        this.tryUpdatePlayerAggro(
+          mv,
+          time,
+          dt,
+          aliveWalls,
+          sep.pushX,
+          sep.pushY,
+          activePlayers
+        )
+      ) {
         continue;
       }
 
@@ -404,12 +423,13 @@ export class MonsterCombatAI {
     const mv = monsters.get(params.monsterId);
     if (!mv) return false;
 
+    const localPlayerId = this.ctx.getLocalPlayerId();
     const isLocalPlayerAttack = Boolean(
-      !params.fromRemote && params.attackerId && params.attackerId === this.ctx.getLocalPlayerId()
+      !params.fromRemote && params.attackerId && params.attackerId === localPlayerId
     );
     const playerPos = this.ctx.getLocalPlayerPosition();
 
-    if (params.attackerId) {
+    if (params.isHost && params.attackerId) {
       this.aggroTargets.set(params.monsterId, {
         playerId: params.attackerId,
         expiresAt: performance.now() + PLAYER_COMBAT_CONFIG.monsterAggroDurationMs,
@@ -419,9 +439,10 @@ export class MonsterCombatAI {
       }
     }
 
-    const attackerPos = params.attackerId
-      ? this.resolveActivePlayers().find((p) => p.id === params.attackerId) ?? playerPos
-      : playerPos;
+    const attackerPos =
+      params.attackerId && params.attackerId !== localPlayerId
+        ? this.resolveActivePlayers().find((p) => p.id === params.attackerId) ?? playerPos
+        : playerPos;
 
     const triggerHitFeedback = (includeSpriteFlash: boolean) => {
       this.ctx.onMonsterHitImpact?.(
@@ -485,7 +506,7 @@ export class MonsterCombatAI {
         monsterId: params.monsterId,
         damage: params.damage,
         attackerName: params.sourceName,
-        attackerId: params.attackerId ?? this.ctx.getLocalPlayerId(),
+        attackerId: params.attackerId ?? localPlayerId,
         isCrit: params.hitMeta?.isCrit,
         isSkill: params.hitMeta?.isSkill,
       });
@@ -517,10 +538,13 @@ export class MonsterCombatAI {
     triggerHitFeedback(false);
     const deadM = mv.monster;
     this.ctx.playExplosionAt(deadM.x, deadM.y);
-    mv.container.destroy();
+    MonsterVisualManager.disposeVisual(mv);
     monsters.delete(params.monsterId);
     this.blockerCache.delete(params.monsterId);
     this.aggroTargets.delete(params.monsterId);
+    if (deadM.isBoss) {
+      this.bossSkillSystem.deleteState(params.monsterId);
+    }
 
     // 정예 '비전 폭발' 능력: 사망 시 1.1초 예고 후 110px 반경 폭발 피해
     if (deadM.eliteAffix === 'arcane_nova' && this.ctx.projectileSystem) {
@@ -566,7 +590,6 @@ export class MonsterCombatAI {
     const rewardStone = Math.round(rewardTier.stone * params.bonusMultiplier);
     const rewardGold = Math.round(rewardTier.gold * params.bonusMultiplier);
     const expReward = deadM.expReward ?? (deadM.isBoss ? 120 : 16);
-    const localPlayerId = this.ctx.getLocalPlayerId();
     const isKillParticipant =
       !params.attackerId ||
       params.attackerId === localPlayerId ||
@@ -619,11 +642,16 @@ export class MonsterCombatAI {
         this.aggroTargets.delete(id);
       }
     }
+    this.bossSkillSystem.pruneStaleState(validIds);
     this.rangedMageAI.pruneStaleState(validIds);
     this.fieldMonsterAI.pruneStaleState(validIds);
   }
 
-  private tryActivateEliteShield(mv: MonsterVisual, time: number): void {
+  private tryActivateEliteShield(
+    mv: MonsterVisual,
+    time: number,
+    activePlayers: ReadonlyArray<ActivePlayerTarget>
+  ): void {
     const m = mv.monster;
     if (m.hp <= 0 || !m.isElite || m.eliteAffix !== 'fortified') return;
 
@@ -633,7 +661,7 @@ export class MonsterCombatAI {
     const lastShield = mv.lastShieldTime ?? -ELITE_SHIELD_BUFF_CONFIG.cooldownMs;
     if (time - lastShield < ELITE_SHIELD_BUFF_CONFIG.cooldownMs) return;
 
-    const nearbyPlayer = findTargetPlayerForMonster(m.x, m.y, this.resolveActivePlayers(), 420);
+    const nearbyPlayer = findTargetPlayerForMonster(m.x, m.y, activePlayers, 420);
     if (!nearbyPlayer && m.hp >= m.maxHp) return;
 
     mv.lastShieldTime = time;
@@ -660,11 +688,11 @@ export class MonsterCombatAI {
     dt: number,
     aliveWalls: ConstructedBuilding[],
     sepX: number,
-    sepY: number
+    sepY: number,
+    activePlayers: ReadonlyArray<ActivePlayerTarget>
   ): boolean {
     const m = mv.monster;
     const now = performance.now();
-    const activePlayers = this.resolveActivePlayers();
     let aggro = this.aggroTargets.get(m.id);
     if (aggro && now > aggro.expiresAt) {
       this.aggroTargets.delete(m.id);

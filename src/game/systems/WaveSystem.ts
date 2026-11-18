@@ -21,6 +21,7 @@ import { sound } from '../../lib/sound';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
 import { DungeonInvasionSpawner } from './DungeonInvasionSpawner';
+import { MonsterSpatialGrid } from '../utils/spatialGrid';
 import { MonsterCombatAI, MonsterKilledMeta } from './MonsterCombatAI';
 import { MonsterSyncCoordinator } from './MonsterSyncCoordinator';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
@@ -209,11 +210,13 @@ export class WaveSystem {
   public destroy(): void {
     this.destroyed = true;
     GameEvents.off('territory-lost', this.onTerritoryLost);
+    this.combatAI.destroy();
     this.dungeonSpawner.clearTimersAndPortal();
     for (const mv of this.monsters.values()) {
-      mv.container.destroy();
+      MonsterVisualManager.disposeVisual(mv);
     }
     this.monsters.clear();
+    MonsterVisualManager.clearTrackedVisuals();
     this.syncCoordinator.resetAll();
   }
 
@@ -231,9 +234,10 @@ export class WaveSystem {
 
     if (prev || this.monsters.size > 0) {
       for (const mv of this.monsters.values()) {
-        mv.container.destroy();
+        MonsterVisualManager.disposeVisual(mv);
       }
       this.monsters.clear();
+      MonsterVisualManager.clearTrackedVisuals();
       this.combatAI.pruneStaleMonsterState(new Set());
     }
     this.monsterSyncAccumMs = 0;
@@ -262,6 +266,13 @@ export class WaveSystem {
     return this.monsters;
   }
 
+  public getSpatialGrid(frameStamp?: number): MonsterSpatialGrid {
+    const grid = this.combatAI.getSpatialGrid();
+    const stamp = frameStamp ?? this.ctx.scene?.time?.now ?? -1;
+    grid.ensureFresh(this.monsters, stamp);
+    return grid;
+  }
+
   public aggroCampMonsters(campTerritoryId: number, playerId: string): void {
     this.combatAI.aggroCampMonsters(campTerritoryId, playerId);
   }
@@ -272,6 +283,7 @@ export class WaveSystem {
 
   public setOnlineCount(count: number): void {
     const next = Math.max(1, count);
+    if (next === this.onlineCount) return;
     if (next > 1) {
       this.remoteSyncPeerSeen = true;
     } else if (this.onlineCount > 1 && next === 1) {
@@ -283,7 +295,9 @@ export class WaveSystem {
   }
 
   public setActiveGarrisonCount(count: number): void {
-    this.waveState.activeGarrisonCount = Math.max(0, count);
+    const next = Math.max(0, count);
+    if (next === this.waveState.activeGarrisonCount) return;
+    this.waveState.activeGarrisonCount = next;
     this.emitWaveState();
   }
 
@@ -666,7 +680,7 @@ export class WaveSystem {
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, payload.bossWaveCount);
     this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
     this.spawner.applyRemoteSync(chunkResult.monsters);
-    this.combatAI.pruneStaleMonsterState(new Set(this.monsters.keys()));
+    this.ctx.onMonstersChanged?.();
     this.emitWaveState();
   }
 
@@ -676,7 +690,7 @@ export class WaveSystem {
     this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, payload.bossWaveCount);
     this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
 
-    const { needsFullSync, killedCount } = this.syncCoordinator.applyDeltaSync(
+    const { needsFullSync, killedCount, spawnedCount } = this.syncCoordinator.applyDeltaSync(
       this.ctx.scene,
       this.monsters,
       payload,
@@ -687,8 +701,10 @@ export class WaveSystem {
       }
     );
 
-    if (killedCount > 0 || (payload.spawns?.length ?? 0) > 0) {
-      this.combatAI.pruneStaleMonsterState(new Set(this.monsters.keys()));
+    if (spawnedCount > 0) {
+      this.ctx.onMonstersChanged?.();
+    }
+    if (killedCount > 0 || spawnedCount > 0) {
       this.emitWaveState();
     }
     if (!this.hasCompletedInitialSync || needsFullSync) {

@@ -24,6 +24,7 @@ import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { resolveSafeSpawnPosition } from '../../utils/playerSpawnUtils';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
+import { ensureClassSpritesLoaded } from '../utils/classAssetLoader';
 import { PlayerDashController } from './PlayerDashController';
 import { PlayerPointerController } from './PlayerPointerController';
 
@@ -39,6 +40,7 @@ export interface IPlayerMovementContext {
   getWaterBodies: () => ReadonlyArray<WaterRect>;
   getIslands: () => Island[];
   getMonsterVisuals: () => Map<string, MonsterVisual>;
+  findNearestMonster?: (x: number, y: number, radiusPx: number) => MonsterVisual | null;
   findTappedEntityVisual: (wx: number, wy: number) => EntityVisual | null;
   isWithinEntityGatherRange: (px: number, py: number, visual: EntityVisual) => boolean;
   getEntityInteractionPoint: (visual: EntityVisual) => { x: number; y: number };
@@ -102,6 +104,7 @@ export class PlayerMovementController {
       getPlayerPosition: () => this.getPosition(),
       getIslands: ctx.getIslands,
       getMonsterVisuals: ctx.getMonsterVisuals,
+      findNearestMonster: ctx.findNearestMonster,
       findTappedEntityVisual: ctx.findTappedEntityVisual,
       isWithinEntityGatherRange: ctx.isWithinEntityGatherRange,
       getEntityInteractionPoint: ctx.getEntityInteractionPoint,
@@ -203,6 +206,20 @@ export class PlayerMovementController {
 
   public refreshProfileVisuals(): void {
     this.playerNameTag.setText(this.ctx.getPlayerName());
+    if (this.currentClassId !== 'pawn') {
+      const targetClassId = this.currentClassId;
+      ensureClassSpritesLoaded(
+        this.ctx.scene,
+        this.ctx.getPlayerColor(),
+        targetClassId,
+        () => {
+          if (this.ctx.isSceneAlive() && this.currentClassId === targetClassId) {
+            this.playAnimation(this.currentAction);
+          }
+        }
+      );
+      return;
+    }
     this.playAnimation(this.currentAction);
   }
 
@@ -214,7 +231,16 @@ export class PlayerMovementController {
     } else {
       this.playerSprite.setDisplaySize(128, 128);
     }
-    this.playAnimation(this.currentAction);
+    ensureClassSpritesLoaded(
+      this.ctx.scene,
+      this.ctx.getPlayerColor(),
+      classId,
+      () => {
+        if (this.ctx.isSceneAlive() && this.currentClassId === classId) {
+          this.playAnimation(this.currentAction);
+        }
+      }
+    );
   }
 
   public playAnimation(action: PlayerAction): void {
@@ -646,5 +672,6 @@ export class PlayerMovementController {
       unbind();
     }
     this.unbindInputs = [];
+    this.dashController.destroy();
   }
 }

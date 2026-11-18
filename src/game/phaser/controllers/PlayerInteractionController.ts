@@ -38,6 +38,7 @@ export interface IPlayerInteractionContext {
   spendInventory: (wood: number, stone: number, gold: number) => void;
   addHarvestedResource: (resKey: keyof Inventory, amount: number) => void;
   getMonsterVisuals: () => Map<string, MonsterVisual>;
+  queryMonstersInRadius?: (x: number, y: number, radiusPx: number) => MonsterVisual[];
   damageMonster: (
     monsterId: string,
     damage: number,
@@ -123,11 +124,14 @@ export class PlayerInteractionController {
       this.ctx.getEffectiveAttackCooldownMs?.() ?? classDef?.attackCooldownMs ?? 320;
 
     // 1. 마물 타격 (전직 클래스별 사거리·공속·치명타·흡혈·원거리·광역·관통 반영)
+    const searchRadius = Math.max(baseRange, PLAYER_COMBAT_CONFIG.meleeRangeBoss);
+    const candidates =
+      this.ctx.queryMonstersInRadius?.(px, py, searchRadius) ??
+      this.ctx.getMonsterVisuals().values();
     const targetsInRange: Array<{ mv: MonsterVisual; dist: number }> = [];
-    for (const mv of this.ctx.getMonsterVisuals().values()) {
-      const range = mv.monster.isBoss
-        ? Math.max(baseRange, PLAYER_COMBAT_CONFIG.meleeRangeBoss)
-        : baseRange;
+    for (const mv of candidates) {
+      if (mv.monster.hp <= 0) continue;
+      const range = mv.monster.isBoss ? searchRadius : baseRange;
       const d = Math.hypot(px - mv.monster.x, py - mv.monster.y);
       if (d <= range) {
         targetsInRange.push({ mv, dist: d });
@@ -166,7 +170,11 @@ export class PlayerInteractionController {
           isMagic: isMage,
           onArrive: () => {
             if (isMage) {
-              for (const mv of this.ctx.getMonsterVisuals().values()) {
+              const splashCandidates =
+                this.ctx.queryMonstersInRadius?.(hitX, hitY, 95) ??
+                this.ctx.getMonsterVisuals().values();
+              for (const mv of splashCandidates) {
+                if (mv.monster.hp <= 0) continue;
                 if (Math.hypot(mv.monster.x - hitX, mv.monster.y - hitY) <= 95) {
                   this.dealNormalAttackHit(
                     mv.monster.id,

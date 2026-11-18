@@ -15,6 +15,7 @@ import {
   LOADING_STAGE_WEIGHTS,
   mapAssetProgressToPercent,
 } from '../data/loadingConfig';
+import { isSameInventory } from './utils/inventoryUtils';
 
 interface PhaserGameProps {
   playerName: string;
@@ -63,6 +64,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
+  const lastSceneInventoryRef = useRef<Inventory | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingPercent, setLoadingPercent] = useState(0);
 
@@ -132,6 +134,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     };
 
     const handleInventoryUpdated = (newInv: Inventory) => {
+      lastSceneInventoryRef.current = { ...newInv };
       onUpdateInventoryRef.current(() => newInv);
     };
 
@@ -199,6 +202,15 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         playerColor,
         zoom,
       });
+      const prevPreBoot = config.callbacks?.preBoot;
+      config.callbacks = {
+        ...config.callbacks,
+        preBoot: (bootedGame) => {
+          bootedGame.registry.set('roomConfig', roomConfig);
+          bootedGame.registry.set('metaBonuses', metaBonuses);
+          prevPreBoot?.(bootedGame);
+        },
+      };
       game = new Phaser.Game(config);
       game.registry.set('roomConfig', roomConfig);
       game.registry.set('metaBonuses', metaBonuses);
@@ -232,6 +244,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         game = null;
       }
       gameRef.current = null;
+      lastSceneInventoryRef.current = null;
     };
   }, []);
 
@@ -244,6 +257,10 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   }, [zoom]);
 
   useEffect(() => {
+    if (lastSceneInventoryRef.current && isSameInventory(lastSceneInventoryRef.current, inventory)) {
+      return;
+    }
+    lastSceneInventoryRef.current = null;
     GameEvents.emit('set-inventory', inventory);
   }, [inventory]);
 

@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { PLAYER_CLASS_DEFINITIONS } from '../../../data/classes';
 import { PlayerClassId } from '../../../types/game';
 import { DEPTH } from '../../depthLayers';
+import { PhaserFxPool } from '../utils/fxObjectPool';
 
 const CLASS_FX_PALETTE: Record<
   PlayerClassId,
@@ -22,10 +23,12 @@ export class PlayerCelebrationEffects {
   private scene: Phaser.Scene;
   private isSceneAlive: () => boolean;
   private activeTimers = new Set<Phaser.Time.TimerEvent>();
+  private fxPool: PhaserFxPool;
 
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
     this.isSceneAlive = isSceneAlive;
+    this.fxPool = new PhaserFxPool(scene, isSceneAlive);
   }
 
   public playLevelUpEffect(x: number, y: number, level: number, delayMs = 0): void {
@@ -49,23 +52,23 @@ export class PlayerCelebrationEffects {
     const classDef = PLAYER_CLASS_DEFINITIONS[classId];
 
     // 1. 웅장한 하늘 빛기둥 + 중심 오라
-    const pillar = scene.add.graphics();
-    pillar.setPosition(x, y);
-    pillar.setDepth(DEPTH.EXPLOSION);
-    pillar.fillStyle(palette.primary, 0.34);
-    pillar.fillRect(-38, -320, 76, 330);
-    pillar.fillStyle(0xffffff, 0.45);
-    pillar.fillRect(-14, -320, 28, 330);
-    scene.tweens.add({
-      targets: pillar,
-      scaleX: 1.8,
-      alpha: 0,
-      duration: 850,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        if (pillar.scene) pillar.destroy();
-      },
-    });
+    const pillar = this.fxPool.acquireGraphics(x, y, DEPTH.EXPLOSION);
+    if (pillar) {
+      pillar.fillStyle(palette.primary, 0.34);
+      pillar.fillRect(-38, -320, 76, 330);
+      pillar.fillStyle(0xffffff, 0.45);
+      pillar.fillRect(-14, -320, 28, 330);
+      scene.tweens.add({
+        targets: pillar,
+        scaleX: 1.8,
+        alpha: 0,
+        duration: 850,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          this.fxPool.releaseGraphics(pillar);
+        },
+      });
+    }
 
     // 2. 다중 확장 충격파 링
     this.spawnExpandingRing(x, y, palette.primary, 130, 520, 5);
@@ -77,30 +80,37 @@ export class PlayerCelebrationEffects {
     this.activeTimers.add(ringTimer);
 
     // 3. 스프라이트 성광/폭발/빛기둥 애니메이션 결합
-    if (scene.textures.exists('levelUpPillarFx') && scene.anims.exists('levelup_pillar_anim')) {
-      const pillarSprite = scene.add.sprite(x, y - 92, 'levelUpPillarFx');
-      pillarSprite.setDepth(DEPTH.EXPLOSION + 2);
-      pillarSprite.setDisplaySize(210, 280);
-      pillarSprite.setTint(palette.primary);
-      pillarSprite.play('levelup_pillar_anim');
-      pillarSprite.once('animationcomplete', () => pillarSprite.destroy());
-    }
-    if (scene.textures.exists('healFx') && scene.anims.exists('heal_anim')) {
-      const healFx = scene.add.sprite(x, y - 10, 'healFx');
-      healFx.setDepth(DEPTH.EXPLOSION + 1);
-      healFx.setDisplaySize(230, 230);
-      healFx.setTint(palette.primary);
-      healFx.play('heal_anim');
-      healFx.once('animationcomplete', () => healFx.destroy());
-    }
-    if (scene.textures.exists('critStarBurstFx') && scene.anims.exists('crit_star_burst_anim')) {
-      const burst = scene.add.sprite(x, y - 22, 'critStarBurstFx');
-      burst.setDepth(DEPTH.EXPLOSION + 3);
-      burst.setDisplaySize(180, 180);
-      burst.setTint(palette.secondary);
-      burst.play('crit_star_burst_anim');
-      burst.once('animationcomplete', () => burst.destroy());
-    }
+    this.fxPool.playSpriteAnim({
+      texKey: 'levelUpPillarFx',
+      animKey: 'levelup_pillar_anim',
+      x,
+      y: y - 92,
+      width: 210,
+      height: 280,
+      depth: DEPTH.EXPLOSION + 2,
+      tint: palette.primary,
+      skipIfOffscreen: false,
+    });
+    this.fxPool.playSpriteAnim({
+      texKey: 'healFx',
+      animKey: 'heal_anim',
+      x,
+      y: y - 10,
+      width: 230,
+      depth: DEPTH.EXPLOSION + 1,
+      tint: palette.primary,
+      skipIfOffscreen: false,
+    });
+    this.fxPool.playSpriteAnim({
+      texKey: 'critStarBurstFx',
+      animKey: 'crit_star_burst_anim',
+      x,
+      y: y - 22,
+      width: 180,
+      depth: DEPTH.EXPLOSION + 3,
+      tint: palette.secondary,
+      skipIfOffscreen: false,
+    });
 
     // 4. 방사형 빛 파편 파티클 16개
     this.spawnRadialParticles(x, y - 16, palette.primary, palette.secondary, 16, 120);
@@ -138,43 +148,48 @@ export class PlayerCelebrationEffects {
     const { scene } = this;
 
     // 상승하는 황금빛 기둥 & 발밑 오라 링
-    const pillar = scene.add.graphics();
-    pillar.setPosition(x, y);
-    pillar.setDepth(DEPTH.EXPLOSION);
-    pillar.fillStyle(0xfde047, 0.28);
-    pillar.fillRect(-22, -160, 44, 165);
-    pillar.fillStyle(0xffffff, 0.35);
-    pillar.fillRect(-8, -150, 16, 155);
+    const pillar = this.fxPool.acquireGraphics(x, y, DEPTH.EXPLOSION);
+    if (pillar) {
+      pillar.fillStyle(0xfde047, 0.28);
+      pillar.fillRect(-22, -160, 44, 165);
+      pillar.fillStyle(0xffffff, 0.35);
+      pillar.fillRect(-8, -150, 16, 155);
 
-    scene.tweens.add({
-      targets: pillar,
-      scaleX: 1.5,
-      alpha: 0,
-      duration: 620,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        if (pillar.scene) pillar.destroy();
-      },
-    });
+      scene.tweens.add({
+        targets: pillar,
+        scaleX: 1.5,
+        alpha: 0,
+        duration: 620,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          this.fxPool.releaseGraphics(pillar);
+        },
+      });
+    }
 
     this.spawnExpandingRing(x, y, 0xfde047, 82, 460, 3.5);
     this.spawnRadialParticles(x, y - 12, 0xfde047, 0xfbbf24, 10, 74);
 
-    if (scene.textures.exists('levelUpPillarFx') && scene.anims.exists('levelup_pillar_anim')) {
-      const pillarSprite = scene.add.sprite(x, y - 74, 'levelUpPillarFx');
-      pillarSprite.setDepth(DEPTH.EXPLOSION + 2);
-      pillarSprite.setDisplaySize(160, 210);
-      pillarSprite.play('levelup_pillar_anim');
-      pillarSprite.once('animationcomplete', () => pillarSprite.destroy());
-    }
-    if (scene.textures.exists('healFx') && scene.anims.exists('heal_anim')) {
-      const fx = scene.add.sprite(x, y - 6, 'healFx');
-      fx.setDepth(DEPTH.EXPLOSION + 1);
-      fx.setDisplaySize(150, 150);
-      fx.setTint(0xfde047);
-      fx.play('heal_anim');
-      fx.once('animationcomplete', () => fx.destroy());
-    }
+    this.fxPool.playSpriteAnim({
+      texKey: 'levelUpPillarFx',
+      animKey: 'levelup_pillar_anim',
+      x,
+      y: y - 74,
+      width: 160,
+      height: 210,
+      depth: DEPTH.EXPLOSION + 2,
+      skipIfOffscreen: false,
+    });
+    this.fxPool.playSpriteAnim({
+      texKey: 'healFx',
+      animKey: 'heal_anim',
+      x,
+      y: y - 6,
+      width: 150,
+      depth: DEPTH.EXPLOSION + 1,
+      tint: 0xfde047,
+      skipIfOffscreen: false,
+    });
 
     this.spawnOverheadBanner(x, y - 68, `🌟 LEVEL UP! Lv.${level}`, '#fde047', '16px', 1450);
   }
@@ -187,9 +202,8 @@ export class PlayerCelebrationEffects {
     duration: number,
     strokeWidth: number
   ): void {
-    const ring = this.scene.add.graphics();
-    ring.setPosition(x, y);
-    ring.setDepth(DEPTH.EXPLOSION);
+    const ring = this.fxPool.acquireGraphics(x, y, DEPTH.EXPLOSION);
+    if (!ring) return;
     ring.lineStyle(strokeWidth, color, 0.95);
     ring.strokeCircle(0, 0, 16);
     ring.fillStyle(color, 0.16);
@@ -202,7 +216,7 @@ export class PlayerCelebrationEffects {
       duration,
       ease: 'Cubic.easeOut',
       onComplete: () => {
-        if (ring.scene) ring.destroy();
+        this.fxPool.releaseGraphics(ring);
       },
     });
   }
@@ -216,11 +230,10 @@ export class PlayerCelebrationEffects {
     maxDist: number
   ): void {
     for (let i = 0; i < count; i++) {
+      const spark = this.fxPool.acquireGraphics(x, y, DEPTH.SPARK);
+      if (!spark) break;
       const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.2;
       const dist = maxDist * (0.65 + Math.random() * 0.45);
-      const spark = this.scene.add.graphics();
-      spark.setPosition(x, y);
-      spark.setDepth(DEPTH.SPARK);
       spark.fillStyle(i % 2 === 0 ? colorA : colorB, 1);
       spark.fillCircle(0, 0, i % 3 === 0 ? 5 : 3.5);
 
@@ -233,7 +246,7 @@ export class PlayerCelebrationEffects {
         duration: 580,
         ease: 'Quad.easeOut',
         onComplete: () => {
-          if (spark.scene) spark.destroy();
+          this.fxPool.releaseGraphics(spark);
         },
       });
     }
@@ -286,5 +299,6 @@ export class PlayerCelebrationEffects {
       timer.remove(false);
     }
     this.activeTimers.clear();
+    this.fxPool.destroy();
   }
 }

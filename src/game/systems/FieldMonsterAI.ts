@@ -75,7 +75,8 @@ export class FieldMonsterAI {
     aliveWalls: ConstructedBuilding[],
     sepX: number,
     sepY: number,
-    activeAggroPlayerId?: string | null
+    activeAggroPlayerId?: string | null,
+    activePlayers?: ReadonlyArray<ActivePlayerTarget>
   ): boolean {
     const m = mv.monster;
     if (!m.isFieldMonster) return false;
@@ -115,7 +116,7 @@ export class FieldMonsterAI {
     const targetMatch = findTargetPlayerForMonster(
       m.x,
       m.y,
-      this.resolveActivePlayers(),
+      activePlayers ?? this.resolveActivePlayers(),
       aggroRadius,
       activeAggroPlayerId ?? undefined
     );

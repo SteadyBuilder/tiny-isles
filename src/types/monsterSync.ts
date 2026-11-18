@@ -58,6 +58,8 @@ export interface MonstersDeltaSyncPayload {
   totalMonsterCount: number;
   waveCount: number;
   bossWaveCount: number;
+  batchIndex?: number;
+  totalBatches?: number;
 }
 
 export interface MonsterHitPayload {

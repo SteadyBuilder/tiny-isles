@@ -164,7 +164,7 @@ export class WaveSpawner {
     for (const [id, mv] of monsters.entries()) {
       if (!incomingIds.has(id)) {
         this.ctx.playExplosionAt(mv.container.x, mv.container.y);
-        mv.container.destroy();
+        MonsterVisualManager.disposeVisual(mv);
         monsters.delete(id);
       }
     }

@@ -3,6 +3,7 @@ import { GARRISON_CONFIG } from '../../data/worldRules';
 import { GarrisonUnit } from '../../types/game';
 import { DEPTH, setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { sound } from '../../lib/sound';
+import { ProjectileSystem } from './ProjectileSystem';
 import { MonsterVisual, WaveSystem } from './WaveSystem';
 
 interface GarrisonVisualRef {
@@ -17,6 +18,7 @@ interface GarrisonVisualRef {
 
 export interface IGarrisonContext {
   scene: Phaser.Scene;
+  projectileSystem?: ProjectileSystem;
 }
 
 /**
@@ -83,13 +85,13 @@ export class GarrisonSystem {
   }
 
   public update(time: number, delta: number) {
-    if (this.visuals.size === 0) return;
+    if (this.visuals.size === 0 || !this.waveSystem.getIsHost()) return;
 
     const dt = delta / 1000;
     const monsters = this.waveSystem.getMonsterVisuals();
 
     for (const ref of this.visuals.values()) {
-      const nearest = this.findNearestMonster(ref.sprite.x, ref.sprite.y, monsters);
+      const nearest = this.findNearestMonster(ref.sprite.x, ref.sprite.y, monsters, time);
 
       if (nearest) {
         const dx = nearest.monster.x - ref.sprite.x;
@@ -120,21 +122,13 @@ export class GarrisonSystem {
   private findNearestMonster(
     gx: number,
     gy: number,
-    monsters: Map<string, MonsterVisual>
+    monsters: Map<string, MonsterVisual>,
+    time: number
   ): MonsterVisual | null {
     if (monsters.size === 0) return null;
-    let best: MonsterVisual | null = null;
-    let minDist: number = GARRISON_CONFIG.aggroRange;
-
-    for (const mv of monsters.values()) {
-      if (mv.monster.hp <= 0) continue;
-      const d = Math.hypot(mv.monster.x - gx, mv.monster.y - gy);
-      if (d <= minDist) {
-        minDist = d;
-        best = mv;
-      }
-    }
-    return best;
+    return this.waveSystem
+      .getSpatialGrid(time)
+      .findNearestInRadius(gx, gy, GARRISON_CONFIG.aggroRange);
   }
 
   private moveToward(ref: GarrisonVisualRef, tx: number, ty: number, dt: number) {
@@ -171,6 +165,28 @@ export class GarrisonSystem {
 
     this.playAnim(ref, 'axe');
     sound.playTowerShoot();
+
+    if (this.ctx.projectileSystem) {
+      this.ctx.projectileSystem.fireProjectile({
+        startX,
+        startY,
+        targetX: targetMv.monster.x,
+        targetY: targetMv.monster.y - 10,
+        durationMs: 180,
+        tint: 0x38bdf8,
+        size: 28,
+        onArrive: () => {
+          if (this.waveSystem.getIsHost()) {
+            this.waveSystem.damageMonster(
+              targetId,
+              GARRISON_CONFIG.baseAttack,
+              `${ref.unit.name} 수비대`
+            );
+          }
+        },
+      });
+      return;
+    }
 
     const proj = scene.add.image(startX, startY, 'arrowProj');
     proj.setDepth(DEPTH.PROJECTILE);

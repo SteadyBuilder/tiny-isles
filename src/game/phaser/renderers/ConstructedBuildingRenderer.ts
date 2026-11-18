@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PERFORMANCE_CONFIG } from '../../../data/performanceConfig';
 import { ConstructedBuilding, Island } from '../../../types/game';
 import { getBlueprint } from '../../constants';
 import { CONSTRUCTED_DEPTH_BIAS, ySortDepth } from '../../depthLayers';
@@ -174,6 +175,7 @@ export class ConstructedBuildingRenderer {
       container,
       hpBar,
       lastFireTime: 0,
+      lastTimerStep: timerGraphics ? 0 : undefined,
       colliders,
       extraVisuals: extraVisuals.length > 0 ? extraVisuals : undefined,
       timerGraphics,
@@ -187,9 +189,14 @@ export class ConstructedBuildingRenderer {
 
   public updateResourceTimers(progress: number): void {
     const clamped = Math.max(0, Math.min(1, progress));
+    const steps = PERFORMANCE_CONFIG.resourceTimerQuantizationSteps;
+    const step = Math.round(clamped * steps);
+    const quantizedProgress = step / steps;
     for (const cv of this.visuals.values()) {
       if (!cv.timerGraphics || !cv.container.visible) continue;
-      this.drawResourceTimer(cv.timerGraphics, cv.building.type, clamped);
+      if (cv.lastTimerStep === step) continue;
+      cv.lastTimerStep = step;
+      this.drawResourceTimer(cv.timerGraphics, cv.building.type, quantizedProgress);
     }
   }
 

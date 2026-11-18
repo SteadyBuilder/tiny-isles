@@ -24,7 +24,7 @@ export interface IMultiplayerChannelCallbacks {
   getPlayerColor: () => PlayerColor;
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
-  onOnlineCountChanged: (count: number) => void;
+  onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
   onHostStatusChanged?: (isHost: boolean) => void;
   onRemotePlayerMove: (player: Player) => void;
   onRemotePlayerLeave: (playerId: string) => void;
@@ -74,9 +74,13 @@ export class MultiplayerChannelRouter {
   private callbacks: IMultiplayerChannelCallbacks;
   private transport: INetworkTransport | null = null;
   private localBus: BroadcastChannel | null = null;
+  private hasLocalBusPeer = false;
   private unsubscribers: Array<() => void> = [];
   private isHost = true;
   private presenceResolved = false;
+  private knownMemberIds = new Set<string>();
+  private lastOnlineCount = -1;
+  private lastMembersSignature = '';
 
   constructor(callbacks: IMultiplayerChannelCallbacks) {
     this.callbacks = callbacks;
@@ -94,6 +98,9 @@ export class MultiplayerChannelRouter {
     // 협동 모드에서는 Presence가 첫 동기화될 때까지 임의 스폰을 막기 위해 false로 시작
     this.isHost = roomMode === 'solo';
     this.presenceResolved = roomMode === 'solo';
+    this.knownMemberIds.clear();
+    this.lastOnlineCount = -1;
+    this.lastMembersSignature = '';
 
     this.transport =
       customTransport ??
@@ -118,12 +125,14 @@ export class MultiplayerChannelRouter {
   ): void {
     const playerId = this.callbacks.getPlayerId();
     const eventId = serverSync.createEventId(remoteEvent, playerId);
-    this.localBus?.postMessage({
-      type: localType,
-      senderId: playerId,
-      eventId,
-      payload: localPayload,
-    });
+    if (this.localBus && this.hasLocalBusPeer) {
+      this.localBus.postMessage({
+        type: localType,
+        senderId: playerId,
+        eventId,
+        payload: localPayload,
+      });
+    }
     this.transport?.emit(remoteEvent, { ...remotePayload, eventId });
   }
 
@@ -132,11 +141,13 @@ export class MultiplayerChannelRouter {
       unsub();
     }
     this.unsubscribers = [];
+    this.knownMemberIds.clear();
 
     if (this.localBus) {
       this.localBus.close();
       this.localBus = null;
     }
+    this.hasLocalBusPeer = false;
     if (this.transport) {
       this.transport.disconnect();
       this.transport = null;
@@ -273,14 +284,40 @@ export class MultiplayerChannelRouter {
         const hostResolutionChanged = !this.presenceResolved || this.isHost !== snapshot.isHost;
         this.presenceResolved = true;
         this.isHost = snapshot.isHost;
-        this.callbacks.onOnlineCountChanged(snapshot.onlineCount);
-        GameEvents.emit('online-count-changed', snapshot.onlineCount);
-        GameEvents.emit('room-members-updated', snapshot.members);
+
+        const localPlayerId = this.callbacks.getPlayerId();
+        let hasNewPeer = false;
+        const nextKnown = new Set<string>();
+        const signatureParts: string[] = [];
+        for (const member of snapshot.members) {
+          nextKnown.add(member.playerId);
+          if (member.playerId !== localPlayerId && !this.knownMemberIds.has(member.playerId)) {
+            hasNewPeer = true;
+          }
+          signatureParts.push(
+            `${member.playerId}:${member.name}:${member.color}:${member.isHost ? 1 : 0}`
+          );
+        }
+        this.knownMemberIds = nextKnown;
+
+        this.callbacks.onOnlineCountChanged(snapshot.onlineCount, hasNewPeer);
+
+        if (snapshot.onlineCount !== this.lastOnlineCount) {
+          this.lastOnlineCount = snapshot.onlineCount;
+          GameEvents.emit('online-count-changed', snapshot.onlineCount);
+        }
+        signatureParts.sort();
+        const membersSignature = signatureParts.join('|');
+        if (membersSignature !== this.lastMembersSignature) {
+          this.lastMembersSignature = membersSignature;
+          GameEvents.emit('room-members-updated', snapshot.members);
+        }
         if (hostResolutionChanged) {
           this.callbacks.onHostStatusChanged?.(snapshot.isHost);
         }
       }),
       t.onPlayerLeave((playerId) => {
+        this.knownMemberIds.delete(playerId);
         this.callbacks.onRemotePlayerLeave(playerId);
       }),
       t.on<{ building: ConstructedBuilding }>('building_constructed', (p) => {
@@ -296,6 +333,17 @@ export class MultiplayerChannelRouter {
     this.localBus.onmessage = (event: MessageEvent<LocalBusEnvelope>) => {
       const data = event.data;
       if (!data || !data.type) return;
+      if (data.senderId && data.senderId !== playerId) {
+        if (data.type === '__bus_hello') {
+          this.hasLocalBusPeer = true;
+          this.localBus?.postMessage({ type: '__bus_ack', senderId: playerId });
+          return;
+        }
+        if (data.type === '__bus_ack') {
+          this.hasLocalBusPeer = true;
+          return;
+        }
+      }
       if (!serverSync.isValidIncomingEvent(data.eventId, data.senderId, playerId)) return;
 
       if (data.type === 'hit') {
@@ -306,5 +354,6 @@ export class MultiplayerChannelRouter {
         this.dispatchSharedEvent(data.type, data.payload);
       }
     };
+    this.localBus.postMessage({ type: '__bus_hello', senderId: playerId });
   }
 }

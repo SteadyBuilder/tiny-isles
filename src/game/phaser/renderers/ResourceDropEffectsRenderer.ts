@@ -6,6 +6,7 @@ import {
 } from '../../../data/resourceDropFxConfig';
 import { sound } from '../../../lib/sound';
 import { DEPTH, setDepthIfChanged, ySortDepth } from '../../depthLayers';
+import { PhaserFxPool } from '../utils/fxObjectPool';
 
 export interface ResourceDropSpawnParams {
   resourceType: GatherableResourceType;
@@ -47,9 +48,11 @@ export class ResourceDropEffectsRenderer {
   private ctx: IResourceDropContext;
   private particles: DropParticle[] = [];
   private lastPickupSoundAt = 0;
+  private fxPool: PhaserFxPool;
 
   constructor(ctx: IResourceDropContext) {
     this.ctx = ctx;
+    this.fxPool = new PhaserFxPool(ctx.scene, ctx.isSceneAlive);
   }
 
   public spawnResourceDrops(params: ResourceDropSpawnParams): void {
@@ -109,6 +112,7 @@ export class ResourceDropEffectsRenderer {
       }
     }
     this.particles = [];
+    this.fxPool.destroy();
   }
 
   private createParticle(
@@ -252,24 +256,24 @@ export class ResourceDropEffectsRenderer {
       sound.playPop();
     }
 
-    const spark = scene.add.graphics();
-    spark.setPosition(pickupX, pickupY);
-    spark.setDepth(DEPTH.SPARK);
-    spark.fillStyle(p.glowColor, 0.9);
-    spark.fillCircle(0, 0, 5);
-    spark.lineStyle(2, 0xffffff, 0.85);
-    spark.strokeCircle(0, 0, 7);
+    const spark = this.fxPool.acquireGraphics(pickupX, pickupY, DEPTH.SPARK);
+    if (spark) {
+      spark.fillStyle(p.glowColor, 0.9);
+      spark.fillCircle(0, 0, 5);
+      spark.lineStyle(2, 0xffffff, 0.85);
+      spark.strokeCircle(0, 0, 7);
 
-    scene.tweens.add({
-      targets: spark,
-      scale: 2.1,
-      alpha: 0,
-      duration: 180,
-      ease: 'Quad.easeOut',
-      onComplete: () => {
-        if (spark.scene) spark.destroy();
-      },
-    });
+      scene.tweens.add({
+        targets: spark,
+        scale: 2.1,
+        alpha: 0,
+        duration: 180,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
+          this.fxPool.releaseGraphics(spark);
+        },
+      });
+    }
 
     if (p.container.scene) {
       p.container.destroy();

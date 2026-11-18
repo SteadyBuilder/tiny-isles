@@ -57,14 +57,15 @@ function resolveTargetStyleAndOffset(
 }
 
 /**
- * 타겟 위치와 카메라 뷰포트를 기반으로 타게팅 화살표 배치 정보를 계산합니다. (순수 함수)
+ * 타겟 위치와 카메라 뷰포트를 기반으로 타게팅 화살표 배치 정보를 기존 객체에 기록합니다. (프레임 할당 제로)
  */
-export function computeMonsterIndicatorPlacement(
+export function computeMonsterIndicatorPlacementInto(
   target: MonsterIndicatorTarget,
   view: CameraWorldBounds,
   zoom: number,
   timeMs: number,
-  config: MonsterIndicatorConfig
+  config: MonsterIndicatorConfig,
+  out: MonsterIndicatorPlacement
 ): MonsterIndicatorPlacement {
   const safeZoom = Math.max(0.1, zoom);
   const { style, overheadOffsetY } = resolveTargetStyleAndOffset(target, config);
@@ -72,6 +73,10 @@ export function computeMonsterIndicatorPlacement(
   const worldSize = style.size / safeZoom;
   const worldStrokeWidth = style.strokeWidth / safeZoom;
   const inViewPad = config.inViewPaddingPx / safeZoom;
+
+  out.worldSize = worldSize;
+  out.worldStrokeWidth = worldStrokeWidth;
+  out.style = style;
 
   const isInsideView =
     target.x >= view.x + inViewPad &&
@@ -83,15 +88,11 @@ export function computeMonsterIndicatorPlacement(
     const bobWorld =
       (Math.sin(timeMs * config.bobSpeedRadPerMs) * config.bobAmplitudePx) / safeZoom;
 
-    return {
-      mode: 'overhead',
-      x: target.x,
-      y: target.y - overheadOffsetY + bobWorld,
-      angle: Math.PI / 2,
-      worldSize,
-      worldStrokeWidth,
-      style,
-    };
+    out.mode = 'overhead';
+    out.x = target.x;
+    out.y = target.y - overheadOffsetY + bobWorld;
+    out.angle = Math.PI / 2;
+    return out;
   }
 
   const edgePad = config.edgeMarginPx / safeZoom;
@@ -105,17 +106,31 @@ export function computeMonsterIndicatorPlacement(
   const scaleY = Math.abs(dy) > 1e-4 ? halfH / Math.abs(dy) : Number.POSITIVE_INFINITY;
   const t = Math.min(scaleX, scaleY);
 
-  const edgeX = Number.isFinite(t) ? view.centerX + dx * t : view.centerX;
-  const edgeY = Number.isFinite(t) ? view.centerY + dy * t : view.y + edgePad;
-  const angle = Math.atan2(dy, dx);
+  out.mode = 'edge';
+  out.x = Number.isFinite(t) ? view.centerX + dx * t : view.centerX;
+  out.y = Number.isFinite(t) ? view.centerY + dy * t : view.y + edgePad;
+  out.angle = Math.atan2(dy, dx);
+  return out;
+}
 
-  return {
-    mode: 'edge',
-    x: edgeX,
-    y: edgeY,
-    angle,
-    worldSize,
-    worldStrokeWidth,
-    style,
+/**
+ * 타겟 위치와 카메라 뷰포트를 기반으로 타게팅 화살표 배치 정보를 계산합니다. (순수 함수)
+ */
+export function computeMonsterIndicatorPlacement(
+  target: MonsterIndicatorTarget,
+  view: CameraWorldBounds,
+  zoom: number,
+  timeMs: number,
+  config: MonsterIndicatorConfig
+): MonsterIndicatorPlacement {
+  const out: MonsterIndicatorPlacement = {
+    mode: 'overhead',
+    x: 0,
+    y: 0,
+    angle: 0,
+    worldSize: 0,
+    worldStrokeWidth: 0,
+    style: config.normalStyle,
   };
+  return computeMonsterIndicatorPlacementInto(target, view, zoom, timeMs, config, out);
 }

@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { PLAYER_DASH_CONFIG } from '../../../data/combatFeedbackConfig';
+import { PERFORMANCE_CONFIG } from '../../../data/performanceConfig';
 import { sound } from '../../../lib/sound';
 import { DashCooldownState } from '../../../types/combat';
 import { DEPTH, ySortDepth } from '../../depthLayers';
 import { GameEvents } from '../../events/gameEvents';
+import { PhaserFxPool } from '../utils/fxObjectPool';
 
 export interface IPlayerDashContext {
   scene: Phaser.Scene;
@@ -17,6 +19,7 @@ export interface IPlayerDashContext {
  */
 export class PlayerDashController {
   private ctx: IPlayerDashContext;
+  private fxPool: PhaserFxPool;
   private isDashing = false;
   private dashRemainingMs = 0;
   private dashSpeedPx: number = PLAYER_DASH_CONFIG.minDashSpeedPx;
@@ -28,6 +31,7 @@ export class PlayerDashController {
 
   constructor(ctx: IPlayerDashContext) {
     this.ctx = ctx;
+    this.fxPool = new PhaserFxPool(ctx.scene, ctx.isSceneAlive);
   }
 
   public getIsDashing(): boolean {
@@ -125,7 +129,7 @@ export class PlayerDashController {
   public update(deltaMs: number, playerSprite: Phaser.Physics.Arcade.Sprite): boolean {
     if (this.cooldownRemainingMs > 0) {
       this.cooldownRemainingMs = Math.max(0, this.cooldownRemainingMs - deltaMs);
-      const bucket = Math.ceil(this.cooldownRemainingMs / 100);
+      const bucket = Math.ceil(this.cooldownRemainingMs / PERFORMANCE_CONFIG.cooldownUiBucketMs);
       if (bucket !== this.lastUiEmitBucket || this.cooldownRemainingMs === 0) {
         this.lastUiEmitBucket = bucket;
         this.emitState();
@@ -181,17 +185,18 @@ export class PlayerDashController {
     if (!this.ctx.isSceneAlive() || !playerSprite.active) return;
 
     const frameName = playerSprite.frame?.name;
-    const ghost = scene.add.sprite(
+    const ghost = this.fxPool.acquireImage(
+      playerSprite.texture.key,
       playerSprite.x,
       playerSprite.y,
-      playerSprite.texture.key,
+      ySortDepth(playerSprite.y, 20),
       frameName
     );
+    if (!ghost) return;
     ghost.setDisplaySize(playerSprite.displayWidth, playerSprite.displayHeight);
     ghost.setFlipX(playerSprite.flipX);
     ghost.setTint(tint);
     ghost.setAlpha(0.58);
-    ghost.setDepth(ySortDepth(playerSprite.y, 20));
 
     scene.tweens.add({
       targets: ghost,
@@ -201,21 +206,25 @@ export class PlayerDashController {
       duration: 185,
       ease: 'Quad.easeOut',
       onComplete: () => {
-        if (ghost.scene) ghost.destroy();
+        this.fxPool.releaseImage(ghost);
       },
     });
   }
 
   private spawnDustPuff(x: number, y: number): void {
-    const { scene } = this.ctx;
-    if (!this.ctx.isSceneAlive()) return;
-    if (scene.textures.exists('dustFx2') && scene.anims.exists('dust2_anim')) {
-      const dust = scene.add.sprite(x, y, 'dustFx2');
-      dust.setDepth(DEPTH.SLASH);
-      dust.setDisplaySize(76, 76);
-      dust.setAlpha(0.85);
-      dust.play('dust2_anim');
-      dust.once('animationcomplete', () => dust.destroy());
-    }
+    this.fxPool.playSpriteAnim({
+      texKey: 'dustFx2',
+      animKey: 'dust2_anim',
+      x,
+      y,
+      width: 76,
+      depth: DEPTH.SLASH,
+      alpha: 0.85,
+      skipIfOffscreen: false,
+    });
+  }
+
+  public destroy(): void {
+    this.fxPool.destroy();
   }
 }

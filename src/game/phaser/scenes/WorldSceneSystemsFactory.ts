@@ -99,6 +99,7 @@ export interface IWorldSystemsHost {
   constructedBuildingRenderer: ConstructedBuildingRenderer;
   resourceEntityRenderer: ResourceEntityRenderer;
   wallColliders?: Phaser.Physics.Arcade.StaticGroup;
+  onMonstersChanged?: () => void;
 }
 
 export interface WorldSystemsBundle {
@@ -106,6 +107,7 @@ export interface WorldSystemsBundle {
   playerHealthSystem: PlayerHealthSystem;
   projectileSystem: ProjectileSystem;
   playerProgressionSystem: PlayerProgressionSystem;
+  campFortification: CampFortificationSystem;
   monsterCampSystem: MonsterCampSystem;
   fieldMonsterSystem: FieldMonsterSystem;
   waveSystem: WaveSystem;
@@ -140,24 +142,21 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     onThornsReflect: (px, py) => {
       const thorns = playerProgressionSystem?.getThornsDamage() ?? 0;
       if (thorns <= 0 || !waveSystem) return;
-      for (const mv of waveSystem.getMonsterVisuals().values()) {
-        if (Math.hypot(mv.monster.x - px, mv.monster.y - py) <= 115) {
-          waveSystem.damageMonster(
-            mv.monster.id,
-            thorns,
-            `${host.getPlayerName()} (가시반사)`,
-            false,
-            host.getPlayerId()
-          );
-          host.effectsRenderer.showFloatingText(
-            mv.monster.x,
-            mv.monster.y - 30,
-            `🛡️ 반사 -${thorns}`,
-            '#34d399'
-          );
-          break;
-        }
-      }
+      const mv = waveSystem.getSpatialGrid().findNearestInRadius(px, py, 115);
+      if (!mv) return;
+      waveSystem.damageMonster(
+        mv.monster.id,
+        thorns,
+        `${host.getPlayerName()} (가시반사)`,
+        false,
+        host.getPlayerId()
+      );
+      host.effectsRenderer.showFloatingText(
+        mv.monster.x,
+        mv.monster.y - 30,
+        `🛡️ 반사 -${thorns}`,
+        '#34d399'
+      );
     },
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
   });
@@ -270,6 +269,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
         multiplayerSync?.broadcastThreatSync(threatPercent, waveCount, bossWaveCount),
       emitThreatOrb: (worldX, worldY, amount) =>
         host.effectsRenderer.emitThreatOrbFromWorld(worldX, worldY, amount),
+      onMonstersChanged: host.onMonstersChanged,
     },
     coreGemSystem
   );
@@ -288,6 +288,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     healPlayer: (amount) => playerHealthSystem.healPlayer(amount),
     onClassChangedVisual: (classId) => host.onPlayerClassVisualChanged?.(classId),
     getMonsterVisuals: () => waveSystem.getMonsterVisuals(),
+    queryMonstersInRadius: (x, y, r) => waveSystem.getSpatialGrid().queryRadius(x, y, r),
     damageMonster: (id, dmg, attacker, attackerId, hitMeta) =>
       waveSystem.damageMonster(id, dmg, attacker, false, attackerId, hitMeta),
     tryDamageCampCoreInRadius: (x, y, r, dmg) =>
@@ -397,7 +398,10 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     waveSystem
   );
 
-  const garrisonSystem = new GarrisonSystem({ scene: host.scene }, waveSystem);
+  const garrisonSystem = new GarrisonSystem(
+    { scene: host.scene, projectileSystem },
+    waveSystem
+  );
 
   multiplayerSync = new MultiplayerSyncController({
     scene: host.scene,
@@ -408,11 +412,11 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getRoomMode: host.getRoomMode,
     isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
     getLocalPlayerState: host.getLocalPlayerState,
-    onOnlineCountChanged: (count) => {
+    onOnlineCountChanged: (count, hasNewPeer) => {
       waveSystem.setOnlineCount(count);
       monsterCampSystem.setOnlineCount(count);
       fieldMonsterSystem.setOnlineCount(count);
-      if (waveSystem.getIsHost()) {
+      if (waveSystem.getIsHost() && hasNewPeer) {
         const ws = waveSystem.getWaveState();
         multiplayerSync?.broadcastThreatSync(ws.threatPercent, ws.waveCount, ws.bossWaveCount);
         if (count > 1) {
@@ -493,6 +497,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     playerHealthSystem,
     projectileSystem,
     playerProgressionSystem,
+    campFortification,
     monsterCampSystem,
     fieldMonsterSystem,
     waveSystem,

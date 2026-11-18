@@ -3,86 +3,12 @@ import { ITEM_CATALOG } from '../../../data/items';
 import { POTION_LIST, RESOURCE_BUNDLE_SPRITES } from '../../../data/potions';
 
 /**
- * 사냥 특화 모드(4대 전직 클래스, 특화 마물 병과, 부락 본진, 경량 배칭 텍스처) 에셋 로더 및 애니메이션 등록기
+ * 사냥·전투 모드(특화 마물 병과, 스킬 FX, 아이템/물약, 부락 본진, 경량 배칭 텍스처) 에셋 로더 및 애니메이션 등록기
+ * - 플레이어 전직 클래스 시트(4직업 x 2색상)는 classAssetLoader를 통해 전직 시 온디맨드 로드합니다.
  */
-export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
-  const colors = ['blue', 'red'] as const;
-  for (const color of colors) {
-    scene.load.spritesheet(`${color}WarriorIdle`, `/assets/units/${color}/Warrior_Idle.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}WarriorRun`, `/assets/units/${color}/Warrior_Run.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}WarriorAttack`, `/assets/units/${color}/Warrior_Attack.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-
-    scene.load.spritesheet(`${color}LancerIdle`, `/assets/units/${color}/Lancer_Idle.png`, {
-      frameWidth: 320,
-      frameHeight: 320,
-    });
-    scene.load.spritesheet(`${color}LancerRun`, `/assets/units/${color}/Lancer_Run.png`, {
-      frameWidth: 320,
-      frameHeight: 320,
-    });
-    scene.load.spritesheet(`${color}LancerAttack`, `/assets/units/${color}/Lancer_Attack.png`, {
-      frameWidth: 320,
-      frameHeight: 320,
-    });
-
-    scene.load.spritesheet(`${color}ArcherIdle`, `/assets/units/${color}/Archer_Idle.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}ArcherRun`, `/assets/units/${color}/Archer_Run.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}ArcherAttack`, `/assets/units/${color}/Archer_Attack.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-
-    scene.load.spritesheet(`${color}ArchmageIdle`, `/assets/units/${color}/Archmage_Idle.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}ArchmageRun`, `/assets/units/${color}/Archmage_Run.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}ArchmageAttack`, `/assets/units/${color}/Archmage_Attack.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}ArchmageCast`, `/assets/units/${color}/Archmage_Cast.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}ArchmageHit`, `/assets/units/${color}/Archmage_Hit.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    scene.load.spritesheet(`${color}ArchmageStun`, `/assets/units/${color}/Archmage_Stun.png`, {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-  }
-
-  // 특화 마물 병과 (창병, 원거리 궁수 사격, 흑마법사)
-  scene.load.spritesheet('enemyArcherAttack', '/assets/units/enemies/Black_Archer_Attack.png', {
-    frameWidth: 192,
-    frameHeight: 192,
-  });
+export function preloadHuntingModeAssets(scene: Phaser.Scene, isHuntingMode = true): void {
+  // 특화 마물 병과 (보스·사냥 병과 공용)
   scene.load.spritesheet('enemyLancerRun', '/assets/units/enemies/Black_Lancer_Run.png', {
-    frameWidth: 320,
-    frameHeight: 320,
-  });
-  scene.load.spritesheet('enemyLancerAttack', '/assets/units/enemies/Black_Lancer_Attack.png', {
     frameWidth: 320,
     frameHeight: 320,
   });
@@ -90,32 +16,18 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
     frameWidth: 192,
     frameHeight: 192,
   });
-  scene.load.spritesheet('enemyArchmageAttack', '/assets/units/enemies/Black_Archmage_Attack.png', {
-    frameWidth: 192,
-    frameHeight: 192,
-  });
   scene.load.spritesheet('enemyArchmageCast', '/assets/units/enemies/Black_Archmage_Cast.png', {
-    frameWidth: 192,
-    frameHeight: 192,
-  });
-  scene.load.spritesheet('enemyArchmageHit', '/assets/units/enemies/Black_Archmage_Hit.png', {
-    frameWidth: 192,
-    frameHeight: 192,
-  });
-  scene.load.spritesheet('enemyArchmageStun', '/assets/units/enemies/Black_Archmage_Stun.png', {
     frameWidth: 192,
     frameHeight: 192,
   });
 
   // 스킬, 회피 대시 및 마법 이펙트
-  scene.load.spritesheet('fireFx', '/assets/fx/Fire_01.png', { frameWidth: 64, frameHeight: 64 });
   scene.load.spritesheet('fireFx2', '/assets/fx/Fire_02.png', { frameWidth: 64, frameHeight: 64 });
   scene.load.spritesheet('fireFx3', '/assets/fx/Fire_03.png', { frameWidth: 64, frameHeight: 64 });
   scene.load.spritesheet('explosionFx2', '/assets/fx/Explosion_02.png', {
     frameWidth: 192,
     frameHeight: 192,
   });
-  scene.load.spritesheet('dustFx1', '/assets/fx/Dust_01.png', { frameWidth: 64, frameHeight: 64 });
   scene.load.spritesheet('dustFx2', '/assets/fx/Dust_02.png', { frameWidth: 64, frameHeight: 64 });
   scene.load.spritesheet('healFx', '/assets/fx/Heal_Effect.png', {
     frameWidth: 192,
@@ -178,10 +90,12 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene): void {
     frameHeight: 192,
   });
 
-  // 몬스터 부락 본진 건물
-  scene.load.image('blackCastle', '/assets/buildings/Black_Castle.png');
-  scene.load.image('blackTower', '/assets/buildings/Black_Tower.png');
-  scene.load.image('purpleCastle', '/assets/buildings/Purple_Castle.png');
+  // 몬스터 부락 본진 건물 (사냥 특화 모드 전용)
+  if (isHuntingMode) {
+    scene.load.image('blackCastle', '/assets/buildings/Black_Castle.png');
+    scene.load.image('blackTower', '/assets/buildings/Black_Tower.png');
+    scene.load.image('purpleCastle', '/assets/buildings/Purple_Castle.png');
+  }
 
   // 장비·물약·자원 꾸러미 스프라이트
   const loadedKeys = new Set<string>();
@@ -236,27 +150,21 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
   }
   if (!scene.textures.exists('loot_chest_closed')) {
     const g = scene.make.graphics({ x: 0, y: 0 });
-    // 그림자
     g.fillStyle(0x000000, 0.35);
     g.fillEllipse(24, 42, 36, 10);
-    // 상자 본체 (나무 + 금속/금테)
     g.fillStyle(0x78350f, 1);
     g.fillRoundedRect(8, 20, 32, 20, 3);
-    // 상단 뚜껑 (약간 둥근 덮개)
     g.fillStyle(0x92400e, 1);
     g.fillRoundedRect(7, 13, 34, 11, 4);
-    // 목재 판자 줄무늬
     g.fillStyle(0x451a03, 0.55);
     g.fillRect(9, 25, 30, 2);
     g.fillRect(9, 32, 30, 2);
-    // 황금 테두리 및 보강 띠
     g.lineStyle(2, 0xfbbf24, 1);
     g.strokeRoundedRect(8, 14, 32, 26, 3);
     g.fillStyle(0xfbbf24, 1);
     g.fillRect(13, 14, 3, 25);
     g.fillRect(32, 14, 3, 25);
     g.fillRect(8, 22, 32, 3);
-    // 중앙 자물쇠
     g.fillStyle(0xfde047, 1);
     g.fillRoundedRect(20, 20, 8, 9, 2);
     g.fillStyle(0x451a03, 1);
@@ -266,20 +174,16 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
   }
   if (!scene.textures.exists('loot_chest_open')) {
     const g = scene.make.graphics({ x: 0, y: 0 });
-    // 그림자
     g.fillStyle(0x000000, 0.35);
     g.fillEllipse(24, 42, 36, 10);
-    // 열린 뚜껑 (뒤로 젖혀짐)
     g.fillStyle(0x78350f, 1);
     g.fillRoundedRect(8, 6, 32, 11, 3);
     g.lineStyle(2, 0xfbbf24, 1);
     g.strokeRoundedRect(8, 6, 32, 11, 3);
-    // 내부 황금빛 보물 광채
     g.fillStyle(0xfef08a, 0.95);
     g.fillRect(11, 16, 26, 8);
     g.fillStyle(0xffffff, 0.85);
     g.fillRect(15, 17, 18, 5);
-    // 상자 하부 본체
     g.fillStyle(0x78350f, 1);
     g.fillRoundedRect(8, 22, 32, 18, 3);
     g.lineStyle(2, 0xfbbf24, 1);
@@ -291,80 +195,6 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
     g.fillRoundedRect(21, 22, 6, 5, 1);
     g.generateTexture('loot_chest_open', 48, 48);
     g.destroy();
-  }
-
-  const colors = ['blue', 'red'] as const;
-  const classSpecs = [
-    { id: 'guardian', prefix: 'Warrior', idleEnd: 7, runEnd: 5, atkEnd: 3 },
-    { id: 'lancer', prefix: 'Lancer', idleEnd: 11, runEnd: 5, atkEnd: 2 },
-    { id: 'ranger', prefix: 'Archer', idleEnd: 5, runEnd: 3, atkEnd: 7 },
-    { id: 'archmage', prefix: 'Archmage', idleEnd: 5, runEnd: 5, atkEnd: 5 },
-  ] as const;
-
-  for (const color of colors) {
-    for (const cls of classSpecs) {
-      const idleTex = `${color}${cls.prefix}Idle`;
-      const runTex = `${color}${cls.prefix}Run`;
-      const atkTex = `${color}${cls.prefix}Attack`;
-      const castTex = `${color}${cls.prefix}Cast`;
-      const hitTex = `${color}${cls.prefix}Hit`;
-      const stunTex = `${color}${cls.prefix}Stun`;
-
-      if (scene.textures.exists(idleTex)) {
-        scene.anims.create({
-          key: `${color}_${cls.id}_idle`,
-          frames: scene.anims.generateFrameNumbers(idleTex, { start: 0, end: cls.idleEnd }),
-          frameRate: 7,
-          repeat: -1,
-        });
-      }
-      if (scene.textures.exists(runTex)) {
-        scene.anims.create({
-          key: `${color}_${cls.id}_run`,
-          frames: scene.anims.generateFrameNumbers(runTex, { start: 0, end: cls.runEnd }),
-          frameRate: 9,
-          repeat: -1,
-        });
-      }
-      if (scene.textures.exists(atkTex)) {
-        scene.anims.create({
-          key: `${color}_${cls.id}_axe`,
-          frames: scene.anims.generateFrameNumbers(atkTex, { start: 0, end: cls.atkEnd }),
-          frameRate: 15,
-          repeat: 0,
-        });
-        scene.anims.create({
-          key: `${color}_${cls.id}_pickaxe`,
-          frames: scene.anims.generateFrameNumbers(atkTex, { start: 0, end: cls.atkEnd }),
-          frameRate: 15,
-          repeat: 0,
-        });
-      }
-      if (scene.textures.exists(castTex)) {
-        scene.anims.create({
-          key: `${color}_${cls.id}_cast`,
-          frames: scene.anims.generateFrameNumbers(castTex, { start: 0, end: 4 }),
-          frameRate: 11,
-          repeat: 0,
-        });
-      }
-      if (scene.textures.exists(hitTex)) {
-        scene.anims.create({
-          key: `${color}_${cls.id}_hit`,
-          frames: scene.anims.generateFrameNumbers(hitTex, { start: 0, end: 4 }),
-          frameRate: 16,
-          repeat: 0,
-        });
-      }
-      if (scene.textures.exists(stunTex)) {
-        scene.anims.create({
-          key: `${color}_${cls.id}_stun`,
-          frames: scene.anims.generateFrameNumbers(stunTex, { start: 0, end: 5 }),
-          frameRate: 10,
-          repeat: -1,
-        });
-      }
-    }
   }
 
   // 마물 특화 병과 애니메이션
@@ -384,14 +214,6 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
       repeat: -1,
     });
   }
-  if (scene.textures.exists('enemyArchmageAttack')) {
-    scene.anims.create({
-      key: 'monster_archmage_attack',
-      frames: scene.anims.generateFrameNumbers('enemyArchmageAttack', { start: 0, end: 5 }),
-      frameRate: 14,
-      repeat: 0,
-    });
-  }
   if (scene.textures.exists('enemyArchmageCast')) {
     scene.anims.create({
       key: 'monster_archmage_cast',
@@ -400,22 +222,7 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
       repeat: 0,
     });
   }
-  if (scene.textures.exists('enemyArchmageHit')) {
-    scene.anims.create({
-      key: 'monster_archmage_hit',
-      frames: scene.anims.generateFrameNumbers('enemyArchmageHit', { start: 0, end: 4 }),
-      frameRate: 16,
-      repeat: 0,
-    });
-  }
-  if (scene.textures.exists('enemyArchmageStun')) {
-    scene.anims.create({
-      key: 'monster_archmage_stun',
-      frames: scene.anims.generateFrameNumbers('enemyArchmageStun', { start: 0, end: 5 }),
-      frameRate: 10,
-      repeat: -1,
-    });
-  }
+
   const fxAnimSpecs: ReadonlyArray<{
     tex: string;
     key: string;
@@ -423,11 +230,9 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
     frameRate: number;
     repeat: number;
   }> = [
-    { tex: 'fireFx', key: 'fire_anim', end: 7, frameRate: 16, repeat: 0 },
     { tex: 'fireFx2', key: 'fire2_anim', end: 9, frameRate: 18, repeat: 0 },
     { tex: 'fireFx3', key: 'fire3_anim', end: 11, frameRate: 20, repeat: 0 },
     { tex: 'explosionFx2', key: 'explosion2_anim', end: 9, frameRate: 20, repeat: 0 },
-    { tex: 'dustFx1', key: 'dust1_anim', end: 7, frameRate: 18, repeat: 0 },
     { tex: 'dustFx2', key: 'dust2_anim', end: 9, frameRate: 20, repeat: 0 },
     { tex: 'healFx', key: 'heal_anim', end: 10, frameRate: 16, repeat: 0 },
     { tex: 'slashArcFx', key: 'slash_arc_anim', end: 5, frameRate: 22, repeat: 0 },

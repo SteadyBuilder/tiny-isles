@@ -156,16 +156,31 @@ export class MonsterSyncCoordinator {
         totalMonsterCount,
         waveCount,
         bossWaveCount,
+        batchIndex: i,
+        totalBatches,
       });
     }
     return batches;
   }
 
+  private pruneExpiredFullSyncBatches(now: number): void {
+    for (const [id, entry] of this.incomingFullSyncBatches.entries()) {
+      if (now - entry.createdAt > MONSTER_SYNC_CONFIG.fullSyncBatchTtlMs) {
+        this.incomingFullSyncBatches.delete(id);
+      }
+    }
+  }
+
   public receiveFullSyncChunk(
     payload: MonstersFullSyncPayload
   ): { ready: boolean; monsters: Monster[] } {
+    const now = performance.now();
+    this.pruneExpiredFullSyncBatches(now);
+
     const total = payload.totalChunks ?? 1;
     if (total <= 1 || !payload.syncId) {
+      this.countMismatchStreak = 0;
+      this.remoteTargets.clear();
       return { ready: true, monsters: payload.monsters || [] };
     }
 
@@ -181,7 +196,7 @@ export class MonsterSyncCoordinator {
 
     let batch = this.incomingFullSyncBatches.get(syncId);
     if (!batch) {
-      batch = { totalChunks: total, chunks: new Map(), createdAt: performance.now() };
+      batch = { totalChunks: total, chunks: new Map(), createdAt: now };
       this.incomingFullSyncBatches.set(syncId, batch);
     }
     batch.chunks.set(chunkIdx, payload.monsters || []);
@@ -197,6 +212,7 @@ export class MonsterSyncCoordinator {
       if (part) merged.push(...part);
     }
     this.countMismatchStreak = 0;
+    this.remoteTargets.clear();
     return { ready: true, monsters: merged };
   }
 
@@ -205,15 +221,16 @@ export class MonsterSyncCoordinator {
     monsters: Map<string, MonsterVisual>,
     payload: MonstersDeltaSyncPayload,
     callbacks: RemoteDeltaApplyCallbacks
-  ): { needsFullSync: boolean; killedCount: number } {
+  ): { needsFullSync: boolean; killedCount: number; spawnedCount: number } {
     const now = performance.now();
     let killedCount = 0;
+    let spawnedCount = 0;
 
     for (const kill of payload.kills || []) {
       const mv = monsters.get(kill.id);
       if (mv) {
         callbacks.onExplosion(mv.container.x, mv.container.y);
-        mv.container.destroy();
+        MonsterVisualManager.disposeVisual(mv);
         monsters.delete(kill.id);
       } else {
         callbacks.onExplosion(kill.x, kill.y);
@@ -228,7 +245,7 @@ export class MonsterSyncCoordinator {
       const mv = monsters.get(removedId);
       if (mv) {
         callbacks.onExplosion(mv.container.x, mv.container.y);
-        mv.container.destroy();
+        MonsterVisualManager.disposeVisual(mv);
         monsters.delete(removedId);
       }
       this.remoteTargets.delete(removedId);
@@ -248,6 +265,7 @@ export class MonsterSyncCoordinator {
         MonsterVisualManager.updateHpBar(existing, false);
       } else {
         monsters.set(sp.id, MonsterVisualManager.create(scene, { ...sp }));
+        spawnedCount++;
       }
       this.remoteTargets.delete(sp.id);
     }
@@ -291,7 +309,11 @@ export class MonsterSyncCoordinator {
       }
     }
 
-    if (typeof payload.totalMonsterCount === 'number') {
+    const totalBatches = payload.totalBatches ?? 1;
+    const batchIndex = payload.batchIndex ?? 0;
+    const isFinalBatch = totalBatches <= 1 || batchIndex >= totalBatches - 1;
+
+    if (isFinalBatch && typeof payload.totalMonsterCount === 'number') {
       if (monsters.size !== payload.totalMonsterCount) {
         this.countMismatchStreak++;
       } else {
@@ -302,6 +324,7 @@ export class MonsterSyncCoordinator {
     return {
       needsFullSync: missingUpdateTarget || this.countMismatchStreak >= 2,
       killedCount,
+      spawnedCount,
     };
   }
 

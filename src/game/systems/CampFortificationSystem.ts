@@ -48,8 +48,21 @@ export class CampFortificationSystem {
     this.ctx = ctx;
   }
 
-  public spawnForCamp(camp: MonsterCampState, hpMult: number, atkMult: number): void {
-    this.clearForCamp(camp.territoryId);
+  public getStructures(): ReadonlyMap<string, CampStructure> {
+    return this.structures;
+  }
+
+  public refreshWallColliders(): void {
+    this.ctx.wallColliders?.refresh();
+  }
+
+  public spawnForCamp(
+    camp: MonsterCampState,
+    hpMult: number,
+    atkMult: number,
+    refreshColliders = true
+  ): void {
+    this.clearForCamp(camp.territoryId, false);
 
     const tpl = CAMP_RING_TEMPLATES[camp.ring];
     const fort = tpl.fortification;
@@ -83,7 +96,7 @@ export class CampFortificationSystem {
         attack: 0,
         rangePx: 0,
         fireRateMs: 0,
-      });
+      }, false);
     });
 
     // 2. 적 방어 타워 (본진 주변 대각선 2~4개)
@@ -113,24 +126,31 @@ export class CampFortificationSystem {
         attack: towerAtk,
         rangePx: fort.towerRangePx,
         fireRateMs: fort.towerFireRateMs,
-      });
+      }, false);
     });
+
+    if (refreshColliders) {
+      this.refreshWallColliders();
+    }
   }
 
-  private createStructure(params: {
-    id: string;
-    territoryId: number;
-    kind: 'wall' | 'tower';
-    x: number;
-    y: number;
-    hp: number;
-    spriteKey: string;
-    isHoriz: boolean;
-    ring: 1 | 2 | 3 | 4;
-    attack: number;
-    rangePx: number;
-    fireRateMs: number;
-  }): void {
+  private createStructure(
+    params: {
+      id: string;
+      territoryId: number;
+      kind: 'wall' | 'tower';
+      x: number;
+      y: number;
+      hp: number;
+      spriteKey: string;
+      isHoriz: boolean;
+      ring: 1 | 2 | 3 | 4;
+      attack: number;
+      rangePx: number;
+      fireRateMs: number;
+    },
+    refreshCollider = true
+  ): void {
     const { scene } = this.ctx;
     const container = scene.add.container(params.x, params.y);
     container.setDepth(ySortDepth(params.y, params.kind === 'tower' ? 140 : 60));
@@ -165,7 +185,9 @@ export class CampFortificationSystem {
       collider.setDisplaySize(colW, colH);
       collider.refreshBody();
       this.ctx.wallColliders.add(collider);
-      this.ctx.wallColliders.refresh();
+      if (refreshCollider) {
+        this.ctx.wallColliders.refresh();
+      }
     }
 
     const st: CampStructure = {
@@ -274,28 +296,39 @@ export class CampFortificationSystem {
     st.hpBar.fillRect(-w / 2, y, Math.max(2, w * ratio), 5);
   }
 
-  private removeStructure(id: string): void {
+  private removeStructure(id: string, refreshCollider = true): boolean {
     const st = this.structures.get(id);
-    if (!st) return;
+    if (!st) return false;
+    let removedCollider = false;
     if (st.collider && this.ctx.wallColliders) {
       this.ctx.wallColliders.remove(st.collider, true, true);
-      this.ctx.wallColliders.refresh();
+      removedCollider = true;
+      if (refreshCollider) {
+        this.ctx.wallColliders.refresh();
+      }
     }
     st.container.destroy();
     this.structures.delete(id);
+    return removedCollider;
   }
 
-  public clearForCamp(territoryId: number): void {
+  public clearForCamp(territoryId: number, refreshColliders = true): void {
+    let removedAnyCollider = false;
     for (const [id, st] of Array.from(this.structures.entries())) {
       if (st.territoryId === territoryId) {
-        this.removeStructure(id);
+        if (this.removeStructure(id, false)) {
+          removedAnyCollider = true;
+        }
       }
+    }
+    if (removedAnyCollider && refreshColliders) {
+      this.refreshWallColliders();
     }
   }
 
   public destroy(): void {
     for (const id of Array.from(this.structures.keys())) {
-      this.removeStructure(id);
+      this.removeStructure(id, false);
     }
   }
 }

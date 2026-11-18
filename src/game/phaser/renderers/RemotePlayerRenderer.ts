@@ -1,13 +1,18 @@
 import Phaser from 'phaser';
 import { Player } from '../../../types/game';
 import { serverSync } from '../../../lib/serverSync';
-import { ySortDepth } from '../../depthLayers';
+import { setDepthIfChanged, ySortDepth } from '../../depthLayers';
 
 interface RemotePlayerVisual {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
   nameTag: Phaser.GameObjects.Text;
   data: Player;
+  lastTargetX: number;
+  lastTargetY: number;
+  lastName: string;
+  lastDirection: 'left' | 'right';
+  lastAnimKey: string;
 }
 
 /**
@@ -46,32 +51,67 @@ export class RemotePlayerRenderer {
         .setOrigin(0.5);
       container.add(nameTag);
 
-      visual = { container, sprite, nameTag, data };
+      const initialAnimKey = `${data.color}_${data.action}`;
+      sprite.setFlipX(data.direction === 'left');
+      if (scene.anims.exists(initialAnimKey)) {
+        sprite.play(initialAnimKey);
+      }
+
+      visual = {
+        container,
+        sprite,
+        nameTag,
+        data,
+        lastTargetX: data.x,
+        lastTargetY: data.y,
+        lastName: data.name,
+        lastDirection: data.direction,
+        lastAnimKey: initialAnimKey,
+      };
+      setDepthIfChanged(container, ySortDepth(data.y, 24));
       this.remotePlayers.set(data.id, visual);
+      return;
     }
 
     visual.data = data;
 
-    scene.tweens.killTweensOf(visual.container);
-    if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
-      visual.container.setPosition(data.x, data.y);
-    } else {
-      scene.tweens.add({
-        targets: visual.container,
-        x: data.x,
-        y: data.y,
-        duration: 120,
-        ease: 'Linear',
-      });
+    const posChanged =
+      Math.abs(visual.lastTargetX - data.x) >= 0.5 ||
+      Math.abs(visual.lastTargetY - data.y) >= 0.5;
+    if (posChanged) {
+      visual.lastTargetX = data.x;
+      visual.lastTargetY = data.y;
+      scene.tweens.killTweensOf(visual.container);
+      if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
+        visual.container.setPosition(data.x, data.y);
+      } else {
+        scene.tweens.add({
+          targets: visual.container,
+          x: data.x,
+          y: data.y,
+          duration: 120,
+          ease: 'Linear',
+        });
+      }
+      setDepthIfChanged(visual.container, ySortDepth(data.y, 24));
     }
 
-    visual.container.setDepth(ySortDepth(data.y, 24));
-    visual.sprite.setFlipX(data.direction === 'left');
-    visual.nameTag.setText(data.name);
+    if (visual.lastDirection !== data.direction) {
+      visual.lastDirection = data.direction;
+      visual.sprite.setFlipX(data.direction === 'left');
+    }
+
+    if (visual.lastName !== data.name) {
+      visual.lastName = data.name;
+      visual.nameTag.setText(data.name);
+    }
 
     const animKey = `${data.color}_${data.action}`;
-    if (scene.anims.exists(animKey)) {
-      visual.sprite.play(animKey, true);
+    if (visual.lastAnimKey !== animKey) {
+      visual.lastAnimKey = animKey;
+      if (scene.anims.exists(animKey)) {
+        visual.sprite.play(animKey, true);
+      }
     }
   }
 

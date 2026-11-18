@@ -21,6 +21,7 @@ export interface IPlayerPointerContext {
   getPlayerPosition: () => { x: number; y: number };
   getIslands: () => Island[];
   getMonsterVisuals: () => Map<string, MonsterVisual>;
+  findNearestMonster?: (x: number, y: number, radiusPx: number) => MonsterVisual | null;
   findTappedEntityVisual: (wx: number, wy: number) => EntityVisual | null;
   isWithinEntityGatherRange: (px: number, py: number, visual: EntityVisual) => boolean;
   getEntityInteractionPoint: (visual: EntityVisual) => { x: number; y: number };
@@ -236,9 +237,13 @@ export class PlayerPointerController {
   }
 
   private findNearestMonster(wx: number, wy: number, maxDist: number): MonsterVisual | null {
+    if (this.ctx.findNearestMonster) {
+      return this.ctx.findNearestMonster(wx, wy, maxDist);
+    }
     let nearest: MonsterVisual | null = null;
     let minDist = maxDist;
     this.ctx.getMonsterVisuals().forEach((mv) => {
+      if (mv.monster.hp <= 0) return;
       const d = Math.hypot(wx - mv.monster.x, wy - mv.monster.y);
       if (d < minDist) {
         minDist = d;

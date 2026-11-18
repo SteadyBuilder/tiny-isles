@@ -3,8 +3,10 @@ import {
   COMBAT_CAMERA_SHAKE_CONFIG,
   MONSTER_HIT_FEEDBACK_CONFIG,
 } from '../../../data/combatFeedbackConfig';
+import { PERFORMANCE_CONFIG } from '../../../data/performanceConfig';
 import { CombatHitFeedbackOptions } from '../../../types/combat';
 import { DEPTH } from '../../depthLayers';
+import { PhaserFxPool, isPointInSceneViewport } from '../utils/fxObjectPool';
 
 /**
  * 전투 타격감(미세/강한 카메라 쉐이크, 히트 플래시, 스케일 펀치, 타격 스파크/슬래시) 전담 렌더러
@@ -12,6 +14,8 @@ import { DEPTH } from '../../depthLayers';
 export class CombatFeedbackRenderer {
   private scene: Phaser.Scene;
   private isSceneAlive: () => boolean;
+  private fxPool: PhaserFxPool;
+  private activeHitBurstCount = 0;
   private lastBasicShakeAt = 0;
   private lastSkillShakeAt = 0;
   private lastPlayerHitShakeAt = 0;
@@ -19,6 +23,7 @@ export class CombatFeedbackRenderer {
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
     this.isSceneAlive = isSceneAlive;
+    this.fxPool = new PhaserFxPool(scene, isSceneAlive);
   }
 
   public playHitImpact(
@@ -36,20 +41,25 @@ export class CombatFeedbackRenderer {
       }
     }
 
-    // 2. 피격 대상 흰색 히트 플래시 & 스케일 펀치
-    if (opts.targetSprite && opts.targetSprite.scene) {
+    // 2. 피격 대상 흰색 히트 플래시 & 스케일 펀치 (가시 영역에 있는 스프라이트만 처리)
+    if (opts.targetSprite && opts.targetSprite.scene && opts.targetSprite.visible) {
       this.flashAndPunchSprite(opts.targetSprite, restoreTint);
     }
 
-    // 3. 타격 임팩트 슬래시 & 비산 스파크
-    this.spawnHitBurst(
-      opts.x,
-      opts.y,
-      Boolean(opts.isCrit),
-      Boolean(opts.isSkill),
-      opts.attackerX,
-      opts.attackerY
-    );
+    // 3. 타격 임팩트 슬래시 & 비산 스파크 (화면 내 + 동시 버스트 상한 이내일 때만 생성)
+    if (
+      isPointInSceneViewport(this.scene, opts.x, opts.y) &&
+      this.activeHitBurstCount < PERFORMANCE_CONFIG.maxConcurrentHitBursts
+    ) {
+      this.spawnHitBurst(
+        opts.x,
+        opts.y,
+        Boolean(opts.isCrit),
+        Boolean(opts.isSkill),
+        opts.attackerX,
+        opts.attackerY
+      );
+    }
   }
 
   public triggerBasicHitShake(isCrit = false): void {
@@ -169,65 +179,61 @@ export class CombatFeedbackRenderer {
         ? Math.atan2(y - attackerY, x - attackerX)
         : Math.random() * Math.PI * 2;
 
-    if (scene.textures.exists('hitSparkFx') && scene.anims.exists('hit_spark_anim')) {
-      const hitSprite = scene.add.sprite(x, hitY, 'hitSparkFx');
-      hitSprite.setDepth(DEPTH.SPARK + 1);
-      const sz = isSkill ? 96 : isCrit ? 84 : 64;
-      hitSprite.setDisplaySize(sz, sz);
-      hitSprite.setRotation(baseAngle + (Math.random() - 0.5) * 0.5);
-      if (isSkill) hitSprite.setTint(0x67e8f9);
-      else if (isCrit) hitSprite.setTint(0xfde047);
-      hitSprite.play('hit_spark_anim');
-      hitSprite.once('animationcomplete', () => {
-        if (hitSprite.scene) hitSprite.destroy();
-      });
-    }
-
-    if (
-      (isCrit || isSkill) &&
-      scene.textures.exists('critStarBurstFx') &&
-      scene.anims.exists('crit_star_burst_anim')
-    ) {
-      const star = scene.add.sprite(x, hitY, 'critStarBurstFx');
-      star.setDepth(DEPTH.SPARK + 2);
-      const starSize = isSkill ? 116 : 98;
-      star.setDisplaySize(starSize, starSize);
-      star.setTint(isSkill ? 0x38bdf8 : 0xfbbf24);
-      star.play('crit_star_burst_anim');
-      star.once('animationcomplete', () => {
-        if (star.scene) star.destroy();
-      });
-    }
-
-    const slash = scene.add.graphics();
-    slash.setPosition(x, hitY);
-    slash.setRotation(baseAngle + (Math.random() - 0.5) * 0.6);
-    slash.setDepth(DEPTH.SLASH);
-    const radius = isCrit || isSkill ? 28 : 20;
-    slash.lineStyle(isCrit ? 4 : 3, slashColor, 0.95);
-    slash.beginPath();
-    slash.arc(0, 0, radius, -0.85, 0.85, false);
-    slash.strokePath();
-
-    scene.tweens.add({
-      targets: slash,
-      scale: 1.45,
-      alpha: 0,
-      duration: 140,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        if (slash.scene) slash.destroy();
-      },
+    this.fxPool.playSpriteAnim({
+      texKey: 'hitSparkFx',
+      animKey: 'hit_spark_anim',
+      x,
+      y: hitY,
+      width: isSkill ? 96 : isCrit ? 84 : 64,
+      depth: DEPTH.SPARK + 1,
+      rotationRad: baseAngle + (Math.random() - 0.5) * 0.5,
+      tint: isSkill ? 0x67e8f9 : isCrit ? 0xfde047 : undefined,
+      skipIfOffscreen: false,
     });
+
+    if (isCrit || isSkill) {
+      this.fxPool.playSpriteAnim({
+        texKey: 'critStarBurstFx',
+        animKey: 'crit_star_burst_anim',
+        x,
+        y: hitY,
+        width: isSkill ? 116 : 98,
+        depth: DEPTH.SPARK + 2,
+        tint: isSkill ? 0x38bdf8 : 0xfbbf24,
+        skipIfOffscreen: false,
+      });
+    }
+
+    const slash = this.fxPool.acquireGraphics(x, hitY, DEPTH.SLASH);
+    if (slash) {
+      this.activeHitBurstCount += 1;
+      slash.setRotation(baseAngle + (Math.random() - 0.5) * 0.6);
+      const radius = isCrit || isSkill ? 28 : 20;
+      slash.lineStyle(isCrit ? 4 : 3, slashColor, 0.95);
+      slash.beginPath();
+      slash.arc(0, 0, radius, -0.85, 0.85, false);
+      slash.strokePath();
+
+      scene.tweens.add({
+        targets: slash,
+        scale: 1.45,
+        alpha: 0,
+        duration: 140,
+        ease: 'Cubic.easeOut',
+        onComplete: () => {
+          this.activeHitBurstCount = Math.max(0, this.activeHitBurstCount - 1);
+          this.fxPool.releaseGraphics(slash);
+        },
+      });
+    }
 
     // 2. 타격 비산 스파크 (4~6개)
     const count = isCrit || isSkill ? 6 : 4;
     for (let i = 0; i < count; i++) {
+      const spark = this.fxPool.acquireGraphics(x, hitY, DEPTH.SPARK);
+      if (!spark) break;
       const ang = baseAngle + (Math.random() - 0.5) * 1.9;
       const dist = (isCrit ? 34 : 24) + Math.random() * 14;
-      const spark = scene.add.graphics();
-      spark.setPosition(x, hitY);
-      spark.setDepth(DEPTH.SPARK);
       spark.fillStyle(i % 2 === 0 ? 0xffffff : sparkColor, 1);
       spark.fillRect(-2.5, -2.5, 5, 5);
 
@@ -240,9 +246,14 @@ export class CombatFeedbackRenderer {
         duration: 170,
         ease: 'Quad.easeOut',
         onComplete: () => {
-          if (spark.scene) spark.destroy();
+          this.fxPool.releaseGraphics(spark);
         },
       });
     }
+  }
+
+  public destroy(): void {
+    this.activeHitBurstCount = 0;
+    this.fxPool.destroy();
   }
 }

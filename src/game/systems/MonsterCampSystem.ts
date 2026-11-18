@@ -25,7 +25,7 @@ import { computeHuntingScaling } from '../utils/huntingScalingUtils';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import type { CampFortificationSystem } from './CampFortificationSystem';
 
-interface CampVisualNode {
+export interface CampVisualNode {
   camp: MonsterCampState;
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
@@ -77,6 +77,10 @@ export class MonsterCampSystem {
 
   constructor(ctx: IMonsterCampContext) {
     this.ctx = ctx;
+  }
+
+  public getCampVisuals(): ReadonlyMap<number, CampVisualNode> {
+    return this.campNodes;
   }
 
   private isHost(): boolean {
@@ -174,11 +178,12 @@ export class MonsterCampSystem {
 
       const node = this.createCampVisual(campState, tpl.buildingSprite);
       this.campNodes.set(isl.id, node);
-      this.ctx.fortification?.spawnForCamp(campState, hpMult, atkMult);
+      this.ctx.fortification?.spawnForCamp(campState, hpMult, atkMult, false);
       if (hostAuthoritative) {
         this.spawnCampGarrison(campState);
       }
     }
+    this.ctx.fortification?.refreshWallColliders();
     this.garrisonsInitialized = hostAuthoritative;
 
     this.ctx.emitTerritoriesUpdated();

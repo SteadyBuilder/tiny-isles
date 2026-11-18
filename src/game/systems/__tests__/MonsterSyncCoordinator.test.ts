@@ -381,3 +381,123 @@ test('interpolateRemoteMonsters lerps close targets smoothly and snaps far telep
   assert.equal(farVis.monster.x, 1000);
   assert.equal(farVis.container.x, 1000);
 });
+
+test('multi-batch buildDeltaBatches applies sequentially without triggering false needsFullSync', () => {
+  const hostCoord = new MonsterSyncCoordinator();
+  const guestCoord = new MonsterSyncCoordinator();
+  const mockScene = createMockScene();
+  const hostMonsters = new Map<string, MonsterVisual>();
+  const guestMonsters = new Map<string, MonsterVisual>();
+
+  for (let i = 0; i < 200; i++) {
+    const id = `batch_m_${i}`;
+    hostMonsters.set(id, makeVisual(makeMonster({ id, x: i * 5, y: 100 })));
+  }
+
+  const batches = hostCoord.buildDeltaBatches(hostMonsters, 3, 1);
+  assert.equal(batches.length, 3);
+  assert.equal(batches[0].batchIndex, 0);
+  assert.equal(batches[0].totalBatches, 3);
+  assert.equal(batches[2].batchIndex, 2);
+  assert.equal(batches[2].totalBatches, 3);
+
+  // Trigger 1 prior count mismatch so an unchecked intermediate batch would hit streak >= 2
+  guestCoord.applyDeltaSync(
+    mockScene,
+    guestMonsters,
+    {
+      spawns: [],
+      updates: [],
+      kills: [],
+      removedIds: [],
+      totalMonsterCount: 999,
+      waveCount: 3,
+      bossWaveCount: 1,
+    },
+    { onExplosion: () => {}, onShake: () => {}, onRemoteKill: () => {} }
+  );
+
+  let totalSpawned = 0;
+  for (let i = 0; i < batches.length; i++) {
+    const res = guestCoord.applyDeltaSync(mockScene, guestMonsters, batches[i], {
+      onExplosion: () => {},
+      onShake: () => {},
+      onRemoteKill: () => {},
+    });
+    assert.equal(res.needsFullSync, false, `batch ${i} must not trigger full sync`);
+    totalSpawned += res.spawnedCount;
+  }
+
+  assert.equal(totalSpawned, 200);
+  assert.equal(guestMonsters.size, 200);
+});
+
+test('receiveFullSyncChunk expires incomplete stale batches by TTL and resets remoteTargets/streak on completion', () => {
+  const guestCoord = new MonsterSyncCoordinator();
+  const mockScene = createMockScene();
+  const guestMonsters = new Map<string, MonsterVisual>();
+  const m1 = makeVisual(makeMonster({ id: 'm_1', x: 100, y: 100 }));
+  guestMonsters.set('m_1', m1);
+
+  // Set remote target to (200, 100) before full sync resets position back to (100, 100)
+  guestCoord.applyDeltaSync(
+    mockScene,
+    guestMonsters,
+    {
+      spawns: [],
+      updates: [['m_1', 200, 100, 100, 100, 1, 0, 0]],
+      kills: [],
+      removedIds: [],
+      totalMonsterCount: 99, // create 1 mismatch streak too
+      waveCount: 1,
+      bossWaveCount: 0,
+    },
+    { onExplosion: () => {}, onShake: () => {}, onRemoteKill: () => {} }
+  );
+
+  // Mock time progression for TTL test
+  const origNow = performance.now.bind(performance);
+  let fakeNow = 1000;
+  performance.now = () => fakeNow;
+  try {
+    // Incomplete batch fs_stale arrives at t=1000
+    const incomplete = guestCoord.receiveFullSyncChunk({
+      monsters: [makeMonster({ id: 'old_chunk', x: 10, y: 10 })],
+      waveCount: 1,
+      bossWaveCount: 0,
+      syncId: 'fs_stale',
+      chunkIndex: 0,
+      totalChunks: 2,
+    });
+    assert.equal(incomplete.ready, false);
+
+    // Advance past fullSyncBatchTtlMs (8000ms) -> chunk 1 of fs_stale must NOT resurrect expired batch
+    fakeNow = 10000;
+    const expiredSecondHalf = guestCoord.receiveFullSyncChunk({
+      monsters: [makeMonster({ id: 'old_chunk_2', x: 20, y: 20 })],
+      waveCount: 1,
+      bossWaveCount: 0,
+      syncId: 'fs_stale',
+      chunkIndex: 1,
+      totalChunks: 2,
+    });
+    assert.equal(expiredSecondHalf.ready, false);
+
+    // Single-chunk full sync clears remoteTargets and resets countMismatchStreak
+    const fullSingle = guestCoord.receiveFullSyncChunk({
+      monsters: [makeMonster({ id: 'm_1', x: 100, y: 100 })],
+      waveCount: 1,
+      bossWaveCount: 0,
+      syncId: 'fs_single',
+      chunkIndex: 0,
+      totalChunks: 1,
+    });
+    assert.equal(fullSingle.ready, true);
+
+    // Interpolation after full sync must NOT drag m_1 toward old (200, 100)
+    guestCoord.interpolateRemoteMonsters(guestMonsters, 50);
+    assert.equal(m1.monster.x, 100);
+  } finally {
+    performance.now = origNow;
+  }
+});

@@ -144,14 +144,12 @@ export class PreloadScene extends Phaser.Scene {
 
     // Terrain & Environment
     this.load.image('grassSeamless', '/assets/terrain/Grass_Seamless.png');
-    this.load.image('tilemap', '/assets/terrain/Tilemap_color1.png');
     this.load.image('tilemap1', '/assets/terrain/Tilemap_color1.png');
     this.load.image('tilemap2', '/assets/terrain/Tilemap_color2.png');
     this.load.image('tilemap3', '/assets/terrain/Tilemap_color3.png');
     this.load.image('tilemap4', '/assets/terrain/Tilemap_color4.png');
     this.load.image('tilemap5', '/assets/terrain/Tilemap_color5.png');
     this.load.image('waterBg', '/assets/terrain/Water_Background_color.png');
-    this.load.image('waterFoam', '/assets/terrain/Water_Foam.png');
     this.load.image('waterRock1', '/assets/terrain/Water_Rocks_01.png');
     this.load.image('waterRock2', '/assets/terrain/Water_Rocks_02.png');
     this.load.image('cloud1', '/assets/decorations/Clouds_01.png');
@@ -159,7 +157,9 @@ export class PreloadScene extends Phaser.Scene {
 
     // UI Elements
     this.load.image('cursorTarget', '/assets/ui/Cursors/Cursor_04.png');
-    preloadHuntingModeAssets(this);
+    const regRoom = this.registry.get('roomConfig') as { missionId?: string } | undefined;
+    const isHuntingMode = regRoom?.missionId ? regRoom.missionId === 'hunting_conquest' : true;
+    preloadHuntingModeAssets(this, isHuntingMode);
   }
 
   create() {

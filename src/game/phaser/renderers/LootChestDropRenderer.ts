@@ -3,6 +3,7 @@ import { RARITY_META } from '../../../data/items';
 import { sound } from '../../../lib/sound';
 import { EquipmentItem } from '../../../types/game';
 import { DEPTH, ySortDepth } from '../../depthLayers';
+import { PhaserFxPool, isPointInSceneViewport } from '../utils/fxObjectPool';
 
 export interface ChestDropParams {
   x: number;
@@ -25,10 +26,12 @@ export class LootChestDropRenderer {
   private isSceneAlive: () => boolean;
   private activeContainers = new Set<Phaser.GameObjects.Container>();
   private activeTimers = new Set<Phaser.Time.TimerEvent>();
+  private fxPool: PhaserFxPool;
 
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
     this.isSceneAlive = isSceneAlive;
+    this.fxPool = new PhaserFxPool(scene, isSceneAlive);
   }
 
   public playDropAnimation(params: ChestDropParams): void {
@@ -300,9 +303,9 @@ export class LootChestDropRenderer {
   }
 
   private spawnPulseRing(x: number, y: number, color: number, maxRadius: number): void {
-    const ring = this.scene.add.graphics();
-    ring.setPosition(x, y);
-    ring.setDepth(DEPTH.EXPLOSION);
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return;
+    const ring = this.fxPool.acquireGraphics(x, y, DEPTH.EXPLOSION);
+    if (!ring) return;
     ring.lineStyle(4, color, 0.95);
     ring.strokeCircle(0, 0, 14);
     ring.fillStyle(color, 0.25);
@@ -315,19 +318,19 @@ export class LootChestDropRenderer {
       duration: 420,
       ease: 'Cubic.easeOut',
       onComplete: () => {
-        if (ring.scene) ring.destroy();
+        this.fxPool.releaseGraphics(ring);
       },
     });
   }
 
   private spawnRaritySparks(x: number, y: number, color: number): void {
+    if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, x, y)) return;
     const count = 12;
     for (let i = 0; i < count; i++) {
+      const spark = this.fxPool.acquireGraphics(x, y, DEPTH.SPARK);
+      if (!spark) break;
       const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.25;
       const dist = 36 + Math.random() * 34;
-      const spark = this.scene.add.graphics();
-      spark.setPosition(x, y);
-      spark.setDepth(DEPTH.SPARK);
       spark.fillStyle(i % 2 === 0 ? color : 0xffffff, 1);
       spark.fillCircle(0, 0, i % 2 === 0 ? 4.5 : 3);
 
@@ -340,7 +343,7 @@ export class LootChestDropRenderer {
         duration: 480,
         ease: 'Quad.easeOut',
         onComplete: () => {
-          if (spark.scene) spark.destroy();
+          this.fxPool.releaseGraphics(spark);
         },
       });
     }
@@ -355,5 +358,6 @@ export class LootChestDropRenderer {
       if (container.scene) container.destroy();
     }
     this.activeContainers.clear();
+    this.fxPool.destroy();
   }
 }
