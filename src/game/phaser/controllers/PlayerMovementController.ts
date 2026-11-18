@@ -34,6 +34,7 @@ import { resolveSafeSpawnPosition } from '../../utils/playerSpawnUtils';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
 import { ensureClassSpritesLoaded } from '../utils/classAssetLoader';
+import { KeyboardInputController } from './KeyboardInputController';
 import { PlayerDashController } from './PlayerDashController';
 import { PlayerPointerController } from './PlayerPointerController';
 
@@ -92,13 +93,7 @@ export class PlayerMovementController {
   private currentHp: number = PLAYER_COMBAT_CONFIG.maxHp;
   private currentMaxHp: number = PLAYER_COMBAT_CONFIG.maxHp;
 
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private wasdKeys!: { [key: string]: Phaser.Input.Keyboard.Key };
-  private spaceKey!: Phaser.Input.Keyboard.Key;
-  private eKey!: Phaser.Input.Keyboard.Key;
-  private qKey!: Phaser.Input.Keyboard.Key;
-  private iKey!: Phaser.Input.Keyboard.Key;
-  private shiftKey!: Phaser.Input.Keyboard.Key;
+  private keyboardController: KeyboardInputController;
   private joystickVector = { x: 0, y: 0 };
   private isActionHolding = false;
 
@@ -113,6 +108,12 @@ export class PlayerMovementController {
 
   constructor(ctx: IPlayerMovementContext) {
     this.ctx = ctx;
+    this.keyboardController = new KeyboardInputController({
+      onInteract: () => this.ctx.onInteract(),
+      onCastSkill: () => GameEvents.emit('cast-active-skill'),
+      onOpenInventory: () => GameEvents.emit('open-inventory-modal'),
+      onDash: () => this.triggerDash(),
+    });
     this.pointerController = new PlayerPointerController({
       scene: ctx.scene,
       getInitialZoom: ctx.getInitialZoom,
@@ -166,12 +167,7 @@ export class PlayerMovementController {
   }
 
   private readDirectionalInput(): { vx: number; vy: number; usingJoystick: boolean } {
-    let vx = 0;
-    let vy = 0;
-    if (this.cursors?.left.isDown || this.wasdKeys?.A?.isDown) vx -= 1;
-    if (this.cursors?.right.isDown || this.wasdKeys?.D?.isDown) vx += 1;
-    if (this.cursors?.up.isDown || this.wasdKeys?.W?.isDown) vy -= 1;
-    if (this.cursors?.down.isDown || this.wasdKeys?.S?.isDown) vy += 1;
+    let { vx, vy } = this.keyboardController.getDirectionalVector();
     const joyMag = Math.hypot(this.joystickVector.x, this.joystickVector.y);
     const usingJoystick = joyMag > 0.12;
     if (usingJoystick) {
@@ -577,27 +573,7 @@ export class PlayerMovementController {
   }
 
   public setupInputs(): void {
-    const { scene } = this.ctx;
-    if (scene.input.keyboard) {
-      this.cursors = scene.input.keyboard.createCursorKeys();
-      this.wasdKeys = {
-        W: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-        A: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-        S: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-        D: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-      };
-      this.spaceKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-      this.eKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-      this.qKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
-      this.iKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
-      this.shiftKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
-
-      this.spaceKey.on('down', () => this.ctx.onInteract());
-      this.eKey.on('down', () => this.ctx.onInteract());
-      this.qKey.on('down', () => GameEvents.emit('cast-active-skill'));
-      this.iKey.on('down', () => GameEvents.emit('open-inventory-modal'));
-      this.shiftKey.on('down', () => this.triggerDash());
-    }
+    this.keyboardController.attach();
 
     const handleActionStart = () => {
       this.isActionHolding = true;
@@ -611,17 +587,22 @@ export class PlayerMovementController {
     const handleTriggerDash = () => {
       this.triggerDash();
     };
+    const handlePauseToggled = (paused: boolean) => {
+      this.keyboardController.setPaused(paused);
+    };
 
     GameEvents.on('player-action-start', handleActionStart);
     GameEvents.on('player-action-stop', handleActionStop);
     GameEvents.on('player-hp-updated', handleHpUpdated);
     GameEvents.on('trigger-dash', handleTriggerDash);
+    GameEvents.on('game-pause-toggled', handlePauseToggled);
 
     this.unbindInputs.push(() => {
       GameEvents.off('player-action-start', handleActionStart);
       GameEvents.off('player-action-stop', handleActionStop);
       GameEvents.off('player-hp-updated', handleHpUpdated);
       GameEvents.off('trigger-dash', handleTriggerDash);
+      GameEvents.off('game-pause-toggled', handlePauseToggled);
     });
 
     this.dashController.emitState();
@@ -717,7 +698,7 @@ export class PlayerMovementController {
       }
     }
 
-    const isHoldInput = this.spaceKey?.isDown || this.eKey?.isDown || this.isActionHolding;
+    const isHoldInput = this.keyboardController.isInteractHeld() || this.isActionHolding;
     if (isHoldInput && time - this.lastInteractTime >= 240) {
       this.ctx.onInteract();
     }
@@ -784,6 +765,7 @@ export class PlayerMovementController {
 
   public destroy(): void {
     this.clearOneShotFallbackTimer();
+    this.keyboardController.detach();
     for (const unbind of this.unbindInputs) {
       unbind();
     }

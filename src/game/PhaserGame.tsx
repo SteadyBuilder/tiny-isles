@@ -286,6 +286,18 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     };
   }, [joystickRef]);
 
+  const handleCanvasPointerDownCapture = () => {
+    if (typeof document !== 'undefined') {
+      const activeEl = document.activeElement;
+      if (activeEl instanceof HTMLElement && activeEl !== document.body) {
+        activeEl.blur();
+      }
+    }
+    if (typeof window !== 'undefined' && typeof window.focus === 'function') {
+      window.focus();
+    }
+  };
+
   return (
     <div className="relative w-full h-full">
       {loading && <GameLoadingOverlay percent={loadingPercent} />}
@@ -293,6 +305,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       <div
         ref={containerRef}
         id="phaser-game-container"
+        onPointerDownCapture={handleCanvasPointerDownCapture}
         className="w-full h-full overflow-hidden select-none touch-none"
       />
     </div>

@@ -8,6 +8,7 @@ import { GameEvents } from '../game/events/gameEvents';
 import { storage } from '../lib/storage';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
 import { isSameInventory } from '../game/utils/inventoryUtils';
+import { hasBlockingModifier, isEditableDomTarget } from '../game/utils/keyboardInputUtils';
 import {
   ConstructedBuilding,
   DashCooldownState,
@@ -271,15 +272,16 @@ export function useGameShellState() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'b' || e.key === 'B' || e.code === 'KeyB') {
+      if (isEditableDomTarget(e.target) || isEditableDomTarget(document.activeElement)) return;
+      if (hasBlockingModifier(e)) return;
+      if (e.code === 'KeyB' || e.key === 'b' || e.key === 'B') {
         e.preventDefault();
         handleOpenVillageModalForCurrent();
-      } else if (e.key === '1') {
+      } else if (e.code === 'Digit1' || e.key === '1') {
         GameEvents.emit('use-potion', 'potion_small');
-      } else if (e.key === '2') {
+      } else if (e.code === 'Digit2' || e.key === '2') {
         GameEvents.emit('use-potion', 'potion_medium');
-      } else if (e.key === '3') {
+      } else if (e.code === 'Digit3' || e.key === '3') {
         GameEvents.emit('use-potion', 'potion_large');
       }
     };
