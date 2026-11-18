@@ -23,6 +23,7 @@ export interface Player {
   color: PlayerColor;
   classId?: PlayerClassId;
   level?: number;
+  isFainted?: boolean;
   lastUpdated: number;
 }
 

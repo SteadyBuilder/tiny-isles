@@ -1,15 +1,20 @@
 import { DUNGEON_INVASION_CONFIG, HUNTING_AI_CONFIG } from '../../data/monsterCamps';
 import { ConstructedBuilding } from '../../types/game';
+import { ActivePlayerTarget, MonsterPlayerAttackPayload } from '../../types/monsterSync';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { resolveMonsterWallClamping } from '../wallCollisionGeometry';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
 
 export interface IMonsterRangedMageContext {
   getMonsters: () => Map<string, MonsterVisual>;
+  getLocalPlayerId?: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
+  getActivePlayers?: () => ActivePlayerTarget[];
   damageLocalPlayer: (damage: number, attackerName: string) => void;
+  broadcastMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   healCampCore?: (territoryId: number, amount: number) => void;
   clearMonsterAggro?: (monsterId: string) => void;
   projectileSystem?: ProjectileSystem;
@@ -27,6 +32,21 @@ export class MonsterRangedMageAI {
 
   constructor(ctx: IMonsterRangedMageContext) {
     this.ctx = ctx;
+  }
+
+  private resolveActivePlayers(): ActivePlayerTarget[] {
+    if (this.ctx.getActivePlayers) {
+      return this.ctx.getActivePlayers();
+    }
+    const pos = this.ctx.getLocalPlayerPosition();
+    return [
+      {
+        id: this.ctx.getLocalPlayerId?.() ?? 'local',
+        x: pos.x,
+        y: pos.y,
+        isFainted: this.ctx.isLocalPlayerFainted(),
+      },
+    ];
   }
 
   public pruneStaleState(validIds: Set<string>): void {
@@ -48,16 +68,13 @@ export class MonsterRangedMageAI {
     aliveWalls: ConstructedBuilding[],
     sepX: number,
     sepY: number,
-    hasActiveAggro = false
+    activeAggroPlayerId?: string | null
   ): boolean {
     const m = mv.monster;
     if (!m.isCampMonster) return false;
 
     const homeX = m.homeX ?? m.x;
     const homeY = m.homeY ?? m.y;
-    const playerPos = this.ctx.getLocalPlayerPosition();
-    const playerFainted = this.ctx.isLocalPlayerFainted();
-    const distToPlayer = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
     const distFromHome = Math.hypot(m.x - homeX, m.y - homeY);
 
     // 마법사 주술 치유: 4.5초마다 주변 부락 동료 및 부락 본진 체력 회복
@@ -89,12 +106,20 @@ export class MonsterRangedMageAI {
       }
     }
 
-    const aggroDetectRadius = hasActiveAggro
+    const aggroDetectRadius = activeAggroPlayerId
       ? HUNTING_AI_CONFIG.campLeashRadiusPx
       : HUNTING_AI_CONFIG.campAggroRadiusPx;
 
+    const targetMatch = findTargetPlayerForMonster(
+      m.x,
+      m.y,
+      this.resolveActivePlayers(),
+      aggroDetectRadius,
+      activeAggroPlayerId ?? undefined
+    );
+
     // 플레이어가 기절했거나 탐지 반경을 벗어난 경우 본래 위치로 귀환
-    if (playerFainted || distToPlayer > aggroDetectRadius) {
+    if (!targetMatch) {
       if (distFromHome > 18) {
         const vx = ((homeX - m.x) / distFromHome) * m.speed * 1.1;
         const vy = ((homeY - m.y) / distFromHome) * m.speed * 1.1;
@@ -107,6 +132,9 @@ export class MonsterRangedMageAI {
       }
       return true;
     }
+
+    const playerPos = targetMatch.player;
+    const distToPlayer = targetMatch.dist;
 
     // 병과별 사거리 산정 (근접 56px, 창병 95px, 원거리 265px, 마법사 295px)
     const desiredRange =
@@ -146,7 +174,7 @@ export class MonsterRangedMageAI {
     const cooldownMs = m.eliteAffix === 'berserker' ? Math.round(baseCooldownMs * 0.8) : baseCooldownMs;
     if (time - mv.lastAttackTime >= cooldownMs) {
       mv.lastAttackTime = time;
-      this.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y);
+      this.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y, playerPos.id);
     }
     return true;
   }
@@ -171,10 +199,30 @@ export class MonsterRangedMageAI {
     this.ctx.showFloatingText(m.x, m.y - 36, `🩸 +${heal}`, '#fb7185');
   }
 
-  public executeRoleAttackOnPlayer(mv: MonsterVisual, targetX: number, targetY: number): void {
+  public executeRoleAttackOnPlayer(
+    mv: MonsterVisual,
+    targetX: number,
+    targetY: number,
+    targetPlayerId?: string
+  ): void {
     const m = mv.monster;
+    const localPlayerId = this.ctx.getLocalPlayerId?.();
+    const isRemoteTarget = Boolean(targetPlayerId && localPlayerId && targetPlayerId !== localPlayerId);
 
     if (m.role === 'ranged' && this.ctx.projectileSystem) {
+      if (isRemoteTarget && targetPlayerId) {
+        this.ctx.broadcastMonsterPlayerAttack?.({
+          targetPlayerId,
+          monsterId: m.id,
+          monsterName: m.name,
+          role: m.role ?? 'ranged',
+          damage: m.attack,
+          startX: m.x,
+          startY: m.y - 16,
+          targetX,
+          targetY,
+        });
+      }
       this.ctx.projectileSystem.fireProjectile({
         startX: m.x,
         startY: m.y - 16,
@@ -184,10 +232,19 @@ export class MonsterRangedMageAI {
         tint: 0xf87171,
         size: 32,
         onArrive: () => {
-          const curPlayer = this.ctx.getLocalPlayerPosition();
-          if (Math.hypot(curPlayer.x - targetX, curPlayer.y - targetY) <= 58) {
-            this.ctx.damageLocalPlayer(m.attack, m.name);
-            this.applyVampiricHeal(mv);
+          if (!this.ctx.isLocalPlayerFainted()) {
+            const curPlayer = this.ctx.getLocalPlayerPosition();
+            if (Math.hypot(curPlayer.x - targetX, curPlayer.y - targetY) <= 58) {
+              this.ctx.damageLocalPlayer(m.attack, m.name);
+              this.applyVampiricHeal(mv);
+              return;
+            }
+          }
+          if (isRemoteTarget && targetPlayerId) {
+            const targetNow = this.resolveActivePlayers().find((p) => p.id === targetPlayerId);
+            if (targetNow && !targetNow.isFainted && Math.hypot(targetNow.x - targetX, targetNow.y - targetY) <= 58) {
+              this.applyVampiricHeal(mv);
+            }
           }
         },
       });
@@ -203,6 +260,22 @@ export class MonsterRangedMageAI {
           if (mv.sprite.active && mv.sprite.scene?.anims.exists('monster_archmage_run')) {
             mv.sprite.play('monster_archmage_run', true);
           }
+        });
+      }
+      if (this.ctx.broadcastMonsterPlayerAttack && this.resolveActivePlayers().length > 1) {
+        this.ctx.broadcastMonsterPlayerAttack({
+          targetPlayerId: '*',
+          monsterId: m.id,
+          monsterName: m.name,
+          role: 'mage',
+          damage: m.attack,
+          startX: m.x,
+          startY: m.y - 18,
+          targetX: strikeX,
+          targetY: strikeY,
+          telegraphRadius: 78,
+          telegraphDurationMs: 950,
+          telegraphColor: 0xa855f7,
         });
       }
       this.ctx.projectileSystem.fireProjectile({
@@ -224,13 +297,31 @@ export class MonsterRangedMageAI {
         color: 0xa855f7,
         onDetonate: () => {
           this.ctx.playExplosionAt(strikeX, strikeY);
-          const curPlayer = this.ctx.getLocalPlayerPosition();
-          if (Math.hypot(curPlayer.x - strikeX, curPlayer.y - strikeY) <= 82) {
-            this.ctx.damageLocalPlayer(m.attack, m.name);
-            this.applyVampiricHeal(mv);
+          if (!this.ctx.isLocalPlayerFainted()) {
+            const curPlayer = this.ctx.getLocalPlayerPosition();
+            if (Math.hypot(curPlayer.x - strikeX, curPlayer.y - strikeY) <= 82) {
+              this.ctx.damageLocalPlayer(m.attack, m.name);
+              this.applyVampiricHeal(mv);
+            }
           }
         },
       });
+      return;
+    }
+
+    if (isRemoteTarget && targetPlayerId) {
+      this.ctx.broadcastMonsterPlayerAttack?.({
+        targetPlayerId,
+        monsterId: m.id,
+        monsterName: m.name,
+        role: m.role ?? 'melee',
+        damage: m.attack,
+        startX: m.x,
+        startY: m.y,
+        targetX,
+        targetY,
+      });
+      this.applyVampiricHeal(mv);
       return;
     }
 

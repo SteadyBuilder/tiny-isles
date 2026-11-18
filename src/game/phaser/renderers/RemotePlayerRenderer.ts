@@ -50,6 +50,8 @@ export class RemotePlayerRenderer {
       this.remotePlayers.set(data.id, visual);
     }
 
+    visual.data = data;
+
     scene.tweens.killTweensOf(visual.container);
     if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
       visual.container.setPosition(data.x, data.y);
@@ -71,6 +73,19 @@ export class RemotePlayerRenderer {
     if (scene.anims.exists(animKey)) {
       visual.sprite.play(animKey, true);
     }
+  }
+
+  public getActivePlayers(): Array<{ id: string; x: number; y: number; isFainted: boolean }> {
+    const result: Array<{ id: string; x: number; y: number; isFainted: boolean }> = [];
+    for (const visual of this.remotePlayers.values()) {
+      result.push({
+        id: visual.data.id,
+        x: visual.container.x,
+        y: visual.container.y,
+        isFainted: Boolean(visual.data.isFainted),
+      });
+    }
+    return result;
   }
 
   public removePlayer(id: string): void {

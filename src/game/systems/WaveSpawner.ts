@@ -159,6 +159,7 @@ export class WaveSpawner {
   public applyRemoteSync(incomingList: Monster[]): void {
     const monsters = this.ctx.getMonsters();
     const incomingIds = new Set(incomingList.map((m) => m.id));
+    const now = performance.now();
 
     for (const [id, mv] of monsters.entries()) {
       if (!incomingIds.has(id)) {
@@ -172,13 +173,24 @@ export class WaveSpawner {
       if (incoming.hp <= 0) continue;
       const existing = monsters.get(incoming.id);
       if (existing) {
-        const prevHp = existing.monster.hp;
-        existing.monster.x = incoming.x;
-        existing.monster.y = incoming.y;
-        existing.monster.hp = incoming.hp;
-        existing.monster.maxHp = incoming.maxHp;
-        existing.monster.direction = incoming.direction;
-        existing.monster.targetTerritoryId = incoming.targetTerritoryId;
+        const m = existing.monster;
+        const prevHp = m.hp;
+        const prevShield = m.shieldHp ?? 0;
+        m.x = incoming.x;
+        m.y = incoming.y;
+        m.hp = incoming.hp;
+        m.maxHp = incoming.maxHp;
+        m.direction = incoming.direction;
+        m.targetTerritoryId = incoming.targetTerritoryId;
+
+        if ((incoming.shieldHp ?? 0) > 0) {
+          m.shieldHp = incoming.shieldHp;
+          m.shieldMaxHp = incoming.shieldMaxHp ?? Math.max(m.shieldMaxHp ?? 0, incoming.shieldHp ?? 0);
+          m.shieldUntil = now + 5000;
+        } else if (prevShield > 0) {
+          m.shieldHp = 0;
+          m.shieldUntil = 0;
+        }
 
         existing.container.setPosition(incoming.x, incoming.y);
         setDepthIfChanged(existing.container, ySortDepth(incoming.y, 28));
@@ -186,9 +198,9 @@ export class WaveSpawner {
 
         if (incoming.hp < prevHp) {
           this.ctx.shakeObject(existing.container);
-          MonsterVisualManager.updateHpBar(existing);
-        } else if (incoming.hp !== prevHp) {
-          MonsterVisualManager.updateHpBar(existing);
+          MonsterVisualManager.updateHpBar(existing, true);
+        } else if (incoming.hp !== prevHp || (incoming.shieldHp ?? 0) !== prevShield) {
+          MonsterVisualManager.updateHpBar(existing, false);
         }
       } else {
         const cloned: Monster = { ...incoming };

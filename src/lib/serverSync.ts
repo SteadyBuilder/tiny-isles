@@ -23,6 +23,7 @@ function warnTableMissing(tableName: string, details?: string) {
 // 레이스 컨디션 및 중복 브로드캐스트 필터링용 캐시
 const recentEvents = new Set<string>();
 const lastMoveTimestamps = new Map<string, number>();
+let broadcastSeq = 0;
 
 export const serverSync = {
   // --- 1. Supabase DB 영구 저장 동기화 ---
@@ -84,15 +85,20 @@ export const serverSync = {
     playerSyncManager.cancel();
   },
 
+  createEventId: (event: string, senderId: string): string => {
+    broadcastSeq = (broadcastSeq + 1) % 1_000_000_000;
+    return `${event}_${senderId}_${Date.now()}_${broadcastSeq}`;
+  },
+
   // --- 2. Realtime Broadcast 멀티플레이어 동기화 ---
   broadcast: <T extends object>(
     channel: RealtimeChannel | null,
     event: string,
-    payload: T,
+    payload: T & { eventId?: string },
     senderId: string
   ) => {
     if (!channel) return;
-    const eventId = `${event}_${senderId}_${Date.now()}`;
+    const eventId = payload.eventId || serverSync.createEventId(event, senderId);
     channel.send({
       type: 'broadcast',
       event,
@@ -106,7 +112,7 @@ export const serverSync = {
     if (!eventId) return true;
     if (recentEvents.has(eventId)) return false;
     recentEvents.add(eventId);
-    if (recentEvents.size > 80) {
+    if (recentEvents.size > 320) {
       const oldest = recentEvents.values().next().value;
       if (oldest) recentEvents.delete(oldest);
     }

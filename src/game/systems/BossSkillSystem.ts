@@ -1,16 +1,21 @@
 import Phaser from 'phaser';
 import { BossSkillId, Monster } from '../../types/game';
+import { ActivePlayerTarget, MonsterPlayerAttackPayload } from '../../types/monsterSync';
 import { sound } from '../../lib/sound';
 import { DEPTH } from '../depthLayers';
+import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
 
 export interface IBossSkillContext {
   scene: Phaser.Scene;
   getMonsters: () => Map<string, MonsterVisual>;
+  getLocalPlayerId?: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
+  getActivePlayers?: () => ActivePlayerTarget[];
   damageLocalPlayer: (damage: number, attackerName: string) => void;
+  broadcastMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   projectileSystem?: ProjectileSystem;
   playExplosionAt: (x: number, y: number) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
@@ -31,27 +36,48 @@ export class BossSkillSystem {
     this.ctx = ctx;
   }
 
+  private resolveActivePlayers(): ActivePlayerTarget[] {
+    if (this.ctx.getActivePlayers) {
+      return this.ctx.getActivePlayers();
+    }
+    const pos = this.ctx.getLocalPlayerPosition();
+    return [
+      {
+        id: this.ctx.getLocalPlayerId?.() ?? 'local',
+        x: pos.x,
+        y: pos.y,
+        isFainted: this.ctx.isLocalPlayerFainted(),
+      },
+    ];
+  }
+
   public tryCastSkill(mv: MonsterVisual, time: number): void {
     const m = mv.monster;
-    if (!m.isBoss || m.hp <= 0 || this.ctx.isLocalPlayerFainted()) return;
+    if (!m.isBoss || m.hp <= 0) return;
 
     const lastCast = this.lastSkillTimeMap.get(m.id) ?? 0;
     if (time - lastCast < BOSS_SKILL_COOLDOWN_MS) return;
 
-    const { x: px, y: py } = this.ctx.getLocalPlayerPosition();
-    const dist = Math.hypot(px - m.x, py - m.y);
-    if (dist > BOSS_SKILL_TRIGGER_RANGE_PX) return;
+    const players = this.resolveActivePlayers();
+    const targetMatch = findTargetPlayerForMonster(m.x, m.y, players, BOSS_SKILL_TRIGGER_RANGE_PX);
+    if (!targetMatch) return;
 
     this.lastSkillTimeMap.set(m.id, time);
     const skillId: BossSkillId = m.bossSkillId ?? 'shockwave';
-    this.executeSkill(mv, skillId, px, py);
+    this.executeSkill(mv, skillId, targetMatch.player.x, targetMatch.player.y, players.length > 1);
+  }
+
+  private emitRemoteBossAttack(payload: MonsterPlayerAttackPayload, isCoop: boolean): void {
+    if (!isCoop) return;
+    this.ctx.broadcastMonsterPlayerAttack?.(payload);
   }
 
   private executeSkill(
     mv: MonsterVisual,
     skillId: BossSkillId,
     targetX: number,
-    targetY: number
+    targetY: number,
+    isCoop: boolean
   ): void {
     const m = mv.monster;
     const ps = this.ctx.projectileSystem;
@@ -59,6 +85,25 @@ export class BossSkillSystem {
     switch (skillId) {
       case 'shockwave': {
         this.ctx.showFloatingText(m.x, m.y - 70, '💥 암흑 충격파!', '#f87171');
+        const dmg = Math.round(m.attack * 1.45);
+        this.emitRemoteBossAttack(
+          {
+            targetPlayerId: '*',
+            monsterId: m.id,
+            monsterName: m.name,
+            role: m.role ?? 'melee',
+            damage: dmg,
+            startX: m.x,
+            startY: m.y,
+            targetX: m.x,
+            targetY: m.y,
+            isBossSkill: true,
+            telegraphRadius: 175,
+            telegraphDurationMs: 750,
+            telegraphColor: 0xef4444,
+          },
+          isCoop
+        );
         if (ps) {
           ps.spawnTelegraphZone({
             x: m.x,
@@ -68,7 +113,7 @@ export class BossSkillSystem {
             color: 0xef4444,
             onDetonate: () => {
               this.spawnFxBurst(m.x, m.y, 'shockwaveRingFx', 280, 0xf87171);
-              this.damagePlayerInRadius(m.x, m.y, 175, Math.round(m.attack * 1.45), m.name);
+              this.damagePlayerInRadius(m.x, m.y, 175, dmg, m.name);
             },
           });
         }
@@ -76,6 +121,25 @@ export class BossSkillSystem {
       }
       case 'frost_nova': {
         this.ctx.showFloatingText(m.x, m.y - 70, '❄️ 혹한의 서리 폭발!', '#38bdf8');
+        const dmg = Math.round(m.attack * 1.4);
+        this.emitRemoteBossAttack(
+          {
+            targetPlayerId: '*',
+            monsterId: m.id,
+            monsterName: m.name,
+            role: m.role ?? 'mage',
+            damage: dmg,
+            startX: m.x,
+            startY: m.y,
+            targetX,
+            targetY,
+            isBossSkill: true,
+            telegraphRadius: 135,
+            telegraphDurationMs: 800,
+            telegraphColor: 0x38bdf8,
+          },
+          isCoop
+        );
         if (ps) {
           ps.spawnTelegraphZone({
             x: targetX,
@@ -85,7 +149,7 @@ export class BossSkillSystem {
             color: 0x38bdf8,
             onDetonate: () => {
               this.spawnFxBurst(targetX, targetY, 'frostNovaFx', 230, 0x38bdf8);
-              this.damagePlayerInRadius(targetX, targetY, 135, Math.round(m.attack * 1.4), m.name);
+              this.damagePlayerInRadius(targetX, targetY, 135, dmg, m.name);
             },
           });
         }
@@ -93,12 +157,28 @@ export class BossSkillSystem {
       }
       case 'void_barrage': {
         this.ctx.showFloatingText(m.x, m.y - 70, '🔱 공허 창기 탄막!', '#fbbf24');
+        const dmg = Math.round(m.attack * 0.9);
         if (ps) {
           const baseAngle = Math.atan2(targetY - m.y, targetX - m.x);
           for (let i = -2; i <= 2; i++) {
             const angle = baseAngle + i * 0.22;
             const destX = m.x + Math.cos(angle) * 440;
             const destY = m.y + Math.sin(angle) * 440;
+            this.emitRemoteBossAttack(
+              {
+                targetPlayerId: '*',
+                monsterId: m.id,
+                monsterName: m.name,
+                role: 'mage',
+                damage: dmg,
+                startX: m.x,
+                startY: m.y - 16,
+                targetX: destX,
+                targetY: destY,
+                isBossSkill: true,
+              },
+              isCoop
+            );
             ps.fireProjectile({
               startX: m.x,
               startY: m.y - 16,
@@ -109,7 +189,7 @@ export class BossSkillSystem {
               size: 40,
               isMagic: true,
               onArrive: () => {
-                this.damagePlayerInRadius(destX, destY, 64, Math.round(m.attack * 0.9), m.name);
+                this.damagePlayerInRadius(destX, destY, 64, dmg, m.name);
               },
             });
           }
@@ -124,19 +204,39 @@ export class BossSkillSystem {
       }
       case 'meteor_rain': {
         this.ctx.showFloatingText(m.x, m.y - 70, '☄️ 공허 운석 낙하!', '#c084fc');
+        const dmg = Math.round(m.attack * 1.35);
         if (ps) {
           for (let i = 0; i < 3; i++) {
             const ox = targetX + (Math.random() - 0.5) * 180;
             const oy = targetY + (Math.random() - 0.5) * 180;
+            const durationMs = 850 + i * 220;
+            this.emitRemoteBossAttack(
+              {
+                targetPlayerId: '*',
+                monsterId: m.id,
+                monsterName: m.name,
+                role: 'mage',
+                damage: dmg,
+                startX: m.x,
+                startY: m.y,
+                targetX: ox,
+                targetY: oy,
+                isBossSkill: true,
+                telegraphRadius: 105,
+                telegraphDurationMs: durationMs,
+                telegraphColor: 0xa855f7,
+              },
+              isCoop
+            );
             ps.spawnTelegraphZone({
               x: ox,
               y: oy,
               radius: 105,
-              durationMs: 850 + i * 220,
+              durationMs,
               color: 0xa855f7,
               onDetonate: () => {
                 this.spawnFxBurst(ox, oy, 'meteorRockFx', 190, 0xc084fc);
-                this.damagePlayerInRadius(ox, oy, 105, Math.round(m.attack * 1.35), m.name);
+                this.damagePlayerInRadius(ox, oy, 105, dmg, m.name);
               },
             });
           }
@@ -145,6 +245,7 @@ export class BossSkillSystem {
       }
       case 'lightning_judgment': {
         this.ctx.showFloatingText(m.x, m.y - 70, '⚡ 종말의 번개 심판!', '#fde047');
+        const dmg = Math.round(m.attack * 1.45);
         if (ps) {
           const offsets = [
             { x: targetX, y: targetY },
@@ -152,15 +253,34 @@ export class BossSkillSystem {
             { x: targetX - 115, y: targetY + 60 },
           ];
           offsets.forEach((pt, idx) => {
+            const durationMs = 700 + idx * 180;
+            this.emitRemoteBossAttack(
+              {
+                targetPlayerId: '*',
+                monsterId: m.id,
+                monsterName: m.name,
+                role: 'mage',
+                damage: dmg,
+                startX: m.x,
+                startY: m.y,
+                targetX: pt.x,
+                targetY: pt.y,
+                isBossSkill: true,
+                telegraphRadius: 95,
+                telegraphDurationMs: durationMs,
+                telegraphColor: 0xfde047,
+              },
+              isCoop
+            );
             ps.spawnTelegraphZone({
               x: pt.x,
               y: pt.y,
               radius: 95,
-              durationMs: 700 + idx * 180,
+              durationMs,
               color: 0xfde047,
               onDetonate: () => {
                 this.spawnFxBurst(pt.x, pt.y, 'lightningStrikeFx', 180, 0xfde047);
-                this.damagePlayerInRadius(pt.x, pt.y, 95, Math.round(m.attack * 1.45), m.name);
+                this.damagePlayerInRadius(pt.x, pt.y, 95, dmg, m.name);
               },
             });
           });

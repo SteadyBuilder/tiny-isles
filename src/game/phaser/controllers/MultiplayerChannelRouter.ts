@@ -1,13 +1,19 @@
 import {
   ConstructedBuilding,
   Entity,
-  Monster,
   Player,
   PlayerColor,
   VillageTier,
 } from '../../../types/game';
+import {
+  MonsterHitPayload,
+  MonsterPlayerAttackPayload,
+  MonstersDeltaSyncPayload,
+  MonstersFullSyncPayload,
+} from '../../../types/monsterSync';
 import { RoomMode } from '../../../types/room';
 import { INetworkTransport } from '../../../lib/contracts/INetworkTransport';
+import { serverSync } from '../../../lib/serverSync';
 import { LocalOfflineTransport } from '../../../lib/transports/LocalOfflineTransport';
 import { SupabaseRoomTransport } from '../../../lib/transports/SupabaseRoomTransport';
 import { GameEvents } from '../../events/gameEvents';
@@ -29,8 +35,11 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
   onRemoteWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
-  onRemoteMonstersSync: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
-  onRemoteMonsterHit: (monsterId: string, damage: number, attackerName: string) => void;
+  onRemoteMonstersSync: (payload: MonstersFullSyncPayload) => void;
+  onRemoteMonstersDeltaSync?: (payload: MonstersDeltaSyncPayload) => void;
+  onRemoteMonstersSyncRequest?: () => void;
+  onRemoteMonsterHit: (payload: MonsterHitPayload) => void;
+  onRemoteMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   onRemoteThreatAdded?: (amount: number) => void;
   onRemoteThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
@@ -54,6 +63,7 @@ export interface IMultiplayerChannelCallbacks {
 interface LocalBusEnvelope {
   type?: string;
   senderId?: string;
+  eventId?: string;
   payload?: unknown;
 }
 
@@ -66,6 +76,7 @@ export class MultiplayerChannelRouter {
   private localBus: BroadcastChannel | null = null;
   private unsubscribers: Array<() => void> = [];
   private isHost = true;
+  private presenceResolved = false;
 
   constructor(callbacks: IMultiplayerChannelCallbacks) {
     this.callbacks = callbacks;
@@ -79,6 +90,10 @@ export class MultiplayerChannelRouter {
     const playerId = this.callbacks.getPlayerId();
     const roomId = this.callbacks.getRoomId?.() || 'default_room';
     const roomMode: RoomMode = this.callbacks.getRoomMode?.() || 'solo';
+
+    // 협동 모드에서는 Presence가 첫 동기화될 때까지 임의 스폰을 막기 위해 false로 시작
+    this.isHost = roomMode === 'solo';
+    this.presenceResolved = roomMode === 'solo';
 
     this.transport =
       customTransport ??
@@ -102,8 +117,14 @@ export class MultiplayerChannelRouter {
     remotePayload: object = localPayload
   ): void {
     const playerId = this.callbacks.getPlayerId();
-    this.localBus?.postMessage({ type: localType, senderId: playerId, payload: localPayload });
-    this.transport?.emit(remoteEvent, remotePayload);
+    const eventId = serverSync.createEventId(remoteEvent, playerId);
+    this.localBus?.postMessage({
+      type: localType,
+      senderId: playerId,
+      eventId,
+      payload: localPayload,
+    });
+    this.transport?.emit(remoteEvent, { ...remotePayload, eventId });
   }
 
   public destroy(): void {
@@ -122,103 +143,12 @@ export class MultiplayerChannelRouter {
     }
   }
 
-  private bindTransportEvents(): void {
-    const t = this.transport;
-    if (!t) return;
-
-    this.unsubscribers.push(
-      t.onPresenceSync((snapshot) => {
-        if (this.isHost !== snapshot.isHost) {
-          this.isHost = snapshot.isHost;
-          this.callbacks.onHostStatusChanged?.(snapshot.isHost);
-        }
-        this.callbacks.onOnlineCountChanged(snapshot.onlineCount);
-        GameEvents.emit('online-count-changed', snapshot.onlineCount);
-        GameEvents.emit('room-members-updated', snapshot.members);
-      }),
-      t.onPlayerLeave((playerId) => {
-        this.callbacks.onRemotePlayerLeave(playerId);
-      }),
-      t.on<Player>('player_move', (p) => this.callbacks.onRemotePlayerMove(p)),
-      t.on<{ entityId: string; damage: number; hitBy: string }>('entity_hit', (p) =>
-        this.callbacks.onRemoteEntityHit(p.entityId, p.damage, p.hitBy)
-      ),
-      t.on<{ islandId: number; unlockedBy: string; ownerId?: string }>('island_unlocked', (p) =>
-        this.callbacks.onRemoteIslandUnlocked(p.islandId, p.unlockedBy, p.ownerId)
-      ),
-      t.on<{ territoryId: number }>('village_upgraded', (p) =>
-        this.callbacks.onRemoteVillageUpgraded(p.territoryId)
-      ),
-      t.on<{ building: ConstructedBuilding }>('building_constructed', (p) => {
-        if (p.building) this.callbacks.onRemoteBuildingConstructed(p.building);
-      }),
-      t.on<{ isBossWave: boolean }>('wave_spawned', (p) =>
-        this.callbacks.onRemoteWaveSpawned(p.isBossWave)
-      ),
-      t.on<{ isBossWave: boolean; isEarlySummon: boolean }>('wave_summon_request', (p) =>
-        this.callbacks.onRemoteWaveSummonRequest?.(Boolean(p.isBossWave), Boolean(p.isEarlySummon))
-      ),
-      t.on<{ monsters: Monster[]; waveCount: number; bossWaveCount: number }>('monsters_sync', (p) =>
-        this.callbacks.onRemoteMonstersSync(p.monsters || [], p.waveCount ?? 0, p.bossWaveCount ?? 0)
-      ),
-      t.on<{ monsterId: string; damage: number; attackerName: string }>('monster_hit', (p) =>
-        this.callbacks.onRemoteMonsterHit(p.monsterId, p.damage, p.attackerName)
-      ),
-      t.on<{ amount: number }>('threat_added', (p) =>
-        this.callbacks.onRemoteThreatAdded?.(Number(p.amount ?? 0))
-      ),
-      t.on<{ threatPercent: number; waveCount: number; bossWaveCount: number }>('threat_sync', (p) =>
-        this.callbacks.onRemoteThreatSync?.(
-          Number(p.threatPercent ?? 0),
-          Number(p.waveCount ?? 0),
-          Number(p.bossWaveCount ?? 0)
-        )
-      ),
-      t.on<{ territoryId: number; reason?: string }>('territory_lost', (p) =>
-        this.callbacks.onRemoteTerritoryLost(p.territoryId, p.reason || '마물 군단')
-      ),
-      t.on<{ buildingId: string; hp: number; maxHp: number; damageDelta?: number }>(
-        'building_hp_sync',
-        (p) => this.callbacks.onRemoteBuildingHpSync?.(p.buildingId, p.hp, p.maxHp, p.damageDelta)
-      ),
-      t.on<{ buildingId: string }>('building_destroyed', (p) =>
-        this.callbacks.onRemoteBuildingDestroyed?.(p.buildingId)
-      ),
-      t.on<{ territoryId: number; coreHp: number; coreMaxHp: number; damageDelta?: number }>(
-        'core_hp_sync',
-        (p) =>
-          this.callbacks.onRemoteCoreHpSync?.(p.territoryId, p.coreHp, p.coreMaxHp, p.damageDelta)
-      ),
-      t.on<{ territoryId: number }>('repair_territory_request', (p) =>
-        this.callbacks.onRemoteRepairTerritoryRequest?.(p.territoryId)
-      ),
-      t.on<{ entity: Entity }>('entity_respawned', (p) => {
-        if (p.entity) this.callbacks.onRemoteEntityRespawned?.(p.entity);
-      }),
-      t.on<{ resetAt: string; attackerName: string }>('world_defense_failed', (p) => {
-        if (p.resetAt) {
-          this.callbacks.onRemoteWorldDefenseFailed?.(p.resetAt, p.attackerName || '마물 군단');
-        }
-      })
-    );
-  }
-
-  private setupLocalBus(playerId: string, roomId: string): void {
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
-    this.localBus = new BroadcastChannel(`tiny_isles_room_${roomId}`);
-    this.localBus.onmessage = (event: MessageEvent<LocalBusEnvelope>) => {
-      const data = event.data;
-      if (!data || data.senderId === playerId || !data.type) return;
-      this.handleLocalMessage(data.type, data.payload);
-    };
-  }
-
-  private handleLocalMessage(type: string, payload: unknown): void {
-    switch (type) {
+  private dispatchSharedEvent(eventName: string, payload: unknown): void {
+    switch (eventName) {
       case 'player_move':
         this.callbacks.onRemotePlayerMove(payload as Player);
         break;
-      case 'hit': {
+      case 'entity_hit': {
         const p = payload as { entityId: string; damage: number; hitBy: string };
         this.callbacks.onRemoteEntityHit(p.entityId, p.damage, p.hitBy);
         break;
@@ -231,9 +161,6 @@ export class MultiplayerChannelRouter {
       case 'village_upgraded':
         this.callbacks.onRemoteVillageUpgraded((payload as { territoryId: number }).territoryId);
         break;
-      case 'building_constructed':
-        this.callbacks.onRemoteBuildingConstructed(payload as ConstructedBuilding);
-        break;
       case 'wave_spawned':
         this.callbacks.onRemoteWaveSpawned((payload as { isBossWave: boolean }).isBossWave);
         break;
@@ -243,15 +170,29 @@ export class MultiplayerChannelRouter {
         break;
       }
       case 'monsters_sync': {
-        const p = payload as { monsters: Monster[]; waveCount: number; bossWaveCount: number };
-        this.callbacks.onRemoteMonstersSync(p.monsters || [], p.waveCount ?? 0, p.bossWaveCount ?? 0);
+        const p = payload as Partial<MonstersFullSyncPayload>;
+        this.callbacks.onRemoteMonstersSync({
+          monsters: p.monsters || [],
+          waveCount: p.waveCount ?? 0,
+          bossWaveCount: p.bossWaveCount ?? 0,
+          syncId: p.syncId,
+          chunkIndex: p.chunkIndex,
+          totalChunks: p.totalChunks,
+        });
         break;
       }
-      case 'monster_hit': {
-        const p = payload as { monsterId: string; damage: number; attackerName: string };
-        this.callbacks.onRemoteMonsterHit(p.monsterId, p.damage, p.attackerName);
+      case 'monsters_delta_sync':
+        this.callbacks.onRemoteMonstersDeltaSync?.(payload as MonstersDeltaSyncPayload);
         break;
-      }
+      case 'monsters_sync_request':
+        this.callbacks.onRemoteMonstersSyncRequest?.();
+        break;
+      case 'monster_hit':
+        this.callbacks.onRemoteMonsterHit(payload as MonsterHitPayload);
+        break;
+      case 'monster_player_attack':
+        this.callbacks.onRemoteMonsterPlayerAttack?.(payload as MonsterPlayerAttackPayload);
+        break;
       case 'threat_added':
         this.callbacks.onRemoteThreatAdded?.(Number((payload as { amount: number }).amount ?? 0));
         break;
@@ -290,6 +231,80 @@ export class MultiplayerChannelRouter {
         if (p.entity) this.callbacks.onRemoteEntityRespawned?.(p.entity);
         break;
       }
+      case 'world_defense_failed': {
+        const p = payload as { resetAt: string; attackerName: string };
+        if (p.resetAt) {
+          this.callbacks.onRemoteWorldDefenseFailed?.(p.resetAt, p.attackerName || '마물 군단');
+        }
+        break;
+      }
     }
+  }
+
+  private bindTransportEvents(): void {
+    const t = this.transport;
+    if (!t) return;
+
+    const sharedEvents = [
+      'player_move',
+      'entity_hit',
+      'island_unlocked',
+      'village_upgraded',
+      'wave_spawned',
+      'wave_summon_request',
+      'monsters_sync',
+      'monsters_delta_sync',
+      'monsters_sync_request',
+      'monster_hit',
+      'monster_player_attack',
+      'threat_added',
+      'threat_sync',
+      'territory_lost',
+      'building_hp_sync',
+      'building_destroyed',
+      'core_hp_sync',
+      'repair_territory_request',
+      'entity_respawned',
+      'world_defense_failed',
+    ] as const;
+
+    this.unsubscribers.push(
+      t.onPresenceSync((snapshot) => {
+        const hostResolutionChanged = !this.presenceResolved || this.isHost !== snapshot.isHost;
+        this.presenceResolved = true;
+        this.isHost = snapshot.isHost;
+        this.callbacks.onOnlineCountChanged(snapshot.onlineCount);
+        GameEvents.emit('online-count-changed', snapshot.onlineCount);
+        GameEvents.emit('room-members-updated', snapshot.members);
+        if (hostResolutionChanged) {
+          this.callbacks.onHostStatusChanged?.(snapshot.isHost);
+        }
+      }),
+      t.onPlayerLeave((playerId) => {
+        this.callbacks.onRemotePlayerLeave(playerId);
+      }),
+      t.on<{ building: ConstructedBuilding }>('building_constructed', (p) => {
+        if (p.building) this.callbacks.onRemoteBuildingConstructed(p.building);
+      }),
+      ...sharedEvents.map((ev) => t.on(ev, (p) => this.dispatchSharedEvent(ev, p)))
+    );
+  }
+
+  private setupLocalBus(playerId: string, roomId: string): void {
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    this.localBus = new BroadcastChannel(`tiny_isles_room_${roomId}`);
+    this.localBus.onmessage = (event: MessageEvent<LocalBusEnvelope>) => {
+      const data = event.data;
+      if (!data || !data.type) return;
+      if (!serverSync.isValidIncomingEvent(data.eventId, data.senderId, playerId)) return;
+
+      if (data.type === 'hit') {
+        this.dispatchSharedEvent('entity_hit', data.payload);
+      } else if (data.type === 'building_constructed') {
+        this.callbacks.onRemoteBuildingConstructed(data.payload as ConstructedBuilding);
+      } else {
+        this.dispatchSharedEvent(data.type, data.payload);
+      }
+    };
   }
 }

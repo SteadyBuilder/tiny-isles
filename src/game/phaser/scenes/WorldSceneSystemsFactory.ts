@@ -1,8 +1,5 @@
 import Phaser from 'phaser';
 import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
-import { FIELD_MONSTER_CONFIG } from '../../../data/fieldMonsters';
-import { POTION_DEFINITIONS, rollMonsterLoot } from '../../../data/potions';
-import { THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import {
   ConstructedBuilding,
@@ -19,6 +16,11 @@ import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { FieldMonsterSystem } from '../../systems/FieldMonsterSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
 import { MonsterCampSystem } from '../../systems/MonsterCampSystem';
+import {
+  MonsterRewardContext,
+  distributeHostMonsterKillReward,
+  distributeRemoteMonsterKillReward,
+} from '../../systems/MonsterRewardDistributor';
 import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
 import { PlayerProgressionSystem } from '../../systems/PlayerProgressionSystem';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
@@ -181,100 +183,47 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     onDefenseFailedReset: () => host.onCoreDestroyed?.(),
   });
 
+  const rewardContext: MonsterRewardContext = {
+    isHuntingMode: host.isHuntingMode,
+    getDifficultyId: () => host.getDifficultyConfig?.().id ?? 'normal',
+    getLocalPlayerId: host.getPlayerId,
+    getLocalPlayerPosition: host.getPlayerPosition,
+    addThreat: (amount) => waveSystem.addThreat(amount, true),
+    emitThreatOrb: (worldX, worldY, amount) =>
+      host.effectsRenderer.emitThreatOrbFromWorld(worldX, worldY, amount),
+    addResources: host.addResources,
+    gainExp: (exp) => playerProgressionSystem?.gainExp(exp),
+    grantRewardItem: (item) => playerProgressionSystem?.grantRewardItem(item),
+    grantPotion: (potionId, count) => playerProgressionSystem?.grantPotion(potionId, count) ?? 0,
+    playChestDrop: (x, y, item, onOpened) =>
+      host.lootChestRenderer.playDropAnimation({ x, y, item, onOpened }),
+    playLootIconDrop: (x, y, textureKey, glowColorHex) =>
+      host.lootChestRenderer.playLootIconDrop({ x, y, textureKey, glowColorHex }),
+    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+  };
+
   waveSystem = new WaveSystem(
     {
       scene: host.scene,
+      initialIsHost: host.getRoomMode?.() !== 'coop',
       isHuntingMode: host.isHuntingMode,
       getDifficultyConfig: host.getDifficultyConfig,
       projectileSystem,
       healCampCore: (territoryId, amount) => monsterCampSystem?.healCampCore(territoryId, amount),
       onMonsterHitImpact: (opts, restoreTint) =>
         host.combatFeedbackRenderer.playHitImpact(opts, restoreTint),
-      onMonsterKilledReward: (x, y, isBoss, expReward, isCampMonster, meta) => {
-        playerProgressionSystem?.gainExp(expReward);
-        // 사냥 특화 모드에서는 던전 침공 마물 처치 시 위협도 미증가, 부락 마물(+5%) 및 야생 필드 마물(+1%) 처치 시 상승
-        if (isCampMonster || !host.isHuntingMode()) {
-          waveSystem.addThreat(THREAT_WAVE_CONFIG.huntThreatGain, true);
-          host.effectsRenderer.emitThreatOrbFromWorld(x, y, THREAT_WAVE_CONFIG.huntThreatGain);
-        } else if (meta?.isFieldMonster) {
-          const fieldGain = FIELD_MONSTER_CONFIG.threatGainOnKill;
-          waveSystem.addThreat(fieldGain, true);
-          host.effectsRenderer.emitThreatOrbFromWorld(x, y, fieldGain);
-        }
-        // 몬스터 처치 시 밸런스 테이블 기반 장비·물약·자원 꾸러미 드랍
-        const difficultyId = host.getDifficultyConfig?.().id ?? 'normal';
-        const lootResults = rollMonsterLoot({
-          ring: meta?.campRing ?? 2,
-          isElite: Boolean(meta?.isElite),
+      onMonsterKilledReward: (x, y, isBoss, expReward, isCampMonster, meta) =>
+        distributeHostMonsterKillReward(
+          rewardContext,
+          x,
+          y,
           isBoss,
-          isHuntingMode: host.isHuntingMode(),
-          difficultyId,
-          eliteTier: meta?.eliteTier,
-        });
-
-        for (const loot of lootResults) {
-          if (loot.kind === 'equipment') {
-            host.lootChestRenderer.playDropAnimation({
-              x,
-              y,
-              item: loot.item,
-              onOpened: (openedItem) => {
-                playerProgressionSystem?.grantRewardItem(openedItem);
-                GameEvents.emit(
-                  'game-alert',
-                  `💎 전리품 드랍! [${openedItem.name}] 획득!`
-                );
-              },
-            });
-          } else if (loot.kind === 'potion') {
-            const added = playerProgressionSystem?.grantPotion(loot.potionId, loot.count) ?? 0;
-            const def = POTION_DEFINITIONS[loot.potionId];
-            if (added > 0 && def) {
-              sound.playGemDrop();
-              host.lootChestRenderer.playLootIconDrop({
-                x,
-                y,
-                textureKey: def.textureKey,
-                glowColorHex: '#4ade80',
-              });
-              host.effectsRenderer.showFloatingText(
-                x,
-                y - 26,
-                `${def.name} +${added}`,
-                '#4ade80'
-              );
-              GameEvents.emit(
-                'game-alert',
-                `🧪 몬스터가 [${def.name}]을(를) 드랍했습니다!`
-              );
-            }
-          } else if (loot.kind === 'resource') {
-            const { wood, stone, gold, label, icon, textureKey } = loot.bundle;
-            host.addResources(wood, stone, gold);
-            const parts: string[] = [];
-            if (wood > 0) parts.push(`🪵+${wood}`);
-            if (stone > 0) parts.push(`🪨+${stone}`);
-            if (gold > 0) parts.push(`🪙+${gold}`);
-            if (parts.length > 0) {
-              host.lootChestRenderer.playLootIconDrop({
-                x,
-                y,
-                textureKey,
-                glowColorHex: '#fbbf24',
-              });
-              host.effectsRenderer.showFloatingText(
-                x,
-                y - 12,
-                `${parts.join(' ')}`,
-                '#fde047'
-              );
-              if (isBoss || meta?.isElite) {
-                GameEvents.emit('game-alert', `${icon} ${label} 획득! (${parts.join(' ')})`);
-              }
-            }
-          }
-        }
-      },
+          expReward,
+          isCampMonster,
+          meta
+        ),
+      onRemoteMonsterKilledReward: (kill) =>
+        distributeRemoteMonsterKillReward(rewardContext, kill),
       getIslands: host.getIslands,
       getConstructedBuildings: host.getConstructedBuildings,
       destroyConstructedBuilding: host.destroyConstructedBuilding,
@@ -290,6 +239,17 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       getLocalPlayerId: host.getPlayerId,
       getLocalPlayerPosition: host.getPlayerPosition,
       isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
+      getActivePlayers: () =>
+        multiplayerSync?.getActivePlayers(
+          host.getPlayerPosition(),
+          playerHealthSystem.isFainted()
+        ) ?? [
+          {
+            id: host.getPlayerId(),
+            ...host.getPlayerPosition(),
+            isFainted: playerHealthSystem.isFainted(),
+          },
+        ],
       damageLocalPlayer: (dmg, attacker) => playerHealthSystem.damagePlayer(dmg, attacker),
       showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
       shakeObject: (target) => host.effectsRenderer.shakeObject(target),
@@ -298,10 +258,13 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       broadcastWaveSpawn: (isBossWave) => multiplayerSync?.broadcastWaveSpawn(isBossWave),
       broadcastWaveSummonRequest: (isBossWave, isEarlySummon) =>
         multiplayerSync?.broadcastWaveSummonRequest(isBossWave, isEarlySummon),
-      broadcastMonstersSync: (monsters, waveCount, bossWaveCount) =>
-        multiplayerSync?.broadcastMonstersSync(monsters, waveCount, bossWaveCount),
-      broadcastMonsterHit: (monsterId, damage, attackerName) =>
-        multiplayerSync?.broadcastMonsterHit(monsterId, damage, attackerName),
+      broadcastMonstersSync: (payload) => multiplayerSync?.broadcastMonstersSync(payload),
+      broadcastMonstersDeltaSync: (payload) =>
+        multiplayerSync?.broadcastMonstersDeltaSync(payload),
+      requestMonstersSync: () => multiplayerSync?.requestMonstersSync(),
+      broadcastMonsterHit: (payload) => multiplayerSync?.broadcastMonsterHit(payload),
+      broadcastMonsterPlayerAttack: (payload) =>
+        multiplayerSync?.broadcastMonsterPlayerAttack(payload),
       broadcastThreatAdded: (amount) => multiplayerSync?.broadcastThreatAdded(amount),
       broadcastThreatSync: (threatPercent, waveCount, bossWaveCount) =>
         multiplayerSync?.broadcastThreatSync(threatPercent, waveCount, bossWaveCount),
@@ -382,6 +345,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
   monsterCampSystem = new MonsterCampSystem({
     scene: host.scene,
     isHuntingMode: host.isHuntingMode,
+    isHost: () => waveSystem.getIsHost(),
     getDifficultyConfig: host.getDifficultyConfig,
     getIslands: host.getIslands,
     getMonsters: () => waveSystem.getMonsterVisuals(),
@@ -442,6 +406,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getPlayerColor: host.getPlayerColor,
     getRoomId: host.getRoomId,
     getRoomMode: host.getRoomMode,
+    isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
     getLocalPlayerState: host.getLocalPlayerState,
     onOnlineCountChanged: (count) => {
       waveSystem.setOnlineCount(count);
@@ -450,10 +415,21 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       if (waveSystem.getIsHost()) {
         const ws = waveSystem.getWaveState();
         multiplayerSync?.broadcastThreatSync(ws.threatPercent, ws.waveCount, ws.bossWaveCount);
+        if (count > 1) {
+          waveSystem.broadcastFullMonstersSync(true);
+        }
       }
     },
     onHostStatusChanged: (isHost) => {
       waveSystem.setHostMode(isHost);
+      if (isHost) {
+        monsterCampSystem.ensureHostGarrisonsSpawned();
+        fieldMonsterSystem.ensureHostInitialized();
+        waveSystem.broadcastFullMonstersSync(true);
+      } else {
+        fieldMonsterSystem.resetForGuest();
+        monsterCampSystem.resetGuestGarrisonState();
+      }
     },
     onRemoteEntityHit: (entityId, damage) =>
       host.resourceEntityRenderer.handleRemoteHit(entityId, damage),
@@ -474,13 +450,22 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     },
     onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
       waveSystem.handleRemoteWaveSummonRequest(isBossWave, isEarlySummon),
-    onRemoteMonstersSync: (monsters, waveCount, bossWaveCount) =>
-      waveSystem.applyRemoteMonstersSync(monsters, waveCount, bossWaveCount),
-    onRemoteMonsterHit: (monsterId, damage, attackerName) => {
+    onRemoteMonstersSync: (payload) => waveSystem.applyRemoteMonstersSync(payload),
+    onRemoteMonstersDeltaSync: (payload) => waveSystem.applyRemoteMonstersDeltaSync(payload),
+    onRemoteMonstersSyncRequest: () => waveSystem.handleRemoteMonstersSyncRequest(),
+    onRemoteMonsterHit: (payload) => {
       if (waveSystem.getIsHost()) {
-        waveSystem.damageMonster(monsterId, damage, attackerName, true);
+        waveSystem.damageMonster(
+          payload.monsterId,
+          payload.damage,
+          payload.attackerName,
+          true,
+          payload.attackerId,
+          { isCrit: payload.isCrit, isSkill: payload.isSkill }
+        );
       }
     },
+    onRemoteMonsterPlayerAttack: (payload) => waveSystem.handleRemoteMonsterPlayerAttack(payload),
     onRemoteThreatAdded: (amount) => {
       if (waveSystem.getIsHost()) {
         waveSystem.addThreat(amount, false);

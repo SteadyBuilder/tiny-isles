@@ -39,6 +39,7 @@ interface CampVisualNode {
 export interface IMonsterCampContext {
   scene: Phaser.Scene;
   isHuntingMode: () => boolean;
+  isHost?: () => boolean;
   getDifficultyConfig?: () => MissionDifficultyConfig;
   getIslands: () => Island[];
   getMonsters: () => Map<string, MonsterVisual>;
@@ -72,9 +73,14 @@ export class MonsterCampSystem {
   private onlineCount = 1;
   private appliedHpMult = 1;
   private appliedAtkMult = 1;
+  private garrisonsInitialized = false;
 
   constructor(ctx: IMonsterCampContext) {
     this.ctx = ctx;
+  }
+
+  private isHost(): boolean {
+    return this.ctx.isHost?.() ?? true;
   }
 
   private getDifficultyMultipliers(): HuntingScalingFactors {
@@ -115,6 +121,8 @@ export class MonsterCampSystem {
       }
     }
 
+    if (!this.isHost()) return;
+
     for (const mv of this.ctx.getMonsters().values()) {
       const m = mv.monster;
       if (!m.isCampMonster || m.hp <= 0) continue;
@@ -132,6 +140,7 @@ export class MonsterCampSystem {
     const { hpMult, atkMult } = this.getDifficultyMultipliers();
     this.appliedHpMult = hpMult;
     this.appliedAtkMult = atkMult;
+    const hostAuthoritative = this.isHost();
     const islands = this.ctx.getIslands();
     for (const isl of islands) {
       if (isl.id === 0) continue; // 중앙 본거지(id: 0)만 유일한 수호 마을로 유지
@@ -166,10 +175,34 @@ export class MonsterCampSystem {
       const node = this.createCampVisual(campState, tpl.buildingSprite);
       this.campNodes.set(isl.id, node);
       this.ctx.fortification?.spawnForCamp(campState, hpMult, atkMult);
-      this.spawnCampGarrison(campState);
+      if (hostAuthoritative) {
+        this.spawnCampGarrison(campState);
+      }
     }
+    this.garrisonsInitialized = hostAuthoritative;
 
     this.ctx.emitTerritoriesUpdated();
+  }
+
+  public ensureHostGarrisonsSpawned(): void {
+    if (!this.ctx.isHuntingMode() || !this.isHost() || this.garrisonsInitialized) return;
+    if (this.campNodes.size === 0) return;
+
+    const hasMigratedCampMonsters = Array.from(this.ctx.getMonsters().values()).some(
+      (mv) => mv.monster.isCampMonster && mv.monster.hp > 0
+    );
+    if (!hasMigratedCampMonsters) {
+      for (const node of this.campNodes.values()) {
+        if (!node.camp.destroyed) {
+          this.spawnCampGarrison(node.camp);
+        }
+      }
+    }
+    this.garrisonsInitialized = true;
+  }
+
+  public resetGuestGarrisonState(): void {
+    this.garrisonsInitialized = false;
   }
 
   private createCampVisual(
@@ -580,7 +613,9 @@ export class MonsterCampSystem {
         }
 
         this.ctx.fortification?.spawnForCamp(camp, hpMult, atkMult);
-        this.spawnCampGarrison(camp);
+        if (this.isHost()) {
+          this.spawnCampGarrison(camp);
+        }
         anyChanged = true;
         GameEvents.emit(
           'game-alert',

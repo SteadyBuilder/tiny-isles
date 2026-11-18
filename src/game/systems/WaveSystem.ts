@@ -6,14 +6,23 @@ import {
   Monster,
   WaveState,
 } from '../../types/game';
+import {
+  ActivePlayerTarget,
+  MonsterHitPayload,
+  MonsterKillSyncPayload,
+  MonsterPlayerAttackPayload,
+  MonstersDeltaSyncPayload,
+  MonstersFullSyncPayload,
+} from '../../types/monsterSync';
 import { MissionDifficultyConfig } from '../../types/room';
-import { THREAT_WAVE_CONFIG, WORLD_CLOCK_CONFIG } from '../../data/worldRules';
+import { MONSTER_SYNC_CONFIG, THREAT_WAVE_CONFIG, WORLD_CLOCK_CONFIG } from '../../data/worldRules';
 import { GameEvents } from '../events/gameEvents';
 import { sound } from '../../lib/sound';
 import { getDynamicScalingProfile } from '../utils/worldClockUtils';
 import { CoreGemSystem } from './CoreGemSystem';
 import { DungeonInvasionSpawner } from './DungeonInvasionSpawner';
-import { MonsterCombatAI } from './MonsterCombatAI';
+import { MonsterCombatAI, MonsterKilledMeta } from './MonsterCombatAI';
+import { MonsterSyncCoordinator } from './MonsterSyncCoordinator';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
 import { WaveSpawner } from './WaveSpawner';
@@ -22,6 +31,7 @@ export type { MonsterVisual };
 
 export interface IWaveSystemContext {
   scene: Phaser.Scene;
+  initialIsHost?: boolean;
   isHuntingMode?: () => boolean;
   getDifficultyConfig?: () => MissionDifficultyConfig;
   projectileSystem?: ProjectileSystem;
@@ -33,13 +43,9 @@ export interface IWaveSystemContext {
     isBoss: boolean,
     expReward: number,
     isCampMonster: boolean,
-    meta?: {
-      isElite: boolean;
-      isFieldMonster?: boolean;
-      campRing?: 1 | 2 | 3 | 4;
-      eliteTier?: import('../../types/hunting').FieldEliteTier;
-    }
+    meta?: MonsterKilledMeta
   ) => void;
+  onRemoteMonsterKilledReward?: (kill: MonsterKillSyncPayload) => void;
   getIslands: () => Island[];
   getConstructedBuildings: () => ConstructedBuilding[];
   destroyConstructedBuilding: (buildingId: string) => void;
@@ -49,6 +55,7 @@ export interface IWaveSystemContext {
   getLocalPlayerId: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
+  getActivePlayers?: () => ActivePlayerTarget[];
   damageLocalPlayer: (damage: number, attackerName: string) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
@@ -56,8 +63,11 @@ export interface IWaveSystemContext {
   addRewardResources: (wood: number, stone: number, gold: number) => void;
   broadcastWaveSpawn?: (isBossWave: boolean) => void;
   broadcastWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
-  broadcastMonstersSync?: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
-  broadcastMonsterHit?: (monsterId: string, damage: number, attackerName: string) => void;
+  broadcastMonstersSync?: (payload: MonstersFullSyncPayload) => void;
+  broadcastMonstersDeltaSync?: (payload: MonstersDeltaSyncPayload) => void;
+  requestMonstersSync?: () => void;
+  broadcastMonsterHit?: (payload: MonsterHitPayload) => void;
+  broadcastMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   broadcastThreatAdded?: (amount: number) => void;
   broadcastThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   emitThreatOrb?: (worldX: number, worldY: number, amount: number) => void;
@@ -79,14 +89,20 @@ export class WaveSystem {
   private combatAI: MonsterCombatAI;
   private spawner: WaveSpawner;
   private dungeonSpawner: DungeonInvasionSpawner;
+  private syncCoordinator = new MonsterSyncCoordinator();
   private monsters = new Map<string, MonsterVisual>();
-  private isHost = true;
+  private isHost: boolean;
   private onlineCount = 1;
   private activeBonusMultiplier = 1.0;
   private warningIssuedForCurrentCycle = false;
   private countdownRemainingMs: number | null = null;
   private monsterSyncAccumMs = 0;
-  private hadMonstersLastTick = false;
+  private lastFullSyncSentAt = 0;
+  private lastGuestSyncRequestAt = 0;
+  private hasCompletedInitialSync = false;
+  private remoteSyncPeerSeen = false;
+  private deltaFlushQueued = false;
+  private destroyed = false;
 
   private waveState: WaveState = {
     threatPercent: 0,
@@ -110,6 +126,7 @@ export class WaveSystem {
   constructor(ctx: IWaveSystemContext, coreGemSystem: CoreGemSystem) {
     this.ctx = ctx;
     this.coreGemSystem = coreGemSystem;
+    this.isHost = ctx.initialIsHost ?? true;
 
     this.combatAI = new MonsterCombatAI({
       scene: this.ctx.scene,
@@ -127,27 +144,42 @@ export class WaveSystem {
       getLocalPlayerId: () => this.ctx.getLocalPlayerId(),
       getLocalPlayerPosition: () => this.ctx.getLocalPlayerPosition(),
       isLocalPlayerFainted: () => this.ctx.isLocalPlayerFainted(),
+      getActivePlayers: this.ctx.getActivePlayers,
       damageLocalPlayer: (dmg, attacker) => this.ctx.damageLocalPlayer(dmg, attacker),
+      broadcastMonsterPlayerAttack: (payload) => this.ctx.broadcastMonsterPlayerAttack?.(payload),
       healCampCore: (territoryId, amount) => this.ctx.healCampCore?.(territoryId, amount),
       projectileSystem: this.ctx.projectileSystem,
+      markLocalMonsterHit: (monsterId) => this.syncCoordinator.markLocalHit(monsterId),
       onMonsterDamaged: () => {
-        if (this.isHost) {
-          this.ctx.broadcastMonstersSync?.(
-            this.getMonsters(),
-            this.waveState.waveCount,
-            this.waveState.bossWaveCount
-          );
+        if (this.isHost && this.shouldBroadcastCoopMonsters()) {
+          this.scheduleDeltaSyncFlush();
         }
       },
       onMonsterHitImpact: (opts, restoreTint) => this.ctx.onMonsterHitImpact?.(opts, restoreTint),
       onMonsterKilled: (x, y, isBoss, expReward, isCampMonster, meta) => {
+        if (this.isHost && meta?.monsterId) {
+          this.syncCoordinator.recordKill({
+            id: meta.monsterId,
+            x: Math.round(x),
+            y: Math.round(y),
+            killerId: meta.killerId,
+            isBoss,
+            isElite: meta.isElite,
+            isCampMonster,
+            isFieldMonster: Boolean(meta.isFieldMonster),
+            campRing: meta.campRing,
+            eliteTier: meta.eliteTier,
+            expReward,
+            bonusMultiplier: meta.bonusMultiplier ?? this.activeBonusMultiplier,
+          });
+        }
         this.ctx.onMonsterKilledReward?.(x, y, isBoss, expReward, isCampMonster, meta);
       },
       showFloatingText: (x, y, text, color) => this.ctx.showFloatingText(x, y, text, color),
       shakeObject: (target) => this.ctx.shakeObject(target),
       playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
       addRewardResources: (w, s, g) => this.ctx.addRewardResources(w, s, g),
-      broadcastMonsterHit: (id, dmg, atk) => this.ctx.broadcastMonsterHit?.(id, dmg, atk),
+      broadcastMonsterHit: (payload) => this.ctx.broadcastMonsterHit?.(payload),
     });
 
     this.spawner = new WaveSpawner({
@@ -165,12 +197,8 @@ export class WaveSystem {
       playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
       onPulseSpawned: () => {
         this.emitWaveState();
-        if (this.isHost) {
-          this.ctx.broadcastMonstersSync?.(
-            this.getMonsters(),
-            this.waveState.waveCount,
-            this.waveState.bossWaveCount
-          );
+        if (this.isHost && this.shouldBroadcastCoopMonsters()) {
+          this.flushDeltaSyncNow();
         }
       },
     });
@@ -179,23 +207,43 @@ export class WaveSystem {
   }
 
   public destroy(): void {
+    this.destroyed = true;
     GameEvents.off('territory-lost', this.onTerritoryLost);
+    this.dungeonSpawner.clearTimersAndPortal();
     for (const mv of this.monsters.values()) {
       mv.container.destroy();
     }
     this.monsters.clear();
+    this.syncCoordinator.resetAll();
   }
 
   public setHostMode(isHost: boolean): void {
-    const becameHost = !this.isHost && isHost;
+    const prev = this.isHost;
     this.isHost = isHost;
-    if (becameHost && this.monsters.size > 0) {
-      this.ctx.broadcastMonstersSync?.(
-        this.getMonsters(),
-        this.waveState.waveCount,
-        this.waveState.bossWaveCount
-      );
+
+    if (isHost) {
+      if (!prev) {
+        this.monsterSyncAccumMs = 0;
+        this.lastFullSyncSentAt = 0;
+      }
+      return;
     }
+
+    if (prev || this.monsters.size > 0) {
+      for (const mv of this.monsters.values()) {
+        mv.container.destroy();
+      }
+      this.monsters.clear();
+      this.combatAI.pruneStaleMonsterState(new Set());
+    }
+    this.monsterSyncAccumMs = 0;
+    this.countdownRemainingMs = null;
+    this.waveState.countdownSecondsRemaining = null;
+    this.dungeonSpawner.clearTimersAndPortal();
+    this.syncCoordinator.resetAll();
+    this.hasCompletedInitialSync = false;
+    this.emitWaveState();
+    this.requestMonstersSyncThrottled(true);
   }
 
   public getIsHost(): boolean {
@@ -223,7 +271,13 @@ export class WaveSystem {
   }
 
   public setOnlineCount(count: number): void {
-    this.onlineCount = Math.max(1, count);
+    const next = Math.max(1, count);
+    if (next > 1) {
+      this.remoteSyncPeerSeen = true;
+    } else if (this.onlineCount > 1 && next === 1) {
+      this.remoteSyncPeerSeen = false;
+    }
+    this.onlineCount = next;
     this.waveState.onlineScaleLabel = getDynamicScalingProfile(this.onlineCount).label;
     this.emitWaveState();
   }
@@ -405,14 +459,83 @@ export class WaveSystem {
     GameEvents.emit('wave-state-updated', { ...this.waveState });
   }
 
-  public update(time: number, delta: number): void {
-    this.combatAI.updateMonsters(time, delta);
+  private shouldBroadcastCoopMonsters(): boolean {
+    return this.onlineCount > 1 || this.remoteSyncPeerSeen;
+  }
 
-    if (!this.isHost) {
-      this.monsterSyncAccumMs = 0;
-      this.hadMonstersLastTick = this.monsters.size > 0;
+  public handleRemoteMonstersSyncRequest(): void {
+    if (!this.isHost) return;
+    this.remoteSyncPeerSeen = true;
+    this.broadcastFullMonstersSync(false, true);
+  }
+
+  public broadcastFullMonstersSync(force = false, fromGuestRequest = false): void {
+    if (!this.isHost) return;
+    const now = performance.now();
+    if (!force && now - this.lastFullSyncSentAt < MONSTER_SYNC_CONFIG.hostFullSyncCooldownMs) {
       return;
     }
+    const chunks = this.syncCoordinator.buildFullSyncChunks(
+      this.monsters,
+      this.waveState.waveCount,
+      this.waveState.bossWaveCount
+    );
+    if (!fromGuestRequest && !this.shouldBroadcastCoopMonsters()) {
+      return;
+    }
+    this.lastFullSyncSentAt = now;
+    for (const chunk of chunks) {
+      this.ctx.broadcastMonstersSync?.(chunk);
+    }
+  }
+
+  private scheduleDeltaSyncFlush(): void {
+    if (this.deltaFlushQueued || !this.isHost || !this.shouldBroadcastCoopMonsters()) return;
+    this.deltaFlushQueued = true;
+    queueMicrotask(() => {
+      this.deltaFlushQueued = false;
+      if (this.destroyed || !this.isHost || !this.shouldBroadcastCoopMonsters()) return;
+      this.flushDeltaSyncNow();
+    });
+  }
+
+  public flushDeltaSyncNow(): void {
+    if (!this.isHost || !this.shouldBroadcastCoopMonsters()) return;
+    const batches = this.syncCoordinator.buildDeltaBatches(
+      this.monsters,
+      this.waveState.waveCount,
+      this.waveState.bossWaveCount
+    );
+    if (batches.length === 0) return;
+    this.monsterSyncAccumMs = 0;
+    for (const batch of batches) {
+      this.ctx.broadcastMonstersDeltaSync?.(batch);
+    }
+  }
+
+  private requestMonstersSyncThrottled(force = false): void {
+    if (this.isHost) return;
+    const now = performance.now();
+    if (!force && now - this.lastGuestSyncRequestAt < MONSTER_SYNC_CONFIG.guestSyncRequestThrottleMs) {
+      return;
+    }
+    this.lastGuestSyncRequestAt = now;
+    this.ctx.requestMonstersSync?.();
+  }
+
+  public update(time: number, delta: number): void {
+    if (!this.isHost) {
+      this.monsterSyncAccumMs = 0;
+      this.syncCoordinator.interpolateRemoteMonsters(this.monsters, delta);
+      MonsterVisualManager.updateHpTrails(this.monsters, delta);
+      if (!this.hasCompletedInitialSync) {
+        this.requestMonstersSyncThrottled(false);
+      }
+      return;
+    }
+
+    this.combatAI.updateMonsters(time, delta);
+    MonsterVisualManager.updateHpTrails(this.monsters, delta);
 
     if (this.countdownRemainingMs !== null) {
       this.countdownRemainingMs -= delta;
@@ -438,34 +561,21 @@ export class WaveSystem {
       }
     }
 
+    if (!this.shouldBroadcastCoopMonsters()) {
+      this.monsterSyncAccumMs = 0;
+      return;
+    }
+
     const hasInvaders = this.waveState.activeMonstersCount > 0;
-    const hasCoOpMonsters = this.onlineCount > 1 && this.monsters.size > 0;
-    const shouldSync = hasInvaders || hasCoOpMonsters;
     const syncInterval = hasInvaders
       ? WORLD_CLOCK_CONFIG.monsterSyncIntervalMs
-      : WORLD_CLOCK_CONFIG.monsterSyncIntervalMs * 2;
+      : Math.round(WORLD_CLOCK_CONFIG.monsterSyncIntervalMs * 1.4);
 
-    if (shouldSync) {
-      this.monsterSyncAccumMs += delta;
-      if (this.monsterSyncAccumMs >= syncInterval) {
-        this.monsterSyncAccumMs = 0;
-        this.ctx.broadcastMonstersSync?.(
-          this.getMonsters(),
-          this.waveState.waveCount,
-          this.waveState.bossWaveCount
-        );
-      }
-    } else if (this.hadMonstersLastTick) {
+    this.monsterSyncAccumMs += delta;
+    if (this.monsterSyncAccumMs >= syncInterval) {
       this.monsterSyncAccumMs = 0;
-      this.ctx.broadcastMonstersSync?.(
-        [],
-        this.waveState.waveCount,
-        this.waveState.bossWaveCount
-      );
-    } else {
-      this.monsterSyncAccumMs = 0;
+      this.flushDeltaSyncNow();
     }
-    this.hadMonstersLastTick = shouldSync;
   }
 
   public spawnMonsterWave(
@@ -473,6 +583,8 @@ export class WaveSystem {
     isLocalTrigger = true,
     isEarlySummon = false
   ): void {
+    if (!this.isHost) return;
+
     if (isBossWave) {
       this.waveState.bossWaveCount += 1;
       this.waveState.waveCount += 1;
@@ -539,27 +651,118 @@ export class WaveSystem {
       this.ctx.broadcastWaveSpawn(isBossWave);
     }
     if (this.isHost) {
-      this.ctx.broadcastMonstersSync?.(
-        this.getMonsters(),
-        this.waveState.waveCount,
-        this.waveState.bossWaveCount
-      );
+      this.flushDeltaSyncNow();
       this.ctx.onMonstersChanged?.();
     }
   }
 
-  public applyRemoteMonstersSync(
-    monsters: Monster[],
-    waveCount: number,
-    bossWaveCount: number
-  ): void {
+  public applyRemoteMonstersSync(payload: MonstersFullSyncPayload): void {
     if (this.isHost) return;
-    this.waveState.waveCount = Math.max(this.waveState.waveCount, waveCount);
-    this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, bossWaveCount);
+    const chunkResult = this.syncCoordinator.receiveFullSyncChunk(payload);
+    if (!chunkResult.ready) return;
+
+    this.hasCompletedInitialSync = true;
+    this.waveState.waveCount = Math.max(this.waveState.waveCount, payload.waveCount);
+    this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, payload.bossWaveCount);
     this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
-    this.spawner.applyRemoteSync(monsters);
+    this.spawner.applyRemoteSync(chunkResult.monsters);
     this.combatAI.pruneStaleMonsterState(new Set(this.monsters.keys()));
     this.emitWaveState();
+  }
+
+  public applyRemoteMonstersDeltaSync(payload: MonstersDeltaSyncPayload): void {
+    if (this.isHost) return;
+    this.waveState.waveCount = Math.max(this.waveState.waveCount, payload.waveCount);
+    this.waveState.bossWaveCount = Math.max(this.waveState.bossWaveCount, payload.bossWaveCount);
+    this.waveState.wavesUntilBoss = computeWavesUntilBoss(this.waveState.waveCount);
+
+    const { needsFullSync, killedCount } = this.syncCoordinator.applyDeltaSync(
+      this.ctx.scene,
+      this.monsters,
+      payload,
+      {
+        onExplosion: (x, y) => this.ctx.playExplosionAt(x, y),
+        onShake: (target) => this.ctx.shakeObject(target),
+        onRemoteKill: (kill) => this.ctx.onRemoteMonsterKilledReward?.(kill),
+      }
+    );
+
+    if (killedCount > 0 || (payload.spawns?.length ?? 0) > 0) {
+      this.combatAI.pruneStaleMonsterState(new Set(this.monsters.keys()));
+      this.emitWaveState();
+    }
+    if (!this.hasCompletedInitialSync || needsFullSync) {
+      this.requestMonstersSyncThrottled(false);
+    }
+  }
+
+  public handleRemoteMonsterPlayerAttack(payload: MonsterPlayerAttackPayload): void {
+    if (this.isHost) return;
+    const localId = this.ctx.getLocalPlayerId();
+    if (payload.targetPlayerId !== '*' && payload.targetPlayerId !== localId) return;
+
+    const ps = this.ctx.projectileSystem;
+    if (payload.telegraphRadius && payload.telegraphDurationMs && ps) {
+      if (payload.role === 'mage' && !payload.isBossSkill) {
+        ps.fireProjectile({
+          startX: payload.startX,
+          startY: payload.startY,
+          targetX: payload.targetX,
+          targetY: payload.targetY,
+          durationMs: 320,
+          tint: 0xd946ef,
+          size: 42,
+          isMagic: true,
+          onArrive: () => {},
+        });
+      }
+      const radius = payload.telegraphRadius;
+      ps.spawnTelegraphZone({
+        x: payload.targetX,
+        y: payload.targetY,
+        radius,
+        durationMs: payload.telegraphDurationMs,
+        color: payload.telegraphColor ?? 0xa855f7,
+        onDetonate: () => {
+          this.ctx.playExplosionAt(payload.targetX, payload.targetY);
+          if (!this.ctx.isLocalPlayerFainted()) {
+            const cur = this.ctx.getLocalPlayerPosition();
+            if (Math.hypot(cur.x - payload.targetX, cur.y - payload.targetY) <= radius + 4) {
+              this.ctx.damageLocalPlayer(payload.damage, payload.monsterName);
+            }
+          }
+        },
+      });
+      return;
+    }
+
+    if (ps && (payload.role === 'ranged' || payload.isBossSkill)) {
+      const isMagic = payload.role === 'mage' || Boolean(payload.isBossSkill);
+      const hitRadius = isMagic ? 64 : 58;
+      ps.fireProjectile({
+        startX: payload.startX,
+        startY: payload.startY,
+        targetX: payload.targetX,
+        targetY: payload.targetY,
+        durationMs: payload.isBossSkill ? 520 : 260,
+        tint: payload.isBossSkill ? 0xfbbf24 : 0xf87171,
+        size: payload.isBossSkill ? 40 : 32,
+        isMagic,
+        onArrive: () => {
+          if (!this.ctx.isLocalPlayerFainted()) {
+            const cur = this.ctx.getLocalPlayerPosition();
+            if (Math.hypot(cur.x - payload.targetX, cur.y - payload.targetY) <= hitRadius) {
+              this.ctx.damageLocalPlayer(payload.damage, payload.monsterName);
+            }
+          }
+        },
+      });
+      return;
+    }
+
+    if (!this.ctx.isLocalPlayerFainted()) {
+      this.ctx.damageLocalPlayer(payload.damage, payload.monsterName);
+    }
   }
 
   public damageMonster(
@@ -583,11 +786,9 @@ export class WaveSystem {
     if (killed) {
       this.emitWaveState();
       if (this.isHost) {
-        this.ctx.broadcastMonstersSync?.(
-          this.getMonsters(),
-          this.waveState.waveCount,
-          this.waveState.bossWaveCount
-        );
+        if (this.shouldBroadcastCoopMonsters()) {
+          this.scheduleDeltaSyncFlush();
+        }
         this.ctx.onMonstersChanged?.();
       }
     }

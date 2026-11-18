@@ -1,16 +1,25 @@
 import { FIELD_MONSTER_CONFIG } from '../../data/fieldMonsters';
 import { DUNGEON_INVASION_CONFIG } from '../../data/monsterCamps';
 import { ConstructedBuilding } from '../../types/game';
+import { ActivePlayerTarget } from '../../types/monsterSync';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { isInsideCenterVillageSafeZone } from '../utils/fieldSpawnUtils';
+import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { resolveMonsterWallClamping } from '../wallCollisionGeometry';
 import { MonsterVisual } from './MonsterVisualManager';
 
 export interface IFieldMonsterAIContext {
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
+  getLocalPlayerId?: () => string;
+  getActivePlayers?: () => ActivePlayerTarget[];
   clearMonsterAggro?: (monsterId: string) => void;
-  executeRoleAttackOnPlayer: (mv: MonsterVisual, targetX: number, targetY: number) => void;
+  executeRoleAttackOnPlayer: (
+    mv: MonsterVisual,
+    targetX: number,
+    targetY: number,
+    targetPlayerId?: string
+  ) => void;
 }
 
 interface PatrolTarget {
@@ -29,6 +38,21 @@ export class FieldMonsterAI {
 
   constructor(ctx: IFieldMonsterAIContext) {
     this.ctx = ctx;
+  }
+
+  private resolveActivePlayers(): ActivePlayerTarget[] {
+    if (this.ctx.getActivePlayers) {
+      return this.ctx.getActivePlayers();
+    }
+    const pos = this.ctx.getLocalPlayerPosition();
+    return [
+      {
+        id: this.ctx.getLocalPlayerId?.() ?? 'local',
+        x: pos.x,
+        y: pos.y,
+        isFainted: this.ctx.isLocalPlayerFainted(),
+      },
+    ];
   }
 
   public pruneStaleState(validIds: Set<string>): void {
@@ -51,16 +75,13 @@ export class FieldMonsterAI {
     aliveWalls: ConstructedBuilding[],
     sepX: number,
     sepY: number,
-    hasActiveAggro: boolean
+    activeAggroPlayerId?: string | null
   ): boolean {
     const m = mv.monster;
     if (!m.isFieldMonster) return false;
 
     const homeX = m.homeX ?? m.x;
     const homeY = m.homeY ?? m.y;
-    const playerPos = this.ctx.getLocalPlayerPosition();
-    const playerFainted = this.ctx.isLocalPlayerFainted();
-    const distToPlayer = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
     const distFromHome = Math.hypot(m.x - homeX, m.y - homeY);
 
     const enteredCenterSafeZone = isInsideCenterVillageSafeZone(
@@ -87,16 +108,25 @@ export class FieldMonsterAI {
       }
     }
 
-    const aggroRadius = hasActiveAggro
+    const aggroRadius = activeAggroPlayerId
       ? FIELD_MONSTER_CONFIG.fieldLeashRadiusPx
       : FIELD_MONSTER_CONFIG.fieldAggroRadiusPx;
 
-    const shouldChase = !playerFainted && distToPlayer <= aggroRadius;
+    const targetMatch = findTargetPlayerForMonster(
+      m.x,
+      m.y,
+      this.resolveActivePlayers(),
+      aggroRadius,
+      activeAggroPlayerId ?? undefined
+    );
 
-    if (!shouldChase) {
+    if (!targetMatch) {
       this.updatePatrolOrReturn(mv, time, dt, homeX, homeY, distFromHome, aliveWalls);
       return true;
     }
+
+    const targetPlayer = targetMatch.player;
+    const distToPlayer = targetMatch.dist;
 
     const desiredRange =
       m.role === 'mage'
@@ -108,12 +138,12 @@ export class FieldMonsterAI {
         : 58;
 
     if (m.role === 'ranged' && distToPlayer < 110 && distFromHome < 420) {
-      const vx = ((m.x - playerPos.x) / Math.max(1, distToPlayer)) * m.speed * 0.75 + sepX;
-      const vy = ((m.y - playerPos.y) / Math.max(1, distToPlayer)) * m.speed * 0.75 + sepY;
-      this.moveMonster(mv, vx, vy, dt, aliveWalls, playerPos.x < m.x ? 'left' : 'right');
+      const vx = ((m.x - targetPlayer.x) / Math.max(1, distToPlayer)) * m.speed * 0.75 + sepX;
+      const vy = ((m.y - targetPlayer.y) / Math.max(1, distToPlayer)) * m.speed * 0.75 + sepY;
+      this.moveMonster(mv, vx, vy, dt, aliveWalls, targetPlayer.x < m.x ? 'left' : 'right');
     } else if (distToPlayer > desiredRange) {
-      const vx = ((playerPos.x - m.x) / Math.max(1, distToPlayer)) * m.speed + sepX;
-      const vy = ((playerPos.y - m.y) / Math.max(1, distToPlayer)) * m.speed + sepY;
+      const vx = ((targetPlayer.x - m.x) / Math.max(1, distToPlayer)) * m.speed + sepX;
+      const vy = ((targetPlayer.y - m.y) / Math.max(1, distToPlayer)) * m.speed + sepY;
       this.moveMonster(mv, vx, vy, dt, aliveWalls);
       return true;
     }
@@ -122,7 +152,7 @@ export class FieldMonsterAI {
     const cooldownMs = m.eliteAffix === 'berserker' ? Math.round(baseCooldownMs * 0.8) : baseCooldownMs;
     if (time - mv.lastAttackTime >= cooldownMs) {
       mv.lastAttackTime = time;
-      this.ctx.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y);
+      this.ctx.executeRoleAttackOnPlayer(mv, targetPlayer.x, targetPlayer.y, targetPlayer.id);
     }
     return true;
   }

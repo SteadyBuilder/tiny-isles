@@ -2,12 +2,18 @@ import Phaser from 'phaser';
 import {
   ConstructedBuilding,
   Entity,
-  Monster,
   Player,
   PlayerAction,
   PlayerColor,
   VillageTier,
 } from '../../../types/game';
+import {
+  ActivePlayerTarget,
+  MonsterHitPayload,
+  MonsterPlayerAttackPayload,
+  MonstersDeltaSyncPayload,
+  MonstersFullSyncPayload,
+} from '../../../types/monsterSync';
 import { RoomMode } from '../../../types/room';
 import { RemotePlayerRenderer } from '../renderers/RemotePlayerRenderer';
 import { MultiplayerChannelRouter } from './MultiplayerChannelRouter';
@@ -19,6 +25,7 @@ export interface IMultiplayerSyncContext {
   getPlayerColor: () => PlayerColor;
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
+  isLocalPlayerFainted?: () => boolean;
   getLocalPlayerState: () => {
     x: number;
     y: number;
@@ -34,8 +41,11 @@ export interface IMultiplayerSyncContext {
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
   onRemoteWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
-  onRemoteMonstersSync: (monsters: Monster[], waveCount: number, bossWaveCount: number) => void;
-  onRemoteMonsterHit: (monsterId: string, damage: number, attackerName: string) => void;
+  onRemoteMonstersSync: (payload: MonstersFullSyncPayload) => void;
+  onRemoteMonstersDeltaSync?: (payload: MonstersDeltaSyncPayload) => void;
+  onRemoteMonstersSyncRequest?: () => void;
+  onRemoteMonsterHit: (payload: MonsterHitPayload) => void;
+  onRemoteMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   onRemoteThreatAdded?: (amount: number) => void;
   onRemoteThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
@@ -91,10 +101,11 @@ export class MultiplayerSyncController {
       onRemoteWaveSpawned: (isBossWave) => this.ctx.onRemoteWaveSpawned(isBossWave),
       onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
         this.ctx.onRemoteWaveSummonRequest?.(isBossWave, isEarlySummon),
-      onRemoteMonstersSync: (monsters, waveCount, bossWaveCount) =>
-        this.ctx.onRemoteMonstersSync(monsters, waveCount, bossWaveCount),
-      onRemoteMonsterHit: (monsterId, damage, attackerName) =>
-        this.ctx.onRemoteMonsterHit(monsterId, damage, attackerName),
+      onRemoteMonstersSync: (payload) => this.ctx.onRemoteMonstersSync(payload),
+      onRemoteMonstersDeltaSync: (payload) => this.ctx.onRemoteMonstersDeltaSync?.(payload),
+      onRemoteMonstersSyncRequest: () => this.ctx.onRemoteMonstersSyncRequest?.(),
+      onRemoteMonsterHit: (payload) => this.ctx.onRemoteMonsterHit(payload),
+      onRemoteMonsterPlayerAttack: (payload) => this.ctx.onRemoteMonsterPlayerAttack?.(payload),
       onRemoteThreatAdded: (amount) => this.ctx.onRemoteThreatAdded?.(amount),
       onRemoteThreatSync: (threatPercent, waveCount, bossWaveCount) =>
         this.ctx.onRemoteThreatSync?.(threatPercent, waveCount, bossWaveCount),
@@ -115,6 +126,19 @@ export class MultiplayerSyncController {
 
   public getIsHost(): boolean {
     return this.router.getIsHost();
+  }
+
+  public getActivePlayers(
+    localPos: { x: number; y: number },
+    localFainted: boolean
+  ): ActivePlayerTarget[] {
+    const localPlayer: ActivePlayerTarget = {
+      id: this.ctx.getPlayerId(),
+      x: localPos.x,
+      y: localPos.y,
+      isFainted: localFainted,
+    };
+    return [localPlayer, ...this.remoteRenderer.getActivePlayers()];
   }
 
   public setup(): void {
@@ -139,6 +163,7 @@ export class MultiplayerSyncController {
       direction: state.direction,
       action: state.action,
       color: this.ctx.getPlayerColor(),
+      isFainted: this.ctx.isLocalPlayerFainted?.() ?? false,
       lastUpdated: Date.now(),
     };
     this.router.emit('player_move', 'player_move', payload);
@@ -169,16 +194,26 @@ export class MultiplayerSyncController {
     this.router.emit('wave_summon_request', 'wave_summon_request', { isBossWave, isEarlySummon });
   }
 
-  public broadcastMonstersSync(
-    monsters: Monster[],
-    waveCount: number,
-    bossWaveCount: number
-  ): void {
-    this.router.emit('monsters_sync', 'monsters_sync', { monsters, waveCount, bossWaveCount });
+  public broadcastMonstersSync(payload: MonstersFullSyncPayload): void {
+    this.router.emit('monsters_sync', 'monsters_sync', payload);
   }
 
-  public broadcastMonsterHit(monsterId: string, damage: number, attackerName: string): void {
-    this.router.emit('monster_hit', 'monster_hit', { monsterId, damage, attackerName });
+  public broadcastMonstersDeltaSync(payload: MonstersDeltaSyncPayload): void {
+    this.router.emit('monsters_delta_sync', 'monsters_delta_sync', payload);
+  }
+
+  public requestMonstersSync(): void {
+    this.router.emit('monsters_sync_request', 'monsters_sync_request', {
+      requesterId: this.ctx.getPlayerId(),
+    });
+  }
+
+  public broadcastMonsterHit(payload: MonsterHitPayload): void {
+    this.router.emit('monster_hit', 'monster_hit', payload);
+  }
+
+  public broadcastMonsterPlayerAttack(payload: MonsterPlayerAttackPayload): void {
+    this.router.emit('monster_player_attack', 'monster_player_attack', payload);
   }
 
   public broadcastThreatAdded(amount: number): void {

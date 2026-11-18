@@ -3,15 +3,21 @@ import { ELITE_SHIELD_BUFF_CONFIG } from '../../data/elites';
 import { HUNTING_AI_CONFIG } from '../../data/monsterCamps';
 import { PERFORMANCE_CONFIG } from '../../data/performanceConfig';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
-import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
+import { MONSTER_SYNC_CONFIG, PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { CombatHitFeedbackOptions } from '../../types/combat';
 import { ConstructedBuilding, Island } from '../../types/game';
+import {
+  ActivePlayerTarget,
+  MonsterHitPayload,
+  MonsterPlayerAttackPayload,
+} from '../../types/monsterSync';
 import { sound } from '../../lib/sound';
 import {
   getBuildingCollisionBox,
   getTerritoryMainBuilding,
 } from '../constants';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { MonsterSpatialGrid } from '../utils/spatialGrid';
 import { findNextInwardTargetTerritory } from '../utils/waveUtils';
 import {
@@ -24,6 +30,17 @@ import { FieldMonsterAI } from './FieldMonsterAI';
 import { MonsterRangedMageAI } from './MonsterRangedMageAI';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
+
+export interface MonsterKilledMeta {
+  monsterId?: string;
+  killerId?: string;
+  bonusMultiplier?: number;
+  isParticipant?: boolean;
+  isElite: boolean;
+  isFieldMonster?: boolean;
+  campRing?: 1 | 2 | 3 | 4;
+  eliteTier?: import('../../types/hunting').FieldEliteTier;
+}
 
 export interface IMonsterCombatContext {
   scene: Phaser.Scene;
@@ -39,9 +56,12 @@ export interface IMonsterCombatContext {
   getLocalPlayerId: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
+  getActivePlayers?: () => ActivePlayerTarget[];
   damageLocalPlayer: (damage: number, attackerName: string) => void;
+  broadcastMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   healCampCore?: (territoryId: number, amount: number) => void;
   projectileSystem?: ProjectileSystem;
+  markLocalMonsterHit?: (monsterId: string) => void;
   onMonsterDamaged?: () => void;
   onMonsterHitImpact?: (opts: CombatHitFeedbackOptions, restoreTint?: number | null) => void;
   onMonsterKilled?: (
@@ -50,18 +70,13 @@ export interface IMonsterCombatContext {
     isBoss: boolean,
     expReward: number,
     isCampMonster: boolean,
-    meta?: {
-      isElite: boolean;
-      isFieldMonster?: boolean;
-      campRing?: 1 | 2 | 3 | 4;
-      eliteTier?: import('../../types/hunting').FieldEliteTier;
-    }
+    meta?: MonsterKilledMeta
   ) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   playExplosionAt: (x: number, y: number) => void;
   addRewardResources: (wood: number, stone: number, gold: number) => void;
-  broadcastMonsterHit?: (monsterId: string, damage: number, attackerName: string) => void;
+  broadcastMonsterHit?: (payload: MonsterHitPayload) => void;
 }
 
 interface CachedBlockerTarget {
@@ -93,9 +108,12 @@ export class MonsterCombatAI {
     this.ctx = ctx;
     this.rangedMageAI = new MonsterRangedMageAI({
       getMonsters: ctx.getMonsters,
+      getLocalPlayerId: ctx.getLocalPlayerId,
       getLocalPlayerPosition: ctx.getLocalPlayerPosition,
       isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      getActivePlayers: ctx.getActivePlayers,
       damageLocalPlayer: ctx.damageLocalPlayer,
+      broadcastMonsterPlayerAttack: ctx.broadcastMonsterPlayerAttack,
       healCampCore: ctx.healCampCore,
       clearMonsterAggro: (monsterId) => this.aggroTargets.delete(monsterId),
       projectileSystem: ctx.projectileSystem,
@@ -103,22 +121,42 @@ export class MonsterCombatAI {
       showFloatingText: ctx.showFloatingText,
     });
     this.fieldMonsterAI = new FieldMonsterAI({
+      getLocalPlayerId: ctx.getLocalPlayerId,
       getLocalPlayerPosition: ctx.getLocalPlayerPosition,
       isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      getActivePlayers: ctx.getActivePlayers,
       clearMonsterAggro: (monsterId) => this.aggroTargets.delete(monsterId),
-      executeRoleAttackOnPlayer: (mv, tx, ty) =>
-        this.rangedMageAI.executeRoleAttackOnPlayer(mv, tx, ty),
+      executeRoleAttackOnPlayer: (mv, tx, ty, targetPlayerId) =>
+        this.rangedMageAI.executeRoleAttackOnPlayer(mv, tx, ty, targetPlayerId),
     });
     this.bossSkillSystem = new BossSkillSystem({
       scene: ctx.scene,
       getMonsters: ctx.getMonsters,
+      getLocalPlayerId: ctx.getLocalPlayerId,
       getLocalPlayerPosition: ctx.getLocalPlayerPosition,
       isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      getActivePlayers: ctx.getActivePlayers,
       damageLocalPlayer: ctx.damageLocalPlayer,
+      broadcastMonsterPlayerAttack: ctx.broadcastMonsterPlayerAttack,
       projectileSystem: ctx.projectileSystem,
       playExplosionAt: ctx.playExplosionAt,
       showFloatingText: ctx.showFloatingText,
     });
+  }
+
+  private resolveActivePlayers(): ActivePlayerTarget[] {
+    if (this.ctx.getActivePlayers) {
+      return this.ctx.getActivePlayers();
+    }
+    const pos = this.ctx.getLocalPlayerPosition();
+    return [
+      {
+        id: this.ctx.getLocalPlayerId(),
+        x: pos.x,
+        y: pos.y,
+        isFainted: this.ctx.isLocalPlayerFainted(),
+      },
+    ];
   }
 
   public getSpatialGrid(): MonsterSpatialGrid {
@@ -137,6 +175,7 @@ export class MonsterCombatAI {
     const aliveWalls = constructedBuildings.filter(
       (cb) => cb.category === 'wall' && cb.hp > 0
     );
+    const nowPerf = performance.now();
 
     for (const mv of monstersMap.values()) {
       const m = mv.monster;
@@ -148,10 +187,10 @@ export class MonsterCombatAI {
       const sep = this.spatialGrid.computeSeparation(m.id, m.x, m.y);
 
       const existingAggro = this.aggroTargets.get(m.id);
-      const hasActiveAggro =
-        Boolean(existingAggro) &&
-        existingAggro!.playerId === this.ctx.getLocalPlayerId() &&
-        performance.now() <= existingAggro!.expiresAt;
+      const activeAggroPlayerId =
+        existingAggro && nowPerf <= existingAggro.expiresAt
+          ? existingAggro.playerId
+          : null;
 
       // 0-A순위: 몬스터 부락 주둔 수비병(근거리/창병/원거리/마법사) AI
       if (
@@ -162,7 +201,7 @@ export class MonsterCombatAI {
           aliveWalls,
           sep.pushX,
           sep.pushY,
-          hasActiveAggro
+          activeAggroPlayerId
         )
       ) {
         continue;
@@ -177,7 +216,7 @@ export class MonsterCombatAI {
           aliveWalls,
           sep.pushX,
           sep.pushY,
-          hasActiveAggro
+          activeAggroPlayerId
         )
       ) {
         continue;
@@ -380,6 +419,10 @@ export class MonsterCombatAI {
       }
     }
 
+    const attackerPos = params.attackerId
+      ? this.resolveActivePlayers().find((p) => p.id === params.attackerId) ?? playerPos
+      : playerPos;
+
     const triggerHitFeedback = (includeSpriteFlash: boolean) => {
       this.ctx.onMonsterHitImpact?.(
         {
@@ -389,8 +432,8 @@ export class MonsterCombatAI {
           isCrit: params.hitMeta?.isCrit,
           isSkill: params.hitMeta?.isSkill,
           isLocalPlayerAttack,
-          attackerX: playerPos.x,
-          attackerY: playerPos.y,
+          attackerX: attackerPos.x,
+          attackerY: attackerPos.y,
           targetSprite: includeSpriteFlash ? mv.sprite : undefined,
           targetContainer: includeSpriteFlash ? mv.container : undefined,
         },
@@ -435,7 +478,17 @@ export class MonsterCombatAI {
       }
       this.ctx.shakeObject(mv.container);
       triggerHitFeedback(true);
-      this.ctx.broadcastMonsterHit?.(params.monsterId, params.damage, params.sourceName);
+      if (params.hitMeta?.isCrit) sound.playHitCrit();
+      else sound.playHitBasic();
+      this.ctx.markLocalMonsterHit?.(params.monsterId);
+      this.ctx.broadcastMonsterHit?.({
+        monsterId: params.monsterId,
+        damage: params.damage,
+        attackerName: params.sourceName,
+        attackerId: params.attackerId ?? this.ctx.getLocalPlayerId(),
+        isCrit: params.hitMeta?.isCrit,
+        isSkill: params.hitMeta?.isSkill,
+      });
       return false;
     }
 
@@ -475,6 +528,23 @@ export class MonsterCombatAI {
       const novaY = deadM.y;
       const novaDamage = Math.round(deadM.attack * 1.45);
       this.ctx.showFloatingText(novaX, novaY - 40, '💀 비전 폭발 경고!', '#e879f9');
+      if (this.resolveActivePlayers().length > 1) {
+        this.ctx.broadcastMonsterPlayerAttack?.({
+          targetPlayerId: '*',
+          monsterId: deadM.id,
+          monsterName: `${deadM.name} (비전 폭발)`,
+          role: 'mage',
+          damage: novaDamage,
+          startX: novaX,
+          startY: novaY,
+          targetX: novaX,
+          targetY: novaY,
+          isBossSkill: true,
+          telegraphRadius: 110,
+          telegraphDurationMs: 1100,
+          telegraphColor: 0xd946ef,
+        });
+      }
       this.ctx.projectileSystem.spawnTelegraphZone({
         x: novaX,
         y: novaY,
@@ -496,14 +566,27 @@ export class MonsterCombatAI {
     const rewardStone = Math.round(rewardTier.stone * params.bonusMultiplier);
     const rewardGold = Math.round(rewardTier.gold * params.bonusMultiplier);
     const expReward = deadM.expReward ?? (deadM.isBoss ? 120 : 16);
+    const localPlayerId = this.ctx.getLocalPlayerId();
+    const isKillParticipant =
+      !params.attackerId ||
+      params.attackerId === localPlayerId ||
+      deadM.isBoss ||
+      Math.hypot(playerPos.x - deadM.x, playerPos.y - deadM.y) <=
+        MONSTER_SYNC_CONFIG.coopKillShareRadiusPx;
 
-    this.ctx.addRewardResources(rewardWood, rewardStone, rewardGold);
-    sound.playMonsterDeath();
-    const rewardText = deadM.isBoss
-      ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} +✨${expReward}EXP)`
-      : `⚔️ +🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} (+${expReward}EXP)`;
-    this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
+    if (isKillParticipant) {
+      this.ctx.addRewardResources(rewardWood, rewardStone, rewardGold);
+      sound.playMonsterDeath();
+      const rewardText = deadM.isBoss
+        ? `🏆 보스 처치! (+🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} +✨${expReward}EXP)`
+        : `⚔️ +🪵${rewardWood} +🪨${rewardStone} +🪙${rewardGold} (+${expReward}EXP)`;
+      this.ctx.showFloatingText(deadM.x, deadM.y - 45, rewardText, '#4ade80');
+    }
     this.ctx.onMonsterKilled?.(deadM.x, deadM.y, deadM.isBoss, expReward, Boolean(deadM.isCampMonster), {
+      monsterId: deadM.id,
+      killerId: params.attackerId,
+      bonusMultiplier: params.bonusMultiplier,
+      isParticipant: isKillParticipant,
       isElite: Boolean(deadM.isElite),
       isFieldMonster: Boolean(deadM.isFieldMonster),
       campRing: deadM.campRing,
@@ -550,9 +633,8 @@ export class MonsterCombatAI {
     const lastShield = mv.lastShieldTime ?? -ELITE_SHIELD_BUFF_CONFIG.cooldownMs;
     if (time - lastShield < ELITE_SHIELD_BUFF_CONFIG.cooldownMs) return;
 
-    const playerPos = this.ctx.getLocalPlayerPosition();
-    const dist = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
-    if (dist > 420 && m.hp >= m.maxHp) return;
+    const nearbyPlayer = findTargetPlayerForMonster(m.x, m.y, this.resolveActivePlayers(), 420);
+    if (!nearbyPlayer && m.hp >= m.maxHp) return;
 
     mv.lastShieldTime = time;
     const shieldAmount = Math.max(1, Math.round(m.maxHp * ELITE_SHIELD_BUFF_CONFIG.shieldHpRatio));
@@ -580,31 +662,50 @@ export class MonsterCombatAI {
     sepX: number,
     sepY: number
   ): boolean {
-    if (this.ctx.isLocalPlayerFainted()) {
-      this.aggroTargets.delete(mv.monster.id);
-      return false;
+    const m = mv.monster;
+    const now = performance.now();
+    const activePlayers = this.resolveActivePlayers();
+    let aggro = this.aggroTargets.get(m.id);
+    if (aggro && now > aggro.expiresAt) {
+      this.aggroTargets.delete(m.id);
+      aggro = undefined;
     }
 
-    const m = mv.monster;
-    const playerPos = this.ctx.getLocalPlayerPosition();
-    const dist = Math.hypot(playerPos.x - m.x, playerPos.y - m.y);
-    let aggro = this.aggroTargets.get(m.id);
+    let targetMatch = aggro
+      ? findTargetPlayerForMonster(
+          m.x,
+          m.y,
+          activePlayers,
+          HUNTING_AI_CONFIG.waveProximityChaseMaxPx,
+          aggro.playerId
+        )
+      : null;
+
+    if (aggro && !targetMatch) {
+      this.aggroTargets.delete(m.id);
+      aggro = undefined;
+    }
 
     // 근접 어그로: 웨이브/던전 몬스터가 진격 중 일정 반경 내 플레이어를 발견하면 즉시 추격·공격
-    if (!aggro && dist <= HUNTING_AI_CONFIG.waveProximityAggroRadiusPx) {
-      aggro = {
-        playerId: this.ctx.getLocalPlayerId(),
-        expiresAt: performance.now() + PLAYER_COMBAT_CONFIG.monsterAggroDurationMs,
-      };
-      this.aggroTargets.set(m.id, aggro);
+    if (!targetMatch) {
+      targetMatch = findTargetPlayerForMonster(
+        m.x,
+        m.y,
+        activePlayers,
+        HUNTING_AI_CONFIG.waveProximityAggroRadiusPx
+      );
+      if (targetMatch) {
+        this.aggroTargets.set(m.id, {
+          playerId: targetMatch.player.id,
+          expiresAt: now + PLAYER_COMBAT_CONFIG.monsterAggroDurationMs,
+        });
+      }
     }
 
-    if (!aggro || aggro.playerId !== this.ctx.getLocalPlayerId()) return false;
+    if (!targetMatch) return false;
 
-    if (performance.now() > aggro.expiresAt || dist > HUNTING_AI_CONFIG.waveProximityChaseMaxPx) {
-      this.aggroTargets.delete(m.id);
-      return false;
-    }
+    const playerPos = targetMatch.player;
+    const dist = targetMatch.dist;
 
     const baseRange = m.isBoss
       ? PLAYER_COMBAT_CONFIG.monsterBossPlayerAttackRange
@@ -633,7 +734,7 @@ export class MonsterCombatAI {
 
     if (time - mv.lastAttackTime >= PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs) {
       mv.lastAttackTime = time;
-      this.rangedMageAI.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y);
+      this.rangedMageAI.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y, playerPos.id);
     }
     return true;
   }

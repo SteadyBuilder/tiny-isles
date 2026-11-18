@@ -46,6 +46,7 @@ export class FieldMonsterSystem {
   private appliedAtkMult = 1;
   private checkAccumMs = 0;
   private packSeq = 0;
+  private initialized = false;
 
   constructor(ctx: IFieldMonsterContext) {
     this.ctx = ctx;
@@ -63,11 +64,17 @@ export class FieldMonsterSystem {
   }
 
   public initializeFieldMonsters(): void {
-    if (!this.ctx.isHuntingMode() || !this.ctx.isHost()) return;
+    if (!this.ctx.isHuntingMode() || !this.ctx.isHost() || this.initialized) return;
 
     const scaling = computeHuntingScaling(this.ctx.getDifficultyConfig?.(), this.onlineCount);
     this.appliedHpMult = scaling.hpMult;
     this.appliedAtkMult = scaling.atkMult;
+
+    // 호스트 위임(마이그레이션) 시 기존 필드 몬스터가 이미 존재하면 중복 스폰 대신 무리 추적기로 복구
+    if (this.adoptExistingFieldPacks()) {
+      this.initialized = true;
+      return;
+    }
 
     for (const zone of SPAWN_ZONES) {
       const spots = pickZoneFieldSpawnSpots({
@@ -83,6 +90,45 @@ export class FieldMonsterSystem {
         this.spawnPackAt(spot.x, spot.y, spot.ring, zone);
       }
     }
+    this.initialized = true;
+  }
+
+  public ensureHostInitialized(): void {
+    this.initializeFieldMonsters();
+  }
+
+  public resetForGuest(): void {
+    this.packs = [];
+    this.initialized = false;
+    this.checkAccumMs = 0;
+  }
+
+  private adoptExistingFieldPacks(): boolean {
+    const grouped = new Map<string, ActiveFieldPack>();
+    for (const mv of this.ctx.getMonsters().values()) {
+      const m = mv.monster;
+      if (!m.isFieldMonster || m.hp <= 0) continue;
+      const hx = Math.round(m.homeX ?? m.x);
+      const hy = Math.round(m.homeY ?? m.y);
+      const key = `${hx}_${hy}`;
+      let pack = grouped.get(key);
+      if (!pack) {
+        pack = {
+          packId: `fpack_${++this.packSeq}`,
+          x: hx,
+          y: hy,
+          ring: m.campRing ?? 1,
+          zone: 'mid_field',
+          memberIds: [],
+          respawnTimerMs: null,
+        };
+        grouped.set(key, pack);
+      }
+      pack.memberIds.push(m.id);
+    }
+    if (grouped.size === 0) return false;
+    this.packs = Array.from(grouped.values());
+    return true;
   }
 
   public setOnlineCount(count: number): void {
@@ -93,7 +139,7 @@ export class FieldMonsterSystem {
     const prevAtkMult = this.appliedAtkMult;
     this.onlineCount = nextCount;
 
-    if (!this.ctx.isHuntingMode() || !this.ctx.isHost()) return;
+    if (!this.ctx.isHuntingMode() || !this.ctx.isHost() || !this.initialized) return;
 
     const scaling = computeHuntingScaling(this.ctx.getDifficultyConfig?.(), this.onlineCount);
     const hpRatio = prevHpMult > 0 ? scaling.hpMult / prevHpMult : 1;

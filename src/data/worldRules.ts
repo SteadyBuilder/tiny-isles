@@ -12,6 +12,30 @@ export const WORLD_CLOCK_CONFIG = {
 } as const;
 
 /**
+ * 멀티플레이 몬스터 동기화 청킹·델타·보간 설정
+ */
+export const MONSTER_SYNC_CONFIG = {
+  /** 전체 동기화 1회 브로드캐스트당 최대 몬스터 수 (Supabase 페이로드 제한 방지) */
+  fullSyncChunkSize: 120,
+  /** 델타 동기화 1회 브로드캐스트당 최대 위치/HP 업데이트 수 */
+  deltaUpdateChunkSize: 160,
+  /** 델타 동기화 1회 브로드캐스트당 최대 신규 스폰 수 */
+  deltaSpawnChunkSize: 80,
+  /** 게스트가 전체 동기화를 재요청하는 최소 간격 (ms) */
+  guestSyncRequestThrottleMs: 2000,
+  /** 호스트가 중복 전체 동기화 요청을 무시하는 최소 간격 (ms) */
+  hostFullSyncCooldownMs: 300,
+  /** 게스트 로컬 선타격 후 호스트의 이전 HP 패킷으로 되감기는 현상을 막는 유예 시간 (ms) */
+  localHitHpGraceMs: 260,
+  /** 게스트 측 몬스터 보간 순간이동(Snap) 임계 거리 (px) */
+  remoteSnapThresholdPx: 260,
+  /** 게스트 측 몬스터 보간 속도 계수 */
+  remoteLerpSpeedPerSec: 14,
+  /** 협동 처치 시 주변 팀원과 보상/경험치 공유 반경 (px) */
+  coopKillShareRadiusPx: 550,
+} as const;
+
+/**
  * 접속자 수(onlineCount)에 따른 실시간 웨이브 난이도 스케일링 테이블
  */
 export const ONLINE_SCALING_PROFILES: DynamicScalingProfile[] = [
