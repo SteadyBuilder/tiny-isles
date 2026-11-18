@@ -13,6 +13,7 @@ export type GameKeyAction =
   | 'move_left'
   | 'move_right'
   | 'interact'
+  | 'toggle_auto_interact'
   | 'skill'
   | 'inventory'
   | 'dash';
@@ -40,6 +41,9 @@ export const CODE_TO_GAME_ACTION: Readonly<Record<string, GameKeyAction>> = {
   KeyD: 'move_right',
   Space: 'interact',
   KeyE: 'interact',
+  KeyZ: 'interact',
+  KeyF: 'interact',
+  KeyC: 'toggle_auto_interact',
   KeyQ: 'skill',
   KeyI: 'inventory',
   ShiftLeft: 'dash',
@@ -62,12 +66,20 @@ const KEY_FALLBACK_TO_GAME_ACTION: Readonly<Record<string, GameKeyAction>> = {
   ' ': 'interact',
   e: 'interact',
   E: 'interact',
+  z: 'interact',
+  Z: 'interact',
+  f: 'interact',
+  F: 'interact',
+  c: 'toggle_auto_interact',
+  C: 'toggle_auto_interact',
   q: 'skill',
   Q: 'skill',
   i: 'inventory',
   I: 'inventory',
   Shift: 'dash',
 };
+
+const INTERACT_HOLD_CODES: ReadonlyArray<string> = ['Space', 'KeyE', 'KeyZ', 'KeyF'];
 
 const PREVENT_DEFAULT_CODES: ReadonlySet<string> = new Set([
   'ArrowUp',
@@ -137,8 +149,15 @@ export function resolveNormalizedKeyToken(event: Pick<KeyEventLike, 'code' | 'ke
         return event.key === 'ArrowLeft' ? 'ArrowLeft' : 'KeyA';
       case 'move_right':
         return event.key === 'ArrowRight' ? 'ArrowRight' : 'KeyD';
-      case 'interact':
-        return event.key === ' ' ? 'Space' : 'KeyE';
+      case 'interact': {
+        if (event.key === ' ') return 'Space';
+        const lower = event.key.toLowerCase();
+        if (lower === 'z') return 'KeyZ';
+        if (lower === 'f') return 'KeyF';
+        return 'KeyE';
+      }
+      case 'toggle_auto_interact':
+        return 'KeyC';
       case 'skill':
         return 'KeyQ';
       case 'inventory':
@@ -174,8 +193,8 @@ export function resolveDirectionalVectorFromCodes(pressedCodes: ReadonlySet<stri
 }
 
 /**
- * 상호작용 홀드 입력(Space / E)이 유지되고 있는지 판별한다.
+ * 상호작용 홀드 입력(Space / E / Z / F)이 유지되고 있는지 판별한다.
  */
 export function isInteractHoldActive(pressedCodes: ReadonlySet<string>): boolean {
-  return pressedCodes.has('Space') || pressedCodes.has('KeyE');
+  return INTERACT_HOLD_CODES.some((code) => pressedCodes.has(code));
 }

@@ -273,6 +273,7 @@ export function createWorldControllersBundle(
     getEntityInteractionPoint: (visual) =>
       host.resourceEntityRenderer.getEntityInteractionPoint(visual),
     onInteract: () => playerInteraction.tryInteract(),
+    onAutoInteract: () => playerInteraction.tryInteract({ autoMode: true }),
     isPlacementActive: () => towerPlacement.isActive(),
     getAttackRange: (isBoss) => {
       const baseRange = host.systems.playerProgressionSystem.getEffectiveAttackRange();

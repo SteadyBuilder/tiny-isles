@@ -146,3 +146,56 @@ test('KeyboardInputController tracks arrow/WASD keys, fires one-shot actions onc
   controller.processKeyDown({ code: 'ArrowUp', key: 'ArrowUp' });
   assert.deepEqual(controller.getDirectionalVector(), { vx: 0, vy: -1 });
 });
+
+test('Z and F work as alternative interact keys (including Korean IME & diagonal arrows) and C toggles auto-interact', () => {
+  assert.equal(resolveGameKeyAction({ code: 'KeyZ', key: 'ㅋ' }), 'interact');
+  assert.equal(resolveGameKeyAction({ code: 'KeyF', key: 'ㄹ' }), 'interact');
+  assert.equal(resolveGameKeyAction({ code: 'KeyC', key: 'ㅊ' }), 'toggle_auto_interact');
+
+  const pressedZ = new Set<string>(['ArrowUp', 'ArrowLeft', 'KeyZ']);
+  assert.deepEqual(resolveDirectionalVectorFromCodes(pressedZ), { vx: -1, vy: -1 });
+  assert.equal(isInteractHoldActive(pressedZ), true);
+
+  const pressedF = new Set<string>(['ArrowUp', 'ArrowLeft', 'KeyF']);
+  assert.equal(isInteractHoldActive(pressedF), true);
+
+  let interactCount = 0;
+  let autoToggleCount = 0;
+
+  const controller = new KeyboardInputController({
+    onInteract: () => {
+      interactCount += 1;
+    },
+    onToggleAutoInteract: () => {
+      autoToggleCount += 1;
+    },
+    onCastSkill: () => {},
+    onOpenInventory: () => {},
+    onDash: () => {},
+  });
+
+  // Diagonal arrows held + Z pressed
+  controller.processKeyDown({ code: 'ArrowUp', key: 'ArrowUp' });
+  controller.processKeyDown({ code: 'ArrowLeft', key: 'ArrowLeft' });
+  controller.processKeyDown({ code: 'KeyZ', key: 'ㅋ' });
+  assert.deepEqual(controller.getDirectionalVector(), { vx: -1, vy: -1 });
+  assert.equal(interactCount, 1);
+  assert.equal(controller.isInteractHeld(), true);
+
+  controller.processKeyUp({ code: 'KeyZ', key: 'ㅋ' });
+  assert.equal(controller.isInteractHeld(), false);
+
+  // F pressed while diagonal arrows still held
+  controller.processKeyDown({ code: 'KeyF', key: 'f' });
+  assert.equal(interactCount, 2);
+  assert.equal(controller.isInteractHeld(), true);
+  controller.processKeyUp({ code: 'KeyF', key: 'f' });
+
+  // C toggles auto-interact once per press (ignores repeat)
+  controller.processKeyDown({ code: 'KeyC', key: 'ㅊ' });
+  controller.processKeyDown({ code: 'KeyC', key: 'ㅊ', repeat: true });
+  assert.equal(autoToggleCount, 1);
+  controller.processKeyUp({ code: 'KeyC', key: 'ㅊ' });
+  controller.processKeyDown({ code: 'KeyC', key: 'c' });
+  assert.equal(autoToggleCount, 2);
+});

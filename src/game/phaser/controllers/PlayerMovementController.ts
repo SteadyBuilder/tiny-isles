@@ -57,6 +57,7 @@ export interface IPlayerMovementContext {
   isWithinEntityGatherRange: (px: number, py: number, visual: EntityVisual) => boolean;
   getEntityInteractionPoint: (visual: EntityVisual) => { x: number; y: number };
   onInteract: () => void;
+  onAutoInteract?: () => void;
   isPlacementActive?: () => boolean;
   getMoveSpeed?: () => number;
   getAttackRange?: (isBoss: boolean) => number;
@@ -96,6 +97,7 @@ export class PlayerMovementController {
   private keyboardController: KeyboardInputController;
   private joystickVector = { x: 0, y: 0 };
   private isActionHolding = false;
+  private isAutoInteractEnabled = false;
 
   private lastGridPos = { gridX: 0, gridY: 0 };
   private lastStandingTerritoryId: number | null = 0;
@@ -104,12 +106,14 @@ export class PlayerMovementController {
   private lastNearToolShop = false;
   private lastNearMercGuild = false;
   private lastInteractTime = 0;
+  private lastAutoInteractTime = 0;
   private unbindInputs: Array<() => void> = [];
 
   constructor(ctx: IPlayerMovementContext) {
     this.ctx = ctx;
     this.keyboardController = new KeyboardInputController({
       onInteract: () => this.ctx.onInteract(),
+      onToggleAutoInteract: () => this.toggleAutoInteract(),
       onCastSkill: () => GameEvents.emit('cast-active-skill'),
       onOpenInventory: () => GameEvents.emit('open-inventory-modal'),
       onDash: () => this.triggerDash(),
@@ -572,6 +576,11 @@ export class PlayerMovementController {
     this.pointerController.setupCamera(this.playerSprite);
   }
 
+  public toggleAutoInteract(): void {
+    this.isAutoInteractEnabled = !this.isAutoInteractEnabled;
+    GameEvents.emit('auto-interact-changed', this.isAutoInteractEnabled);
+  }
+
   public setupInputs(): void {
     this.keyboardController.attach();
 
@@ -587,6 +596,9 @@ export class PlayerMovementController {
     const handleTriggerDash = () => {
       this.triggerDash();
     };
+    const handleToggleAutoInteract = () => {
+      this.toggleAutoInteract();
+    };
     const handlePauseToggled = (paused: boolean) => {
       this.keyboardController.setPaused(paused);
     };
@@ -595,6 +607,7 @@ export class PlayerMovementController {
     GameEvents.on('player-action-stop', handleActionStop);
     GameEvents.on('player-hp-updated', handleHpUpdated);
     GameEvents.on('trigger-dash', handleTriggerDash);
+    GameEvents.on('toggle-auto-interact', handleToggleAutoInteract);
     GameEvents.on('game-pause-toggled', handlePauseToggled);
 
     this.unbindInputs.push(() => {
@@ -602,9 +615,11 @@ export class PlayerMovementController {
       GameEvents.off('player-action-stop', handleActionStop);
       GameEvents.off('player-hp-updated', handleHpUpdated);
       GameEvents.off('trigger-dash', handleTriggerDash);
+      GameEvents.off('toggle-auto-interact', handleToggleAutoInteract);
       GameEvents.off('game-pause-toggled', handlePauseToggled);
     });
 
+    GameEvents.emit('auto-interact-changed', this.isAutoInteractEnabled);
     this.dashController.emitState();
   }
 
@@ -701,6 +716,13 @@ export class PlayerMovementController {
     const isHoldInput = this.keyboardController.isInteractHeld() || this.isActionHolding;
     if (isHoldInput && time - this.lastInteractTime >= 240) {
       this.ctx.onInteract();
+    } else if (
+      !isHoldInput &&
+      this.isAutoInteractEnabled &&
+      time - this.lastAutoInteractTime >= 240
+    ) {
+      this.lastAutoInteractTime = time;
+      this.ctx.onAutoInteract?.();
     }
 
     this.pointerController.updateZoom(delta);

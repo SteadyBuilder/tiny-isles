@@ -33,6 +33,11 @@ const GUIDE_ITEMS: ReadonlyArray<{
     title: '마물 & 보스 웨이브 방어',
     body: '위협도가 차오르면 외곽에서 마물과 보스가 침공합니다. 본진과 점령 마을의 코어 보석을 지켜내세요!',
   },
+  {
+    iconSrc: '/assets/ui/Icons/Icon_05.png',
+    title: 'PC 키보드 조작법 & 동시 입력 우회',
+    body: '이동: WASD / 방향키 · 공격·채집: Space / E / Z / F · 자동 공격·채집 토글: C · 스킬: Q · 대시: Shift. 일부 키보드에서 대각선 방향키+Space가 막힐 때는 Z/F 키 또는 [C] 자동 공격 토글을 활용하세요.',
+  },
 ];
 
 export const HudHelpModal: React.FC<HudHelpModalProps> = ({ isOpen, onClose }) => {

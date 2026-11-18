@@ -11,6 +11,7 @@ import {
 
 export interface IKeyboardInputCallbacks {
   onInteract: () => void;
+  onToggleAutoInteract?: () => void;
   onCastSkill: () => void;
   onOpenInventory: () => void;
   onDash: () => void;
@@ -150,6 +151,9 @@ export class KeyboardInputController {
     switch (action) {
       case 'interact':
         this.callbacks.onInteract();
+        break;
+      case 'toggle_auto_interact':
+        this.callbacks.onToggleAutoInteract?.();
         break;
       case 'skill':
         this.callbacks.onCastSkill();

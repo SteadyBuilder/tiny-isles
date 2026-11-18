@@ -130,6 +130,8 @@ export interface GameEventPayloads {
   'player-action-start': void;
   'player-action-stop': void;
   'trigger-interact': void;
+  'toggle-auto-interact': void;
+  'auto-interact-changed': boolean;
   'player-grid-pos-changed': { gridX: number; gridY: number };
   'player-standing-territory-changed': number | null;
   'player-moved': { x: number; y: number; direction: string; action: string };

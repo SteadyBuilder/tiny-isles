@@ -116,12 +116,15 @@ export class PlayerInteractionController {
     }
   }
 
-  public tryInteract(): void {
+  public tryInteract(options?: { autoMode?: boolean }): void {
     if (this.ctx.isPlayerFainted()) return;
 
+    const autoMode = Boolean(options?.autoMode);
     const { scene } = this.ctx;
     const now = scene.time.now;
-    this.ctx.markInteractTime(now);
+    if (!autoMode) {
+      this.ctx.markInteractTime(now);
+    }
     const { x: px, y: py } = this.ctx.getPlayerPosition();
 
     const classDef = this.ctx.getPlayerClassDef?.();
@@ -245,27 +248,29 @@ export class PlayerInteractionController {
       }
     }
 
-    // 2. 건설된 '왕국 전직소(job_hall)' 또는 '도구 상점(tool_shop)' 앞에서 상호작용 시 모달 열기
-    const buildings = this.ctx.getConstructedBuildings?.() ?? [];
-    const jobHallStatus = checkJobHallProximity(px, py, buildings);
-    if (jobHallStatus.isNear) {
-      sound.playUnlock();
-      GameEvents.emit('open-job-hall-modal');
-      return;
-    }
+    // 2. 건설된 '왕국 전직소(job_hall)' 또는 '도구 상점(tool_shop)' 앞에서 상호작용 시 모달 열기 (수동 입력 전용)
+    if (!autoMode) {
+      const buildings = this.ctx.getConstructedBuildings?.() ?? [];
+      const jobHallStatus = checkJobHallProximity(px, py, buildings);
+      if (jobHallStatus.isNear) {
+        sound.playUnlock();
+        GameEvents.emit('open-job-hall-modal');
+        return;
+      }
 
-    const toolShopStatus = checkToolShopProximity(px, py, buildings);
-    if (toolShopStatus.isNear) {
-      sound.playUnlock();
-      GameEvents.emit('open-tool-shop-modal');
-      return;
-    }
+      const toolShopStatus = checkToolShopProximity(px, py, buildings);
+      if (toolShopStatus.isNear) {
+        sound.playUnlock();
+        GameEvents.emit('open-tool-shop-modal');
+        return;
+      }
 
-    const mercGuildStatus = checkMercenaryGuildProximity(px, py, buildings);
-    if (mercGuildStatus.isNear) {
-      sound.playUnlock();
-      GameEvents.emit('open-mercenary-guild-modal');
-      return;
+      const mercGuildStatus = checkMercenaryGuildProximity(px, py, buildings);
+      if (mercGuildStatus.isNear) {
+        sound.playUnlock();
+        GameEvents.emit('open-mercenary-guild-modal');
+        return;
+      }
     }
 
     // 2-B. 손상된 목책 및 성벽 수리 (Wall Repair)
@@ -277,46 +282,48 @@ export class PlayerInteractionController {
       }
     }
 
-    // 3. 미점령 영지 개척 제단 확인 (몬스터 부락은 제외)
-    const islands = this.ctx.getIslands();
-    const inventory = this.ctx.getInventory();
-    for (const isl of islands) {
-      if (!isl.unlocked && !isl.isMonsterCamp) {
-        const origin = getIslandOrigin(isl.gridX, isl.gridY);
-        const signX = origin.x + TERRITORY_CENTER_X;
-        const signY = origin.y + TERRITORY_CENTER_Y;
-        const dist = Math.hypot(px - signX, py - signY);
+    // 3. 미점령 영지 개척 제단 확인 (몬스터 부락은 제외, 수동 입력 전용)
+    if (!autoMode) {
+      const islands = this.ctx.getIslands();
+      const inventory = this.ctx.getInventory();
+      for (const isl of islands) {
+        if (!isl.unlocked && !isl.isMonsterCamp) {
+          const origin = getIslandOrigin(isl.gridX, isl.gridY);
+          const signX = origin.x + TERRITORY_CENTER_X;
+          const signY = origin.y + TERRITORY_CENTER_Y;
+          const dist = Math.hypot(px - signX, py - signY);
 
-        if (dist < 260) {
-          const claimCheck = canClaimTerritory(islands, isl, this.ctx.getPlayerId());
-          if (!claimCheck.allowed) {
-            const reason = claimCheck.reason || '1인당 1곳만 점령할 수 있습니다.';
-            this.ctx.showFloatingText(signX, signY - 40, reason, '#f87171');
-            GameEvents.emit('game-alert', reason);
-            return;
-          }
+          if (dist < 260) {
+            const claimCheck = canClaimTerritory(islands, isl, this.ctx.getPlayerId());
+            if (!claimCheck.allowed) {
+              const reason = claimCheck.reason || '1인당 1곳만 점령할 수 있습니다.';
+              this.ctx.showFloatingText(signX, signY - 40, reason, '#f87171');
+              GameEvents.emit('game-alert', reason);
+              return;
+            }
 
-          const costDiscount = this.ctx.getMetaBonuses?.().costDiscountRatio ?? 0;
-          const reqWood = Math.max(0, Math.round(isl.costWood * (1 - costDiscount)));
-          const reqStone = Math.max(0, Math.round(isl.costStone * (1 - costDiscount)));
-          const reqGold = Math.max(0, Math.round(isl.costGold * (1 - costDiscount)));
+            const costDiscount = this.ctx.getMetaBonuses?.().costDiscountRatio ?? 0;
+            const reqWood = Math.max(0, Math.round(isl.costWood * (1 - costDiscount)));
+            const reqStone = Math.max(0, Math.round(isl.costStone * (1 - costDiscount)));
+            const reqGold = Math.max(0, Math.round(isl.costGold * (1 - costDiscount)));
 
-          if (
-            inventory.wood >= reqWood &&
-            inventory.stone >= reqStone &&
-            inventory.gold >= reqGold
-          ) {
-            this.ctx.spendInventory(reqWood, reqStone, reqGold);
-            this.ctx.unlockIslandLocally(isl.id, this.ctx.getPlayerName(), true);
-            return;
-          } else {
-            this.ctx.showFloatingText(
-              signX,
-              signY - 40,
-              `자원 부족! (🪵${reqWood} 🪨${reqStone}${reqGold > 0 ? ` 🪙${reqGold}` : ''})`,
-              '#ff5252'
-            );
-            return;
+            if (
+              inventory.wood >= reqWood &&
+              inventory.stone >= reqStone &&
+              inventory.gold >= reqGold
+            ) {
+              this.ctx.spendInventory(reqWood, reqStone, reqGold);
+              this.ctx.unlockIslandLocally(isl.id, this.ctx.getPlayerName(), true);
+              return;
+            } else {
+              this.ctx.showFloatingText(
+                signX,
+                signY - 40,
+                `자원 부족! (🪵${reqWood} 🪨${reqStone}${reqGold > 0 ? ` 🪙${reqGold}` : ''})`,
+                '#ff5252'
+              );
+              return;
+            }
           }
         }
       }
@@ -391,6 +398,7 @@ export class PlayerInteractionController {
       return;
     }
 
+    if (autoMode) return;
     if (now - this.lastGatherActionTime < RESOURCE_GATHER_COOLDOWN_MS) return;
     this.lastGatherActionTime = now;
     this.ctx.playPlayerAnimation('axe', RESOURCE_GATHER_COOLDOWN_MS);
