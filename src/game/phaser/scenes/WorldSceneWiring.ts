@@ -6,6 +6,7 @@ import {
   Island,
   PlayerColor,
 } from '../../../types/game';
+import { BuildingRepairController } from '../controllers/BuildingRepairController';
 import { PlayerInteractionController } from '../controllers/PlayerInteractionController';
 import { PlayerMovementController } from '../controllers/PlayerMovementController';
 import { TerritoryActionController } from '../controllers/TerritoryActionController';
@@ -57,6 +58,7 @@ export interface IWorldControllersHost {
 export interface WorldControllersBundle {
   territoryPassive: TerritoryPassiveSystem;
   territoryAction: TerritoryActionController;
+  buildingRepair: BuildingRepairController;
   playerInteraction: PlayerInteractionController;
   playerMovement: PlayerMovementController;
   towerPlacement: TowerPlacementController;
@@ -142,6 +144,21 @@ export function createWorldControllersBundle(
       host.systems.multiplayerSync?.broadcastRepairTerritoryRequest(territoryId),
   });
 
+  const buildingRepair = new BuildingRepairController({
+    getConstructedBuildings: host.getConstructedBuildings,
+    getInventory: host.getInventory,
+    spendInventory: host.spendResources,
+    updateConstructedBuildingHpBar: (id) => host.constructedBuildingRenderer.updateHpBar(id),
+    showFloatingText: (x, y, text, color = '#ffffff') =>
+      host.effectsRenderer.showFloatingText(x, y, text, color),
+    saveWorldState: (immediate = false) => host.persistence.saveWorldState(immediate),
+    emitWorldStateToReact: (immediate = false) => host.persistence.emitWorldStateToReact(immediate),
+    broadcastBuildingHpSync: (buildingId, hp, maxHp) =>
+      host.systems.multiplayerSync?.broadcastBuildingHpSync(buildingId, hp, maxHp),
+    shakeObject: (target) => host.effectsRenderer.shakeObject(target),
+    getConstructedVisualContainer: (id) => host.constructedBuildingRenderer.getContainer(id),
+  });
+
   playerInteraction = new PlayerInteractionController({
     scene: host.scene,
     getPlayerId: host.getPlayerId,
@@ -156,6 +173,7 @@ export function createWorldControllersBundle(
     getInventory: host.getInventory,
     spendInventory: host.spendResources,
     addHarvestedResource: host.addHarvestedResource,
+    tryRepairNearestWall: (px, py) => buildingRepair.repairNearestDamagedWall(px, py),
     getMonsterVisuals: () => host.systems.waveSystem.getMonsterVisuals(),
     damageMonster: (id, dmg, attacker, attackerId, hitMeta) =>
       host.systems.waveSystem.damageMonster(id, dmg, attacker, false, attackerId, hitMeta),
@@ -231,6 +249,8 @@ export function createWorldControllersBundle(
     getConstructedBuildings: host.getConstructedBuildings,
     grantDashInvincibility: (durationMs) =>
       host.systems.playerHealthSystem.grantTemporaryInvincibility(durationMs),
+    findNearestDamagedWall: (wx, wy, maxDist) =>
+      buildingRepair.getNearbyDamagedWall(wx, wy, maxDist),
   });
 
   const eventBus = new WorldEventBusController({
@@ -267,6 +287,7 @@ export function createWorldControllersBundle(
       towerPlacement.confirm();
     },
     repairTerritoryCore: (id) => territoryAction.handleRepairCore(id),
+    repairBuilding: (id) => buildingRepair.repairBuildingById(id, true),
     triggerRegularWave: () => host.systems.waveSystem.triggerRegularWave(),
     triggerBossWave: () => host.systems.waveSystem.triggerBossWave(),
     summonEarlyWave: (isBoss) => host.systems.waveSystem.summonEarlyWave(isBoss),
@@ -301,6 +322,7 @@ export function createWorldControllersBundle(
   return {
     territoryPassive,
     territoryAction,
+    buildingRepair,
     playerInteraction,
     playerMovement,
     towerPlacement,

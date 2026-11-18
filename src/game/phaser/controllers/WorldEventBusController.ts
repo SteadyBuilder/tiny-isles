@@ -27,6 +27,7 @@ export interface IWorldEventBusContext {
   cancelTowerPlacement: () => void;
   confirmTowerPlacement: () => void;
   repairTerritoryCore: (territoryId: number) => void;
+  repairBuilding?: (buildingId: string) => void;
   triggerRegularWave: () => void;
   triggerBossWave: () => void;
   summonEarlyWave: (isBossWave: boolean) => void;
@@ -98,6 +99,10 @@ export class WorldEventBusController {
 
     this.register('repair-territory-core', (territoryId) => {
       this.ctx.repairTerritoryCore(territoryId);
+    });
+
+    this.register('repair-building', (buildingId) => {
+      this.ctx.repairBuilding?.(buildingId);
     });
 
     this.register('trigger-regular-wave', () => {

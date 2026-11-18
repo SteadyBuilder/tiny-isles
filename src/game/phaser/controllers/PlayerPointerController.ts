@@ -27,6 +27,11 @@ export interface IPlayerPointerContext {
   onInteract: () => void;
   isPlacementActive?: () => boolean;
   getAttackRange?: (isBoss: boolean) => number;
+  findNearestDamagedWall?: (
+    wx: number,
+    wy: number,
+    maxDist?: number
+  ) => { hitX: number; hitY: number } | null;
 }
 
 /**
@@ -246,11 +251,16 @@ export class PlayerPointerController {
   private findInteractableTarget(
     wx: number,
     wy: number
-  ): { x: number; y: number; entityVisual?: EntityVisual } | null {
+  ): { x: number; y: number; entityVisual?: EntityVisual; stopDistance?: number } | null {
     const touchedEntity = this.ctx.findTappedEntityVisual(wx, wy);
     if (touchedEntity) {
       const point = this.ctx.getEntityInteractionPoint(touchedEntity);
       return { x: point.x, y: point.y, entityVisual: touchedEntity };
+    }
+
+    const damagedWall = this.ctx.findNearestDamagedWall?.(wx, wy, 80);
+    if (damagedWall) {
+      return { x: damagedWall.hitX, y: damagedWall.hitY, stopDistance: 50 };
     }
 
     for (const isl of this.ctx.getIslands()) {

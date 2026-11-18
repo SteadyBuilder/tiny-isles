@@ -68,6 +68,7 @@ export interface GameEventPayloads {
   'building-placed': ConstructedBuilding;
   'building-damaged': { buildingId: string; hp: number; maxHp: number };
   'building-destroyed': { territoryId: number; buildingId: string; slotIndex: number };
+  'repair-building': string; // buildingId
 
   // 웨이브 및 방어 시스템
   'trigger-regular-wave': void;

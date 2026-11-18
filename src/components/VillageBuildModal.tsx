@@ -8,6 +8,8 @@ import {
 } from '../types/game';
 import { CONSTRUCTABLE_BLUEPRINTS, VILLAGE_TIER_CONFIGS } from '../game/constants';
 import { BuildingSystem } from '../game/BuildingSystem';
+import { isWallBuilding } from '../game/systems/WallRepairRules';
+import { TerritoryWallRepairCard } from './TerritoryWallRepairCard';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
 import { WoodModalFrame } from './ui/WoodModalFrame';
 import { PixelGameButton } from './ui/PixelGameButton';
@@ -25,6 +27,7 @@ interface VillageBuildModalProps {
   onConstructBuilding: (territoryId: number, type: ConstructableType, slotIndex?: number) => void;
   onSelectTowerPlacement?: (territoryId: number, type: ConstructableType) => void;
   onRepairCore: (territoryId: number) => void;
+  onRepairBuilding?: (buildingId: string) => void;
   onTestDestroyCore?: (territoryId: number) => void;
 }
 
@@ -47,12 +50,20 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   onConstructBuilding,
   onSelectTowerPlacement,
   onRepairCore,
+  onRepairBuilding,
 }) => {
   const [activeCategory, setActiveCategory] = useState<BuildingCategory>('tower');
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
 
   const curTerritory = territories.find((t) => t.id === playerStandingTerritoryId);
   const access = canBuildInTerritory(curTerritory, playerId, playerStandingTerritoryId);
+
+  const hasDamagedWall = Boolean(
+    curTerritory &&
+      constructedBuildings.some(
+        (b) => b.territoryId === curTerritory.id && isWallBuilding(b) && b.hp < b.maxHp
+      )
+  );
 
   useEffect(() => {
     setSelectedSlotIndex(null);
@@ -139,6 +150,16 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
               <img src="/assets/decorations/Rock2.png" alt="" className="w-3 h-3 pixel-art" />
               <span>5</span>
             </button>
+            {hasDamagedWall && (
+              <button
+                type="button"
+                onClick={() => setActiveCategory('wall')}
+                className="px-2 py-1 rounded-lg bg-[#b45309] hover:bg-[#92400e] border border-[#78350f] text-[#fef3c7] text-[10px] font-black inline-flex items-center gap-1 active:scale-95 transition animate-pulse"
+                title="손상된 성벽/목책 확인 및 수리"
+              >
+                <span>🛡️ 방벽 손상</span>
+              </button>
+            )}
           </div>
 
           {upgrade.nextTier ? (
@@ -165,29 +186,37 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
             {slotStates.map((slot) => {
               const isSelected = selectedSlotIndex === slot.slotIndex;
               const isOcc = Boolean(slot.building);
+              const isDamaged = Boolean(slot.building && slot.building.hp < slot.building.maxHp);
               const slotMark = slot.role === 'wall' ? '방벽' : '터';
               return (
                 <button
                   key={slot.slotIndex}
                   type="button"
-                  disabled={!slot.isUnlocked || isOcc}
-                  onClick={() => setSelectedSlotIndex(isSelected ? null : slot.slotIndex)}
+                  disabled={!slot.isUnlocked || (isOcc && !isDamaged)}
+                  onClick={() => {
+                    setSelectedSlotIndex(isSelected ? null : slot.slotIndex);
+                    if (slot.role === 'wall') setActiveCategory('wall');
+                  }}
                   className={`py-1 px-1 rounded text-[10px] font-black border-2 transition truncate tabular-nums ${
                     !slot.isUnlocked
                       ? 'bg-[#d8c5aa] text-[#9c8973] border-[#c4b094] opacity-55 cursor-not-allowed'
-                      : isOcc
-                        ? 'bg-[#c7aa83] text-[#4a3221] border-[#ad8f67] cursor-not-allowed'
-                        : isSelected
-                          ? 'bg-[#2563eb] text-white border-[#1e40af] shadow'
-                          : 'bg-[#fff5e2] text-[#6d4626] border-[#c4a479] hover:bg-[#ffeac4]'
+                      : isDamaged
+                        ? 'bg-[#7f1d1d] text-[#fecaca] border-[#ef4444] animate-pulse cursor-pointer'
+                        : isOcc
+                          ? 'bg-[#c7aa83] text-[#4a3221] border-[#ad8f67] cursor-not-allowed'
+                          : isSelected
+                            ? 'bg-[#2563eb] text-white border-[#1e40af] shadow'
+                            : 'bg-[#fff5e2] text-[#6d4626] border-[#c4a479] hover:bg-[#ffeac4]'
                   }`}
                   title={
                     slot.building
-                      ? `${slot.building.name} (HP ${slot.building.hp})`
+                      ? `${slot.building.name} (HP ${slot.building.hp}/${slot.building.maxHp})${
+                          isDamaged ? ' - 손상됨 (클릭하여 수리)' : ''
+                        }`
                       : `슬롯 #${slot.slotIndex} (${slot.role})`
                   }
                 >
-                  #{slot.slotIndex} {isOcc ? '완료' : slotMark}
+                  #{slot.slotIndex} {isDamaged ? '손상' : isOcc ? '완료' : slotMark}
                 </button>
               );
             })}
@@ -212,10 +241,25 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
             >
               <img src={cat.iconSrc} alt="" className="w-4 h-4 object-contain pixel-art shrink-0" />
               <span>{cat.label}</span>
+              {cat.key === 'wall' && hasDamagedWall && (
+                <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse" />
+              )}
             </button>
           );
         })}
       </div>
+
+      {/* Wall Status & Direct Repair Section */}
+      {activeCategory === 'wall' && (
+        <TerritoryWallRepairCard
+          territoryId={curTerritory.id}
+          constructedBuildings={constructedBuildings}
+          inventory={inventory}
+          onRepairBuilding={(id) => onRepairBuilding?.(id)}
+          selectedSlotIndex={selectedSlotIndex}
+          onSelectSlot={(slotIdx) => setSelectedSlotIndex(slotIdx)}
+        />
+      )}
 
       {/* Blueprints Grid */}
       <div className="ts-paper-sheet p-2">

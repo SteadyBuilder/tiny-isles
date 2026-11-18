@@ -55,6 +55,7 @@ export interface IPlayerInteractionContext {
   };
   healPlayer?: (amount: number) => void;
   tryAttackCampCore?: (px: number, py: number, rangePx: number, damage: number) => boolean;
+  tryRepairNearestWall?: (px: number, py: number) => boolean;
   projectileSystem?: ProjectileSystem;
   findGatherableEntityVisual: (x: number, y: number) => EntityVisual | null;
   updateEntityHpBar: (entityId: string) => void;
@@ -218,6 +219,17 @@ export class PlayerInteractionController {
     if (toolShopStatus.isNear) {
       sound.playUnlock();
       GameEvents.emit('open-tool-shop-modal');
+      return;
+    }
+
+    // 2-B. 손상된 목책 및 성벽 수리 (Wall Repair)
+    if (this.ctx.tryRepairNearestWall?.(px, py)) {
+      this.ctx.playPlayerAnimation('axe');
+      scene.time.delayedCall(250, () => {
+        if (this.ctx.getCurrentAction() === 'axe') {
+          this.ctx.playPlayerAnimation('idle');
+        }
+      });
       return;
     }
 

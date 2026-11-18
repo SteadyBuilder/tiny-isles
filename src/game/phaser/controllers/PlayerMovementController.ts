@@ -48,6 +48,11 @@ export interface IPlayerMovementContext {
   getAttackRange?: (isBoss: boolean) => number;
   getConstructedBuildings?: () => ConstructedBuilding[];
   grantDashInvincibility?: (durationMs: number) => void;
+  findNearestDamagedWall?: (
+    wx: number,
+    wy: number,
+    maxDist?: number
+  ) => { hitX: number; hitY: number } | null;
 }
 
 /**
@@ -103,6 +108,7 @@ export class PlayerMovementController {
       onInteract: ctx.onInteract,
       isPlacementActive: ctx.isPlacementActive,
       getAttackRange: ctx.getAttackRange,
+      findNearestDamagedWall: ctx.findNearestDamagedWall,
     });
     this.dashController = new PlayerDashController({
       scene: ctx.scene,

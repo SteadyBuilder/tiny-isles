@@ -265,6 +265,7 @@ export function App() {
           GameEvents.emit('enter-tower-placement', { territoryId, type })
         }
         onRepairCore={(territoryId) => GameEvents.emit('repair-territory-core', territoryId)}
+        onRepairBuilding={(buildingId) => GameEvents.emit('repair-building', buildingId)}
       />
 
       <TowerPlacementBanner />
