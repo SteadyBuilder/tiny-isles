@@ -6,6 +6,8 @@ export type PlayerClassId = 'pawn' | 'guardian' | 'lancer' | 'ranger' | 'archmag
 
 export type MonsterCombatRole = 'melee' | 'lancer' | 'ranged' | 'mage';
 
+export type MonsterSkillId = 'dark_cleave' | 'piercing_thrust' | 'volley_shot' | 'abyss_orb';
+
 export type EliteAffixId = 'berserker' | 'swift' | 'vampiric' | 'arcane_nova' | 'fortified';
 
 export type EquipmentSlot = 'weapon' | 'armor' | 'relic';

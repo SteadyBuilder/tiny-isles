@@ -93,6 +93,7 @@ export class WaveSpawner {
       const monster: Monster = {
         id: `m_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
         type: template.type,
+        role: template.role,
         name: template.name,
         isBoss: false,
         x: spawnX,
@@ -127,6 +128,7 @@ export class WaveSpawner {
         const bossMonster: Monster = {
           id: `boss_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           type: bossTemplate.type,
+          role: bossTemplate.role,
           name: bossTemplate.name,
           isBoss: true,
           bossTemplateId: bossTemplate.templateId,

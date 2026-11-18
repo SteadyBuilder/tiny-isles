@@ -1,10 +1,11 @@
-import { BossSkillId, MonsterType } from '../types/game';
+import { BossSkillId, MonsterCombatRole, MonsterType } from '../types/game';
 
 /**
  * 몬스터 기본 스탯 템플릿 인터페이스
  */
 export interface MonsterDataTemplate {
   type: MonsterType;
+  role: MonsterCombatRole;
   name: string;
   baseHp: number;
   hpPerWave: number;
@@ -20,6 +21,7 @@ export interface MonsterDataTemplate {
 export const REGULAR_MONSTER_TEMPLATES: MonsterDataTemplate[] = [
   {
     type: 'zombie',
+    role: 'melee',
     name: '🧟 부패한 좀비',
     baseHp: 90,
     hpPerWave: 15,
@@ -30,23 +32,47 @@ export const REGULAR_MONSTER_TEMPLATES: MonsterDataTemplate[] = [
   },
   {
     type: 'skeleton',
+    role: 'ranged',
     name: '💀 저주받은 스켈레톤',
     baseHp: 70,
     hpPerWave: 12,
     baseAttack: 18,
     attackPerWave: 2,
     speed: 64,
-    description: '빠른 기동력으로 외곽 방어선을 우회하여 중심부로 쇄도하는 골격 병사',
+    description: '빠른 기동력과 원거리 화살 사격으로 외곽 방어선을 압박하는 골격 사수',
   },
   {
     type: 'goblin',
-    name: '👺 암흑 마물병',
+    role: 'melee',
+    name: '👺 암흑 흑기사병',
     baseHp: 80,
     hpPerWave: 14,
     baseAttack: 16,
     attackPerWave: 2,
     speed: 58,
-    description: '균형 잡힌 공격력과 속도로 건물을 집중 파괴하는 전위대',
+    description: '균형 잡힌 근접 검술과 암흑 회전참으로 건물을 집중 파괴하는 전위대',
+  },
+  {
+    type: 'lancer',
+    role: 'lancer',
+    name: '🔱 흑철 창기병',
+    baseHp: 88,
+    hpPerWave: 15,
+    baseAttack: 18,
+    attackPerWave: 2,
+    speed: 62,
+    description: '중거리 창 찌르기와 관통 창격으로 방어선을 꿰뚫는 중거리 돌격병',
+  },
+  {
+    type: 'archmage',
+    role: 'mage',
+    name: '🔮 심연 흑마법병',
+    baseHp: 74,
+    hpPerWave: 13,
+    baseAttack: 20,
+    attackPerWave: 3,
+    speed: 52,
+    description: '원거리 마력탄과 심연 마력진 폭발을 퍼붓는 흑마법 지원병',
   },
 ];
 
@@ -57,6 +83,7 @@ export interface BossMonsterDataTemplate {
   id: string;
   name: string;
   type: MonsterType;
+  role: MonsterCombatRole;
   spriteKey: string;
   tintHex: number;
   scale: number;
@@ -74,6 +101,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_dark_knight',
     name: '⚔️ 암흑의 거인 기사',
     type: 'goblin',
+    role: 'melee',
     spriteKey: 'enemyBlackWarriorRun',
     tintHex: 0xfca5a5,
     scale: 1.0,
@@ -89,6 +117,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_lich_king',
     name: '🔮 불사의 리치 킹',
     type: 'archmage',
+    role: 'mage',
     spriteKey: 'enemyArchmageRun',
     tintHex: 0xc084fc,
     scale: 1.05,
@@ -104,6 +133,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_abyss_lancer',
     name: '🔱 심연의 창기병 군주',
     type: 'lancer',
+    role: 'lancer',
     spriteKey: 'enemyLancerRun',
     tintHex: 0xfbbf24,
     scale: 1.1,
@@ -119,6 +149,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_crimson_archer',
     name: '🏹 핏빛 명사수 군주',
     type: 'skeleton',
+    role: 'ranged',
     spriteKey: 'enemyArcherRun',
     tintHex: 0xf87171,
     scale: 1.12,
@@ -134,6 +165,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_void_tyrant',
     name: '☄️ 공허의 폭군',
     type: 'goblin',
+    role: 'melee',
     spriteKey: 'enemyPurpleWarriorRun',
     tintHex: 0xa855f7,
     scale: 1.18,
@@ -149,6 +181,7 @@ export const BOSS_MONSTER_TEMPLATES: BossMonsterDataTemplate[] = [
     id: 'boss_deathlord',
     name: '💀 종말의 대군주',
     type: 'boss_deathlord',
+    role: 'melee',
     spriteKey: 'enemyPurpleWarriorRun',
     tintHex: 0xef4444,
     scale: 1.25,

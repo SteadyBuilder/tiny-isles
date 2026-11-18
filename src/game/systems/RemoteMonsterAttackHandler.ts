@@ -1,3 +1,4 @@
+import type { BossSkillId, MonsterCombatRole, MonsterSkillId } from '../../types/game';
 import type { MonsterPlayerAttackPayload } from '../../types/monsterSync';
 
 export interface IRemoteAttackProjectilePlayer {
@@ -10,6 +11,9 @@ export interface IRemoteAttackProjectilePlayer {
     tint?: number;
     size?: number;
     isMagic?: boolean;
+    trailColor?: number;
+    impactColor?: number;
+    impactRadius?: number;
     onArrive: () => void;
   }) => void;
   spawnTelegraphZone: (params: {
@@ -22,6 +26,31 @@ export interface IRemoteAttackProjectilePlayer {
   }) => void;
 }
 
+export interface IRemoteMonsterAttackFxPlayer {
+  playBasicAttackFx: (params: {
+    role: MonsterCombatRole;
+    isBoss?: boolean;
+    startX: number;
+    startY: number;
+    targetX: number;
+    targetY: number;
+  }) => void;
+  playSkillCastFx: (params: {
+    skillId: MonsterSkillId | BossSkillId;
+    startX: number;
+    startY: number;
+    targetX: number;
+    targetY: number;
+    isBoss?: boolean;
+  }) => void;
+  playSkillDetonateFx: (params: {
+    skillId?: MonsterSkillId | BossSkillId;
+    x: number;
+    y: number;
+    radius: number;
+  }) => void;
+}
+
 export interface RemoteMonsterPlayerAttackDeps {
   getLocalPlayerId: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
@@ -29,11 +58,12 @@ export interface RemoteMonsterPlayerAttackDeps {
   damageLocalPlayer: (damage: number, attackerName: string) => void;
   playExplosionAt: (x: number, y: number) => void;
   projectileSystem?: IRemoteAttackProjectilePlayer;
+  fxRenderer?: IRemoteMonsterAttackFxPlayer;
   onMonsterAttackVisual?: (monsterId: string, targetX: number) => void;
 }
 
 /**
- * 호스트가 브로드캐스트한 몬스터 원거리·장판·근접 공격을 게스트 화면에서 연출 및 피격 판정합니다.
+ * 호스트가 브로드캐스트한 몬스터 근거리·중거리·원거리·장판·직업 스킬 공격을 게스트 화면에서 연출 및 피격 판정합니다.
  */
 export function executeRemoteMonsterPlayerAttack(
   payload: MonsterPlayerAttackPayload,
@@ -44,18 +74,44 @@ export function executeRemoteMonsterPlayerAttack(
 
   deps.onMonsterAttackVisual?.(payload.monsterId, payload.targetX);
 
+  if (payload.skillId) {
+    deps.fxRenderer?.playSkillCastFx({
+      skillId: payload.skillId,
+      startX: payload.startX,
+      startY: payload.startY,
+      targetX: payload.targetX,
+      targetY: payload.targetY,
+      isBoss: payload.isBossSkill,
+    });
+  } else {
+    deps.fxRenderer?.playBasicAttackFx({
+      role: payload.role,
+      isBoss: payload.isBossSkill,
+      startX: payload.startX,
+      startY: payload.startY,
+      targetX: payload.targetX,
+      targetY: payload.targetY,
+    });
+  }
+
   const ps = deps.projectileSystem;
   if (payload.telegraphRadius && payload.telegraphDurationMs && ps) {
-    if (payload.role === 'mage' && !payload.isBossSkill) {
+    if (
+      (payload.role === 'mage' || payload.skillId === 'piercing_thrust') &&
+      !payload.isBossSkill
+    ) {
       ps.fireProjectile({
         startX: payload.startX,
         startY: payload.startY,
         targetX: payload.targetX,
         targetY: payload.targetY,
-        durationMs: 320,
-        tint: 0xd946ef,
-        size: 42,
+        durationMs: payload.skillId === 'piercing_thrust' ? 210 : 320,
+        tint: payload.projectileTint ?? 0xd946ef,
+        size: payload.projectileSize ?? 42,
         isMagic: true,
+        trailColor: payload.trailColor,
+        impactColor: payload.impactColor,
+        impactRadius: payload.impactRadius,
         onArrive: () => {},
       });
     }
@@ -68,6 +124,12 @@ export function executeRemoteMonsterPlayerAttack(
       color: payload.telegraphColor ?? 0xa855f7,
       onDetonate: () => {
         deps.playExplosionAt(payload.targetX, payload.targetY);
+        deps.fxRenderer?.playSkillDetonateFx({
+          skillId: payload.skillId,
+          x: payload.targetX,
+          y: payload.targetY,
+          radius,
+        });
         if (!deps.isLocalPlayerFainted()) {
           const cur = deps.getLocalPlayerPosition();
           if (Math.hypot(cur.x - payload.targetX, cur.y - payload.targetY) <= radius + 4) {
@@ -79,7 +141,7 @@ export function executeRemoteMonsterPlayerAttack(
     return;
   }
 
-  if (ps && (payload.role === 'ranged' || payload.isBossSkill)) {
+  if (ps && (payload.role === 'ranged' || payload.isBossSkill || payload.skillId === 'volley_shot')) {
     const isMagic = payload.role === 'mage' || Boolean(payload.isBossSkill);
     const hitRadius = isMagic ? 64 : 58;
     ps.fireProjectile({
@@ -88,9 +150,12 @@ export function executeRemoteMonsterPlayerAttack(
       targetX: payload.targetX,
       targetY: payload.targetY,
       durationMs: payload.isBossSkill ? 520 : 260,
-      tint: payload.isBossSkill ? 0xfbbf24 : 0xf87171,
-      size: payload.isBossSkill ? 40 : 32,
+      tint: payload.projectileTint ?? (payload.isBossSkill ? 0xfbbf24 : 0xf87171),
+      size: payload.projectileSize ?? (payload.isBossSkill ? 40 : 32),
       isMagic,
+      trailColor: payload.trailColor,
+      impactColor: payload.impactColor,
+      impactRadius: payload.impactRadius,
       onArrive: () => {
         if (!deps.isLocalPlayerFainted()) {
           const cur = deps.getLocalPlayerPosition();

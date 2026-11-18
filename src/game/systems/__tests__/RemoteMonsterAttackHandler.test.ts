@@ -138,3 +138,46 @@ test('non-telegraph ranged and boss skills fire projectiles and enforce hitRadiu
   boss.fired[0]?.onArrive();
   assert.equal(boss.damages.length, 1);
 });
+
+test('monster class active skills trigger fxRenderer cast/detonate callbacks and custom projectiles', () => {
+  const castCalls: string[] = [];
+  const detonateCalls: string[] = [];
+  const basicCalls: string[] = [];
+  const h = createHarness({ pos: { x: 300, y: 300 } });
+  const depsWithFx = {
+    ...h.deps,
+    fxRenderer: {
+      playBasicAttackFx: (p: { role: string }) => basicCalls.push(p.role),
+      playSkillCastFx: (p: { skillId: string }) => castCalls.push(p.skillId),
+      playSkillDetonateFx: (p: { skillId?: string }) => detonateCalls.push(p.skillId ?? 'none'),
+    },
+  };
+
+  executeRemoteMonsterPlayerAttack(
+    makePayload({
+      role: 'lancer',
+      skillId: 'piercing_thrust',
+      telegraphRadius: 78,
+      telegraphDurationMs: 580,
+      damage: 32,
+    }),
+    depsWithFx
+  );
+
+  assert.deepEqual(castCalls, ['piercing_thrust']);
+  assert.equal(h.fired.length, 1);
+  assert.equal(h.telegraphs.length, 1);
+
+  h.telegraphs[0]?.onDetonate();
+  assert.deepEqual(detonateCalls, ['piercing_thrust']);
+  assert.equal(h.damages.length, 1);
+
+  executeRemoteMonsterPlayerAttack(
+    makePayload({
+      role: 'melee',
+      damage: 20,
+    }),
+    depsWithFx
+  );
+  assert.deepEqual(basicCalls, ['melee']);
+});

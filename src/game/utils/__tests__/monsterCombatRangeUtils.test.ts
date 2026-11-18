@@ -31,6 +31,17 @@ test('player melee and boss attack ranges strictly exceed monster melee, lancer,
   assert.equal(resolveMonsterPlayerAttackRange('mage', false), DUNGEON_INVASION_CONFIG.mageAttackRangePx);
 });
 
+test('boss monsters scale attack ranges by combat role (melee < lancer < ranged < mage)', () => {
+  const bossMelee = resolveMonsterPlayerAttackRange('melee', true);
+  const bossLancer = resolveMonsterPlayerAttackRange('lancer', true);
+  const bossRanged = resolveMonsterPlayerAttackRange('ranged', true);
+  const bossMage = resolveMonsterPlayerAttackRange('mage', true);
+
+  assert.ok(bossMelee < bossLancer, `bossMelee(${bossMelee}) < bossLancer(${bossLancer})`);
+  assert.ok(bossLancer < bossRanged, `bossLancer(${bossLancer}) < bossRanged(${bossRanged})`);
+  assert.ok(bossRanged < bossMage, `bossRanged(${bossRanged}) < bossMage(${bossMage})`);
+});
+
 test('canMonsterStrikeInRange enforces first-strike entry delay and resets when leaving range', () => {
   const state: MonsterAttackTimingState = { lastAttackTime: 0 };
   const cooldownMs = 1100;

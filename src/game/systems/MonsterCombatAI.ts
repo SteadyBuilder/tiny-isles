@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { ELITE_SHIELD_BUFF_CONFIG } from '../../data/elites';
+import { resolveMonsterCombatRole } from '../../data/monsterClassSkills';
 import { HUNTING_AI_CONFIG } from '../../data/monsterCamps';
 import { PERFORMANCE_CONFIG } from '../../data/performanceConfig';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
@@ -17,9 +18,11 @@ import {
   getTerritoryMainBuilding,
 } from '../constants';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import { MonsterAttackFxRenderer } from '../phaser/renderers/MonsterAttackFxRenderer';
 import {
   canMonsterStrikeInRange,
   resetMonsterAttackEntry,
+  resolveMonsterPlayerAttackRange,
 } from '../utils/monsterCombatRangeUtils';
 import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { MonsterSpatialGrid } from '../utils/spatialGrid';
@@ -31,6 +34,7 @@ import {
 } from '../wallCollisionGeometry';
 import { BossSkillSystem } from './BossSkillSystem';
 import { FieldMonsterAI } from './FieldMonsterAI';
+import { MonsterClassSkillSystem } from './MonsterClassSkillSystem';
 import { MonsterRangedMageAI } from './MonsterRangedMageAI';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
@@ -104,12 +108,15 @@ export class MonsterCombatAI {
   private blockerCache = new Map<string, CachedBlockerTarget>();
   private aggroTargets = new Map<string, MonsterAggroTarget>();
   private spatialGrid = new MonsterSpatialGrid();
+  private fxRenderer: MonsterAttackFxRenderer;
   private rangedMageAI: MonsterRangedMageAI;
   private fieldMonsterAI: FieldMonsterAI;
   private bossSkillSystem: BossSkillSystem;
+  private classSkillSystem: MonsterClassSkillSystem;
 
   constructor(ctx: IMonsterCombatContext) {
     this.ctx = ctx;
+    this.fxRenderer = new MonsterAttackFxRenderer(ctx.scene);
     this.rangedMageAI = new MonsterRangedMageAI({
       getMonsters: ctx.getMonsters,
       getLocalPlayerId: ctx.getLocalPlayerId,
@@ -121,6 +128,7 @@ export class MonsterCombatAI {
       healCampCore: ctx.healCampCore,
       clearMonsterAggro: (monsterId) => this.aggroTargets.delete(monsterId),
       projectileSystem: ctx.projectileSystem,
+      fxRenderer: this.fxRenderer,
       playExplosionAt: ctx.playExplosionAt,
       showFloatingText: ctx.showFloatingText,
     });
@@ -146,6 +154,22 @@ export class MonsterCombatAI {
       playExplosionAt: ctx.playExplosionAt,
       showFloatingText: ctx.showFloatingText,
     });
+    this.classSkillSystem = new MonsterClassSkillSystem({
+      getLocalPlayerId: ctx.getLocalPlayerId,
+      getLocalPlayerPosition: ctx.getLocalPlayerPosition,
+      isLocalPlayerFainted: ctx.isLocalPlayerFainted,
+      getActivePlayers: ctx.getActivePlayers,
+      damageLocalPlayer: ctx.damageLocalPlayer,
+      broadcastMonsterPlayerAttack: ctx.broadcastMonsterPlayerAttack,
+      projectileSystem: ctx.projectileSystem,
+      fxRenderer: this.fxRenderer,
+      playExplosionAt: ctx.playExplosionAt,
+      showFloatingText: ctx.showFloatingText,
+    });
+  }
+
+  public getFxRenderer(): MonsterAttackFxRenderer {
+    return this.fxRenderer;
   }
 
   private resolveActivePlayers(): ActivePlayerTarget[] {
@@ -171,6 +195,8 @@ export class MonsterCombatAI {
     this.blockerCache.clear();
     this.aggroTargets.clear();
     this.bossSkillSystem.destroy();
+    this.classSkillSystem.destroy();
+    this.fxRenderer.destroy();
   }
 
   public updateMonsters(time: number, delta: number): void {
@@ -192,8 +218,11 @@ export class MonsterCombatAI {
       const m = mv.monster;
       if (m.isBoss) {
         this.bossSkillSystem.tryCastSkill(mv, time, activePlayers);
-      } else if (m.isElite && m.eliteAffix === 'fortified') {
-        this.tryActivateEliteShield(mv, time, activePlayers);
+      } else {
+        if (m.isElite && m.eliteAffix === 'fortified') {
+          this.tryActivateEliteShield(mv, time, activePlayers);
+        }
+        this.classSkillSystem.tryCastClassSkill(mv, time, activePlayers);
       }
       const sep = this.spatialGrid.computeSeparation(m.id, m.x, m.y);
 
@@ -372,19 +401,31 @@ export class MonsterCombatAI {
 
       if (canAttackNow && time - mv.lastAttackTime >= 1150) {
         mv.lastAttackTime = time;
+        const role = resolveMonsterCombatRole(m);
         MonsterVisualManager.playAttackAnimation(mv, targetX);
+        this.fxRenderer.playBasicAttackFx({
+          role,
+          isBoss: m.isBoss || m.isElite,
+          startX: m.x,
+          startY: m.y,
+          targetX,
+          targetY,
+        });
         if (!this.ctx.isHost()) continue;
 
-        if ((m.role === 'ranged' || m.role === 'mage') && this.ctx.projectileSystem) {
+        if ((role === 'ranged' || role === 'mage') && this.ctx.projectileSystem) {
           this.ctx.projectileSystem.fireProjectile({
             startX: m.x,
             startY: m.y - 16,
             targetX,
             targetY,
             durationMs: 210,
-            tint: m.role === 'mage' ? 0xc084fc : 0xf87171,
-            size: 30,
-            isMagic: m.role === 'mage',
+            tint: role === 'mage' ? 0xc084fc : 0xf87171,
+            size: m.isBoss ? 42 : 30,
+            isMagic: role === 'mage',
+            trailColor: role === 'mage' ? 0xd946ef : 0xfb923c,
+            impactColor: role === 'mage' ? 0xc084fc : 0xf87171,
+            impactRadius: role === 'mage' ? 48 : 32,
             onArrive: () => {},
           });
         }
@@ -648,6 +689,7 @@ export class MonsterCombatAI {
       }
     }
     this.bossSkillSystem.pruneStaleState(validIds);
+    this.classSkillSystem.pruneStaleState(validIds);
     this.rangedMageAI.pruneStaleState(validIds);
     this.fieldMonsterAI.pruneStaleState(validIds);
   }
@@ -742,11 +784,8 @@ export class MonsterCombatAI {
 
     const playerPos = targetMatch.player;
     const dist = targetMatch.dist;
-
-    const baseRange = m.isBoss
-      ? PLAYER_COMBAT_CONFIG.monsterBossPlayerAttackRange
-      : PLAYER_COMBAT_CONFIG.monsterPlayerAttackRange;
-    const attackRange = this.rangedMageAI.getWaveRoleAttackRange(mv, baseRange);
+    const role = resolveMonsterCombatRole(m);
+    const attackRange = resolveMonsterPlayerAttackRange(role, m.isBoss);
 
     if (dist > attackRange) {
       resetMonsterAttackEntry(mv);
@@ -769,7 +808,16 @@ export class MonsterCombatAI {
       return true;
     }
 
-    if (canMonsterStrikeInRange(mv, time, PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs)) {
+    const baseCooldownMs =
+      role === 'mage'
+        ? 1800
+        : role === 'ranged'
+        ? 1350
+        : PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs;
+    const cooldownMs =
+      m.eliteAffix === 'berserker' ? Math.round(baseCooldownMs * 0.8) : baseCooldownMs;
+
+    if (canMonsterStrikeInRange(mv, time, cooldownMs)) {
       mv.lastAttackTime = time;
       this.rangedMageAI.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y, playerPos.id);
     }

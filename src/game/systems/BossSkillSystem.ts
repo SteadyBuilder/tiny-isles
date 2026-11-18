@@ -391,6 +391,29 @@ export class BossSkillSystem {
     });
   }
 
+  private playBossAnim(
+    texKey: string,
+    animKey: string,
+    x: number,
+    y: number,
+    width: number,
+    tint = 0xffffff,
+    rotationRad = 0,
+    height = width
+  ): void {
+    this.fxPool.playSpriteAnim({
+      texKey,
+      animKey,
+      x,
+      y,
+      width,
+      height,
+      depth: DEPTH.EXPLOSION + 3,
+      tint,
+      rotationRad,
+    });
+  }
+
   private spawnBossMinions(boss: Monster): void {
     const monsters = this.ctx.getMonsters();
     if (monsters.size > 160) return;
@@ -399,10 +422,12 @@ export class BossSkillSystem {
       const angle = Math.random() * Math.PI * 2;
       const sx = boss.x + Math.cos(angle) * 75;
       const sy = boss.y + Math.sin(angle) * 75;
+      const isRangedMinion = i === 1;
       const minion: Monster = {
         id: `bmin_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 5)}`,
-        type: i === 0 ? 'goblin' : 'skeleton',
-        name: '보스 호위 마물',
+        type: isRangedMinion ? 'skeleton' : 'goblin',
+        role: isRangedMinion ? 'ranged' : 'melee',
+        name: isRangedMinion ? '🏹 보스 호위 명사수' : '⚔️ 보스 호위 흑기사',
         isBoss: false,
         x: sx,
         y: sy,

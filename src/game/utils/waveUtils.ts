@@ -19,6 +19,7 @@ export interface PerimeterSpawnPoint {
 
 export interface MonsterTemplate {
   type: MonsterType;
+  role: import('../../types/game').MonsterCombatRole;
   name: string;
   hp: number;
   attack: number;
@@ -155,6 +156,7 @@ export function findNextInwardTargetTerritory(
 export function getRegularMonsterTemplates(waveNum: number): MonsterTemplate[] {
   return REGULAR_MONSTER_TEMPLATES.map((tmpl) => ({
     type: tmpl.type,
+    role: tmpl.role,
     name: tmpl.name,
     hp: tmpl.baseHp + waveNum * tmpl.hpPerWave,
     attack: tmpl.baseAttack + waveNum * tmpl.attackPerWave,
@@ -178,6 +180,7 @@ export function getBossMonsterTemplate(bossWaveCount: number): BossMonsterTempla
   return {
     templateId: tmpl.id,
     type: tmpl.type,
+    role: tmpl.role,
     name: `${tmpl.name} (${bossWaveCount}차 보스)`,
     spriteKey: tmpl.spriteKey,
     tintHex: tmpl.tintHex,

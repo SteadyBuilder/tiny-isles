@@ -82,9 +82,15 @@ export interface MonsterPlayerAttackPayload {
   targetX: number;
   targetY: number;
   isBossSkill?: boolean;
+  skillId?: import('./hunting').MonsterSkillId | import('./game').BossSkillId;
   telegraphRadius?: number;
   telegraphDurationMs?: number;
   telegraphColor?: number;
+  projectileTint?: number;
+  projectileSize?: number;
+  trailColor?: number;
+  impactColor?: number;
+  impactRadius?: number;
 }
 
 export interface ThreatSyncPayload {

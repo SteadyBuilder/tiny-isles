@@ -1,4 +1,5 @@
 import { FIELD_MONSTER_CONFIG } from '../../data/fieldMonsters';
+import { resolveMonsterCombatRole } from '../../data/monsterClassSkills';
 import { ConstructedBuilding } from '../../types/game';
 import { ActivePlayerTarget } from '../../types/monsterSync';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
