@@ -133,6 +133,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     onPlayerFaintedVisual: host.onPlayerFaintedVisual,
     onPlayerHitVisual: host.onPlayerHitVisual,
     onPlayerDamagedShake: () => host.combatFeedbackRenderer.triggerPlayerDamagedShake(),
+    onPlayerHealed: (px, py) => host.effectsRenderer.playHealEffectAt(px, py),
     getDamageReductionPercent: () => playerProgressionSystem?.getDamageReductionPercent() ?? 0,
     onThornsReflect: (px, py) => {
       const thorns = playerProgressionSystem?.getThornsDamage() ?? 0;

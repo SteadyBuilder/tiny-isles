@@ -15,6 +15,7 @@ export interface IPlayerHealthContext {
   onPlayerDamagedShake?: () => void;
   getDamageReductionPercent?: () => number;
   onThornsReflect?: (px: number, py: number) => void;
+  onPlayerHealed?: (px: number, py: number, gained: number) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
 }
 
@@ -55,6 +56,7 @@ export class PlayerHealthSystem {
     if (gained > 0) {
       const { x, y } = this.ctx.getPlayerPosition();
       this.ctx.showFloatingText(x, y - 40, `💚 +${gained} HP`, '#4ade80');
+      this.ctx.onPlayerHealed?.(x, y, gained);
       this.emitState();
     }
   }

@@ -22,6 +22,7 @@ export class WorldEffectsRenderer {
   private lastInvasionSignature = '';
   private clouds: CloudItem[] = [];
   private activeFloatingTexts: Phaser.GameObjects.Text[] = [];
+  private lastHealFxTime = 0;
 
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
@@ -127,6 +128,25 @@ export class WorldEffectsRenderer {
       bolt.setTint(tint);
       bolt.play('lightning_strike_anim');
       bolt.once('animationcomplete', () => bolt.destroy());
+    }
+  }
+
+  public playHealEffectAt(x: number, y: number, tint = 0x86efac, size = 148): void {
+    if (!this.isSceneAlive()) return;
+    const now = this.scene.time?.now ?? 0;
+    if (now - this.lastHealFxTime < 450) return;
+    this.lastHealFxTime = now;
+
+    if (this.scene.textures.exists('healFx') && this.scene.anims.exists('heal_anim')) {
+      const fx = this.scene.add.sprite(x, y - 10, 'healFx');
+      fx.setDepth(DEPTH.EXPLOSION + 1);
+      fx.setDisplaySize(size, size);
+      fx.setTint(tint);
+      fx.setBlendMode(Phaser.BlendModes.ADD);
+      fx.play('heal_anim');
+      fx.once('animationcomplete', () => {
+        if (fx.scene) fx.destroy();
+      });
     }
   }
 

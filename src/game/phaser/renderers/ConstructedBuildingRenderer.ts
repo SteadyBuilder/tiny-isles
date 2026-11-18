@@ -8,6 +8,7 @@ import {
   getWallCollisionBoxes,
 } from '../../wallCollisionGeometry';
 import { ConstructedVisualRef } from '../../systems/TowerDefenseSystem';
+import { attachSanctuaryAuraEffect } from './SanctuaryAuraEffect';
 
 /**
  * 플레이어가 건설한 건물(방어 타워, 나무 방책, 석조 성벽, 기본/특수 건물)의
@@ -108,9 +109,10 @@ export class ConstructedBuildingRenderer {
 
       if (cb.type === 'special_sanctuary') {
         const auraRing = this.scene.add.graphics();
-        auraRing.lineStyle(1.5, 0x4ade80, 0.22);
+        auraRing.lineStyle(1.5, 0xfde047, 0.24);
         auraRing.strokeCircle(0, 0, 300);
         container.add(auraRing);
+        attachSanctuaryAuraEffect(this.scene, container);
       }
 
       if (cb.type === 'job_hall') {
