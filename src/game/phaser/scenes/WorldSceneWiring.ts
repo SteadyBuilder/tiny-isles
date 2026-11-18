@@ -89,6 +89,20 @@ export function createWorldControllersBundle(
       host.systems.multiplayerSync?.broadcastCoreHpSync(territoryId, coreHp, coreMaxHp),
     onBuildingHealed: (buildingId, hp, maxHp) =>
       host.systems.multiplayerSync?.broadcastBuildingHpSync(buildingId, hp, maxHp),
+    onSanctuaryAuraTick: () => {
+      const hpState = host.systems.playerHealthSystem.getState();
+      if (hpState.isFainted || hpState.hp >= hpState.maxHp) return;
+      const pos = playerMovement.getPosition();
+      const result = checkSanctuaryPlayerHeal(
+        pos.x,
+        pos.y,
+        hpState.maxHp,
+        host.getConstructedBuildings()
+      );
+      if (result.inRange && result.healAmount > 0) {
+        host.systems.playerHealthSystem.healPlayer(result.healAmount);
+      }
+    },
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
     saveWorldState: (immediate = false) => host.persistence.saveWorldState(immediate),
     emitWorldStateToReact: (immediate = false) => host.persistence.emitWorldStateToReact(immediate),
