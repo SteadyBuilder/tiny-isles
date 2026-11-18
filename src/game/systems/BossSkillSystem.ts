@@ -255,6 +255,7 @@ export class BossSkillSystem {
               },
               isCoop
             );
+            this.dropBossMeteor(ox, oy, durationMs);
             ps.spawnTelegraphZone({
               x: ox,
               y: oy,
@@ -263,6 +264,7 @@ export class BossSkillSystem {
               color: 0xa855f7,
               onDetonate: () => {
                 this.spawnFxBurst(ox, oy, 'meteorRockFx', 190, 0xc084fc);
+                this.ctx.playExplosionAt(ox, oy);
                 this.damagePlayerInRadius(ox, oy, 105, dmg, m.name);
               },
             });
@@ -356,6 +358,35 @@ export class BossSkillSystem {
       duration: 380,
       ease: 'Cubic.easeOut',
       onComplete: () => this.fxPool.releaseImage(img),
+    });
+  }
+
+  private dropBossMeteor(tx: number, ty: number, durationMs: number): void {
+    const { scene } = this.ctx;
+    if (!scene.textures.exists('meteorRockFx') || !isPointInSceneViewport(scene, tx, ty)) return;
+    const meteor = this.fxPool.acquireSprite(
+      'meteorRockFx',
+      tx - 95,
+      ty - 310,
+      DEPTH.EXPLOSION + 4
+    );
+    if (!meteor) return;
+    meteor.setDisplaySize(124, 124);
+    meteor.setTint(0xc084fc);
+    if (scene.anims.exists('meteor_rock_anim')) {
+      meteor.play('meteor_rock_anim');
+    }
+    scene.tweens.add({
+      targets: meteor,
+      x: tx,
+      y: ty - 12,
+      scaleX: meteor.scaleX * 1.25,
+      scaleY: meteor.scaleY * 1.25,
+      duration: Math.max(200, durationMs),
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.fxPool.releaseSprite(meteor);
+      },
     });
   }
 

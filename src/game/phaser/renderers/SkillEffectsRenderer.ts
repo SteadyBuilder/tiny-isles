@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
 import { SkillEffectContext } from '../../../types/combat';
 import { DEPTH } from '../../depthLayers';
+import type { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { PhaserFxPool, isPointInSceneViewport } from '../utils/fxObjectPool';
 
 /**
@@ -12,11 +13,16 @@ export class SkillEffectsRenderer {
   private isSceneAlive: () => boolean;
   private activeTimers = new Set<Phaser.Time.TimerEvent>();
   private fxPool: PhaserFxPool;
+  private projectileSystem?: ProjectileSystem;
 
   constructor(scene: Phaser.Scene, isSceneAlive: () => boolean) {
     this.scene = scene;
     this.isSceneAlive = isSceneAlive;
     this.fxPool = new PhaserFxPool(scene, isSceneAlive);
+  }
+
+  public setProjectileSystem(ps: ProjectileSystem): void {
+    this.projectileSystem = ps;
   }
 
   public playClassSkill(ctx: SkillEffectContext): void {
@@ -104,6 +110,28 @@ export class SkillEffectsRenderer {
     this.playSpriteAnim('dustFx2', 'dust2_anim', x, y + 14, 96, style.primaryHex);
     this.playSpriteAnim('lanceBeamFx', 'lance_beam_anim', forwardX, forwardY - 12, 320, style.primaryHex, angle, 150);
 
+    if (this.projectileSystem) {
+      for (let i = -1; i <= 1; i++) {
+        const boltAngle = angle + i * 0.14;
+        this.schedule(Math.abs(i) * 28, () => {
+          this.projectileSystem?.fireProjectile({
+            startX: x,
+            startY: y - 12,
+            targetX: x + Math.cos(boltAngle) * 215,
+            targetY: y + Math.sin(boltAngle) * 215,
+            durationMs: 155,
+            tint: i === 0 ? style.accentHex : style.primaryHex,
+            size: i === 0 ? 48 : 38,
+            isMagic: true,
+            trailColor: style.primaryHex,
+            impactColor: style.accentHex,
+            impactRadius: 56,
+            onArrive: () => {},
+          });
+        });
+      }
+    }
+
     this.schedule(style.chargeDurationMs, () => {
       const tipX = x + Math.cos(angle) * 145;
       const tipY = y + Math.sin(angle) * 145;
@@ -119,7 +147,7 @@ export class SkillEffectsRenderer {
     const { casterX: x, casterY: y, radius, targetPoints } = ctx;
     const style = SKILL_FX_STYLE_CONFIG.ranger;
 
-    this.spawnRotatingCircle(x, y, 130, style.primaryHex, 420);
+    this.spawnRotatingCircle(x, y, 135, style.primaryHex, 440);
 
     const targets =
       targetPoints && targetPoints.length > 0
@@ -133,12 +161,28 @@ export class SkillEffectsRenderer {
     targets.forEach((pt, idx) => {
       const delay = idx * 24;
       this.schedule(delay, () => {
+        if (this.projectileSystem) {
+          this.projectileSystem.fireProjectile({
+            startX: x,
+            startY: y - 18,
+            targetX: pt.x,
+            targetY: pt.y,
+            durationMs: 145,
+            tint: idx % 2 === 0 ? style.primaryHex : style.secondaryHex,
+            size: 42,
+            isMagic: false,
+            trailColor: style.primaryHex,
+            impactColor: style.accentHex,
+            impactRadius: 46,
+            onArrive: () => {},
+          });
+        }
         this.dropSkyArrow(pt.x, pt.y, style.primaryHex, style.secondaryHex);
       });
     });
 
     this.schedule(style.chargeDurationMs, () => {
-      this.playSpriteAnim('critStarBurstFx', 'crit_star_burst_anim', x, y - 14, 150, style.primaryHex);
+      this.playSpriteAnim('critStarBurstFx', 'crit_star_burst_anim', x, y - 14, 165, style.primaryHex);
       ctx.onImpact?.();
     });
   }
@@ -148,7 +192,7 @@ export class SkillEffectsRenderer {
     const style = SKILL_FX_STYLE_CONFIG.archmage;
 
     this.spawnRotatingCircle(x, y, radius * 1.95, style.primaryHex, 780);
-    this.dropMeteor(x, y, style.chargeDurationMs);
+    this.dropMeteor(x, y, style.chargeDurationMs, style.primaryHex, style.secondaryHex);
 
     this.schedule(style.chargeDurationMs, () => {
       this.playSpriteAnim('lightningStrikeFx', 'lightning_strike_anim', x, y - 96, 156, style.primaryHex, 0, 280);
@@ -169,6 +213,27 @@ export class SkillEffectsRenderer {
         });
       }
 
+      if (this.projectileSystem) {
+        for (let i = 0; i < 8; i++) {
+          const ang = (Math.PI * 2 * i) / 8;
+          const dist = radius * 0.92;
+          this.projectileSystem.fireProjectile({
+            startX: x,
+            startY: y - 14,
+            targetX: x + Math.cos(ang) * dist,
+            targetY: y + Math.sin(ang) * dist,
+            durationMs: 260,
+            tint: i % 2 === 0 ? style.primaryHex : style.secondaryHex,
+            size: 48,
+            isMagic: true,
+            trailColor: style.accentHex,
+            impactColor: style.secondaryHex,
+            impactRadius: 68,
+            onArrive: () => {},
+          });
+        }
+      }
+
       this.spawnBurstSparks(x, y, style.secondaryHex, style.primaryHex, 22, radius * 0.9);
       ctx.onImpact?.();
     });
@@ -178,7 +243,7 @@ export class SkillEffectsRenderer {
     if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, tx, ty)) return;
     const arrow = this.fxPool.acquireSprite('arrowStormFx', tx - 85, ty - 220, DEPTH.EXPLOSION + 2);
     if (!arrow) return;
-    arrow.setDisplaySize(84, 84);
+    arrow.setDisplaySize(88, 88);
     arrow.setTint(colorA);
     if (this.scene.anims.exists('arrow_storm_anim')) {
       arrow.play('arrow_storm_anim');
@@ -193,19 +258,38 @@ export class SkillEffectsRenderer {
       onComplete: () => {
         this.fxPool.releaseSprite(arrow);
         if (!this.isSceneAlive()) return;
-        this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', tx, ty, 78, colorB);
-        this.spawnBurstSparks(tx, ty, colorA, colorB, 5, 36);
+        this.playSpriteAnim('hitSparkFx', 'hit_spark_anim', tx, ty - 6, 84, colorA);
+        this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', tx, ty, 92, colorB);
+        this.spawnBurstSparks(tx, ty, colorA, colorB, 6, 40);
       },
     });
   }
 
-  private dropMeteor(tx: number, ty: number, durationMs: number): void {
+  private dropMeteor(
+    tx: number,
+    ty: number,
+    durationMs: number,
+    colorA: number,
+    colorB: number
+  ): void {
     if (!this.isSceneAlive() || !isPointInSceneViewport(this.scene, tx, ty)) return;
-    const meteor = this.fxPool.acquireSprite('meteorRockFx', tx - 110, ty - 340, DEPTH.EXPLOSION + 4);
+    const startX = tx - 110;
+    const startY = ty - 340;
+    const meteor = this.fxPool.acquireSprite('meteorRockFx', startX, startY, DEPTH.EXPLOSION + 4);
     if (!meteor) return;
     meteor.setDisplaySize(136, 136);
     if (this.scene.anims.exists('meteor_rock_anim')) {
       meteor.play('meteor_rock_anim');
+    }
+
+    for (let i = 1; i <= 3; i++) {
+      const t = i * 0.25;
+      this.schedule(Math.round(durationMs * t), () => {
+        const mx = startX + (tx - startX) * t;
+        const my = startY + (ty - 14 - startY) * t;
+        this.playSpriteAnim('fireFx3', 'fire3_anim', mx, my, 82, colorB);
+        this.spawnBurstSparks(mx, my, colorA, colorB, 4, 28);
+      });
     }
 
     this.scene.tweens.add({

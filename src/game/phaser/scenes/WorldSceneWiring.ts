@@ -209,6 +209,8 @@ export function createWorldControllersBundle(
     healPlayer: (amount) => host.systems.playerHealthSystem.healPlayer(amount),
     tryAttackCampCore: (px, py, rangePx, dmg) =>
       host.systems.monsterCampSystem.tryAttackNearestCampCore(px, py, rangePx, dmg),
+    findNearestCampTargetPos: (px, py, rangePx) =>
+      host.systems.monsterCampSystem.findNearestCampTargetPos(px, py, rangePx),
     projectileSystem: host.systems.projectileSystem,
     findGatherableEntityVisual: (x, y) =>
       host.resourceEntityRenderer.findGatherableVisual(x, y),

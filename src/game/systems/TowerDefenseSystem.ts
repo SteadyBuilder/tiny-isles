@@ -100,14 +100,14 @@ export class TowerDefenseSystem {
       }
     }
 
-    const tint =
-      source.type === 'magic_tower'
-        ? 0xc084fc
-        : source.type === 'special_barracks'
-        ? 0xf59e0b
-        : hasBarracksBuff
-        ? 0x67e8f9
-        : 0xffffff;
+    const isMagicTower = source.type === 'magic_tower';
+    const tint = isMagicTower
+      ? 0xc084fc
+      : source.type === 'special_barracks'
+      ? 0xf59e0b
+      : hasBarracksBuff
+      ? 0x67e8f9
+      : 0xffffff;
 
     if (this.ctx.projectileSystem && isEffectVisible) {
       this.ctx.projectileSystem.fireProjectile({
@@ -115,10 +115,13 @@ export class TowerDefenseSystem {
         startY: source.y - 30,
         targetX: targetMv.monster.x,
         targetY: targetMv.monster.y,
-        durationMs: 200,
+        durationMs: isMagicTower ? 220 : 200,
         tint,
-        size: 36,
-        isMagic: source.type === 'magic_tower',
+        size: isMagicTower ? 46 : 36,
+        isMagic: isMagicTower,
+        trailColor: isMagicTower ? 0xe879f9 : hasBarracksBuff ? 0x67e8f9 : undefined,
+        impactColor: isMagicTower ? 0xc084fc : undefined,
+        impactRadius: isMagicTower ? 48 : undefined,
         onArrive: () => {
           if (this.waveSystem.getIsHost()) {
             this.waveSystem.damageMonster(targetMonsterId, damage, source.name);

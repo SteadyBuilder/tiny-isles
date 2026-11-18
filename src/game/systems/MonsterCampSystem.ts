@@ -136,6 +136,20 @@ export class MonsterCampSystem {
     });
   }
 
+  public findNearestCampTargetPos(px: number, py: number, rangePx: number): { x: number; y: number } | null {
+    if (!this.ctx.isHuntingMode()) return null;
+    const fortPos = this.ctx.fortification?.findNearestTargetPos(px, py, rangePx);
+    if (fortPos) return fortPos;
+
+    for (const node of this.campNodes.values()) {
+      if (node.camp.destroyed) continue;
+      if (Math.hypot(px - node.container.x, py - node.container.y) <= rangePx + 55) {
+        return { x: node.container.x, y: node.container.y };
+      }
+    }
+    return null;
+  }
+
   public tryAttackNearestCampCore(px: number, py: number, rangePx: number, damage: number): boolean {
     if (!this.ctx.isHuntingMode()) return false;
     if (this.ctx.fortification?.tryAttackNearest(px, py, rangePx, damage)) {

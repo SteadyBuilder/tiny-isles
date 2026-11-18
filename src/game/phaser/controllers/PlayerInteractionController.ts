@@ -60,6 +60,11 @@ export interface IPlayerInteractionContext {
   };
   healPlayer?: (amount: number) => void;
   tryAttackCampCore?: (px: number, py: number, rangePx: number, damage: number) => boolean;
+  findNearestCampTargetPos?: (
+    px: number,
+    py: number,
+    rangePx: number
+  ) => { x: number; y: number } | null;
   tryRepairNearestWall?: (px: number, py: number) => boolean;
   projectileSystem?: ProjectileSystem;
   findGatherableEntityVisual: (x: number, y: number) => EntityVisual | null;
@@ -164,9 +169,12 @@ export class PlayerInteractionController {
           targetX: hitX,
           targetY: hitY,
           durationMs: 165,
-          tint: isMage ? undefined : 0x38bdf8,
+          tint: isMage ? 0xc084fc : 0x38bdf8,
           size: isMage ? 46 : 34,
           isMagic: isMage,
+          trailColor: isMage ? 0xe879f9 : 0x38bdf8,
+          impactColor: isMage ? 0xc084fc : 0x38bdf8,
+          impactRadius: isMage ? 90 : undefined,
           onArrive: () => {
             if (isMage) {
               const splashCandidates =
@@ -202,7 +210,33 @@ export class PlayerInteractionController {
 
     // 1-B. 사냥 특화 모드: 몬스터 부락 본진 건물 직접 타격
     if (now - this.lastCombatAttackTime >= attackCooldownMs) {
-      if (this.ctx.tryAttackCampCore?.(px, py, baseRange, attackDamage)) {
+      if (classDef?.isRanged && this.ctx.projectileSystem && this.ctx.findNearestCampTargetPos) {
+        const campTarget = this.ctx.findNearestCampTargetPos(px, py, baseRange);
+        if (campTarget) {
+          this.lastCombatAttackTime = now;
+          this.ctx.playPlayerAnimation('axe', attackCooldownMs);
+          const isMage = classDef.id === 'archmage';
+          if (isMage) sound.playMagicCast();
+          else sound.playBowRelease();
+          this.ctx.projectileSystem.fireProjectile({
+            startX: px,
+            startY: py - 20,
+            targetX: campTarget.x,
+            targetY: campTarget.y,
+            durationMs: 180,
+            tint: isMage ? 0xc084fc : 0x38bdf8,
+            size: isMage ? 46 : 34,
+            isMagic: isMage,
+            trailColor: isMage ? 0xe879f9 : 0x38bdf8,
+            impactColor: isMage ? 0xc084fc : 0x38bdf8,
+            impactRadius: isMage ? 85 : undefined,
+            onArrive: () => {
+              this.ctx.tryAttackCampCore?.(campTarget.x, campTarget.y, 90, attackDamage);
+            },
+          });
+          return;
+        }
+      } else if (this.ctx.tryAttackCampCore?.(px, py, baseRange, attackDamage)) {
         this.lastCombatAttackTime = now;
         this.ctx.playPlayerAnimation('axe', attackCooldownMs);
         sound.playChop();

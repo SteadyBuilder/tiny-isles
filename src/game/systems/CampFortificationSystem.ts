@@ -183,6 +183,17 @@ export class CampFortificationSystem {
     }
   }
 
+  public findNearestTargetPos(px: number, py: number, rangePx: number): { x: number; y: number } | null {
+    for (const st of this.structures.values()) {
+      if (st.hp <= 0) continue;
+      const hitPad = st.kind === 'wall' ? 70 : 45;
+      if (Math.hypot(px - st.x, py - st.y) <= rangePx + hitPad) {
+        return { x: st.x, y: st.y };
+      }
+    }
+    return null;
+  }
+
   public tryAttackNearest(px: number, py: number, rangePx: number, damage: number): boolean {
     for (const st of this.structures.values()) {
       if (st.hp <= 0) continue;

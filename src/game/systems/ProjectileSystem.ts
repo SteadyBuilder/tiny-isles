@@ -11,6 +11,10 @@ export interface ActiveProjectile {
   vy: number;
   remainingMs: number;
   isMagic: boolean;
+  trailColor?: number;
+  trailAccumMs: number;
+  impactColor?: number;
+  impactRadius?: number;
   onArrive: () => void;
 }
 
@@ -24,6 +28,26 @@ export interface ActiveTelegraphZone {
   onDetonate: () => void;
 }
 
+interface SparkParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  color: number;
+  remainingMs: number;
+  maxMs: number;
+}
+
+interface ImpactRing {
+  x: number;
+  y: number;
+  maxRadius: number;
+  color: number;
+  remainingMs: number;
+  maxMs: number;
+}
+
 /**
  * 오브젝트 풀(Object Pool) 및 단일 루프(Zero-Tween) 기반 고성능 투사체·마법 장판 시스템
  * - 타워, 원거리/마법 몬스터, 궁수/마법사 플레이어가 공용으로 사용하여 GC 및 드로우콜 폭증을 차단합니다.
@@ -34,12 +58,8 @@ export class ProjectileSystem {
   private activeProjectiles: ActiveProjectile[] = [];
   private activeZones: ActiveTelegraphZone[] = [];
   private fxGraphics: Phaser.GameObjects.Graphics;
-  private sparkParticles: Array<{
-    x: number;
-    y: number;
-    color: number;
-    remainingMs: number;
-  }> = [];
+  private sparkParticles: SparkParticle[] = [];
+  private impactRings: ImpactRing[] = [];
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -53,12 +73,14 @@ export class ProjectileSystem {
     const popped = this.pool.pop();
     if (popped && popped.scene) {
       popped.setTexture(texKey);
+      popped.setBlendMode(isMagic ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL);
       popped.setActive(true);
       popped.setVisible(true);
       return popped;
     }
     const img = this.scene.add.image(0, 0, texKey);
     img.setDepth(DEPTH.PROJECTILE);
+    img.setBlendMode(isMagic ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL);
     return img;
   }
 
@@ -66,11 +88,23 @@ export class ProjectileSystem {
     if (!sprite.scene) return;
     sprite.setActive(false);
     sprite.setVisible(false);
+    sprite.setBlendMode(Phaser.BlendModes.NORMAL);
     if (this.pool.length < 180) {
       this.pool.push(sprite);
     } else {
       sprite.destroy();
     }
+  }
+
+  private isInFxViewport(x: number, y: number): boolean {
+    const cam = this.scene.cameras?.main?.worldView;
+    if (!cam || cam.width <= 0) return true;
+    return (
+      x >= cam.x - 120 &&
+      x <= cam.x + cam.width + 120 &&
+      y >= cam.y - 120 &&
+      y <= cam.y + cam.height + 120
+    );
   }
 
   public fireProjectile(params: {
@@ -82,6 +116,9 @@ export class ProjectileSystem {
     tint?: number;
     size?: number;
     isMagic?: boolean;
+    trailColor?: number;
+    impactColor?: number;
+    impactRadius?: number;
     onArrive: () => void;
   }): void {
     const durationMs = Math.max(80, params.durationMs ?? 210);
@@ -90,17 +127,22 @@ export class ProjectileSystem {
     const vx = (dx / durationMs) * 1000;
     const vy = (dy / durationMs) * 1000;
     const angle = Math.atan2(dy, dx);
+    const isMagic = Boolean(params.isMagic);
 
-    const sprite = this.acquireSprite(Boolean(params.isMagic));
-    const size = params.size ?? (params.isMagic ? 44 : 34);
+    const sprite = this.acquireSprite(isMagic);
+    const size = params.size ?? (isMagic ? 44 : 34);
     sprite.setPosition(params.startX, params.startY);
     sprite.setDisplaySize(size, size);
     sprite.setRotation(angle);
     if (params.tint !== undefined) {
       sprite.setTint(params.tint);
+    } else if (isMagic) {
+      sprite.setTint(0xa855f7);
     } else {
       sprite.clearTint();
     }
+
+    const resolvedTrailColor = params.trailColor ?? (isMagic ? params.tint ?? 0xc084fc : undefined);
 
     this.activeProjectiles.push({
       sprite,
@@ -111,7 +153,11 @@ export class ProjectileSystem {
       vx,
       vy,
       remainingMs: durationMs,
-      isMagic: Boolean(params.isMagic),
+      isMagic,
+      trailColor: resolvedTrailColor,
+      trailAccumMs: 0,
+      impactColor: params.impactColor ?? params.tint,
+      impactRadius: params.impactRadius,
       onArrive: params.onArrive,
     });
   }
@@ -139,24 +185,56 @@ export class ProjectileSystem {
     });
   }
 
-  public spawnSpark(x: number, y: number, isMagic: boolean): void {
-    if (this.sparkParticles.length >= 40) return;
-    const cam = this.scene.cameras?.main?.worldView;
-    if (cam && cam.width > 0) {
-      if (
-        x < cam.x - 100 ||
-        x > cam.x + cam.width + 100 ||
-        y < cam.y - 100 ||
-        y > cam.y + cam.height + 100
-      ) {
-        return;
-      }
+  public spawnSpark(
+    x: number,
+    y: number,
+    isMagic: boolean,
+    customColor?: number,
+    impactRadius?: number
+  ): void {
+    if (!this.isInFxViewport(x, y)) return;
+
+    const color = customColor ?? (isMagic ? 0xc084fc : 0xfde047);
+    if ((isMagic || impactRadius) && this.impactRings.length < 24) {
+      this.impactRings.push({
+        x,
+        y,
+        maxRadius: impactRadius ?? (isMagic ? 34 : 20),
+        color,
+        remainingMs: 210,
+        maxMs: 210,
+      });
     }
+
+    const burstCount = isMagic ? 6 : 3;
+    for (let i = 0; i < burstCount; i++) {
+      if (this.sparkParticles.length >= 90) break;
+      const ang = (Math.PI * 2 * i) / burstCount + (Math.random() - 0.5) * 0.45;
+      const speed = (isMagic ? 78 : 48) + Math.random() * 42;
+      this.sparkParticles.push({
+        x,
+        y,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        radius: isMagic ? 3.8 : 2.8,
+        color: i % 2 === 0 ? color : 0xffffff,
+        remainingMs: isMagic ? 190 : 140,
+        maxMs: isMagic ? 190 : 140,
+      });
+    }
+  }
+
+  private emitTrailParticle(x: number, y: number, color: number, isMagic: boolean): void {
+    if (this.sparkParticles.length >= 90 || !this.isInFxViewport(x, y)) return;
     this.sparkParticles.push({
-      x,
-      y,
-      color: isMagic ? 0xc084fc : 0xfde047,
-      remainingMs: 140,
+      x: x + (Math.random() - 0.5) * (isMagic ? 8 : 4),
+      y: y + (Math.random() - 0.5) * (isMagic ? 8 : 4),
+      vx: (Math.random() - 0.5) * 18,
+      vy: (Math.random() - 0.5) * 18,
+      radius: isMagic ? 3.4 : 2.2,
+      color,
+      remainingMs: isMagic ? 165 : 110,
+      maxMs: isMagic ? 165 : 110,
     });
   }
 
@@ -169,7 +247,7 @@ export class ProjectileSystem {
       p.remainingMs -= delta;
       if (p.remainingMs <= 0) {
         this.releaseSprite(p.sprite);
-        this.spawnSpark(p.targetX, p.targetY, p.isMagic);
+        this.spawnSpark(p.targetX, p.targetY, p.isMagic, p.impactColor, p.impactRadius);
         const lastIdx = this.activeProjectiles.length - 1;
         if (i !== lastIdx) {
           this.activeProjectiles[i] = this.activeProjectiles[lastIdx];
@@ -180,10 +258,18 @@ export class ProjectileSystem {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.sprite.setPosition(p.x, p.y);
+        if (p.trailColor !== undefined) {
+          p.trailAccumMs += delta;
+          const intervalMs = p.isMagic ? 22 : 34;
+          if (p.trailAccumMs >= intervalMs) {
+            p.trailAccumMs = 0;
+            this.emitTrailParticle(p.x, p.y, p.trailColor, p.isMagic);
+          }
+        }
       }
     }
 
-    // 2. 단일 Graphics 컨텍스트로 모든 장판 + 스파크 일괄 렌더링 (드로우콜 1회)
+    // 2. 단일 Graphics 컨텍스트로 모든 장판 + 착탄 링 + 스파크 일괄 렌더링 (드로우콜 1회)
     this.fxGraphics.clear();
 
     for (let i = this.activeZones.length - 1; i >= 0; i--) {
@@ -206,6 +292,26 @@ export class ProjectileSystem {
       }
     }
 
+    for (let i = this.impactRings.length - 1; i >= 0; i--) {
+      const r = this.impactRings[i];
+      r.remainingMs -= delta;
+      if (r.remainingMs <= 0) {
+        const lastIdx = this.impactRings.length - 1;
+        if (i !== lastIdx) {
+          this.impactRings[i] = this.impactRings[lastIdx];
+        }
+        this.impactRings.pop();
+      } else {
+        const progress = 1 - r.remainingMs / r.maxMs;
+        const alpha = (1 - progress) * 0.85;
+        const curRadius = 6 + r.maxRadius * progress;
+        this.fxGraphics.lineStyle(2.5, r.color, alpha);
+        this.fxGraphics.strokeCircle(r.x, r.y, curRadius);
+        this.fxGraphics.fillStyle(r.color, alpha * 0.22);
+        this.fxGraphics.fillCircle(r.x, r.y, curRadius * 0.55);
+      }
+    }
+
     for (let i = this.sparkParticles.length - 1; i >= 0; i--) {
       const sp = this.sparkParticles[i];
       sp.remainingMs -= delta;
@@ -216,11 +322,11 @@ export class ProjectileSystem {
         }
         this.sparkParticles.pop();
       } else {
-        const alpha = sp.remainingMs / 140;
-        this.fxGraphics.fillStyle(sp.color, alpha);
-        this.fxGraphics.fillCircle(sp.x - 8, sp.y - 6, 3.5);
-        this.fxGraphics.fillCircle(sp.x + 8, sp.y + 6, 3.5);
-        this.fxGraphics.fillCircle(sp.x + 7, sp.y - 7, 3);
+        sp.x += sp.vx * dt;
+        sp.y += sp.vy * dt;
+        const ratio = sp.remainingMs / sp.maxMs;
+        this.fxGraphics.fillStyle(sp.color, ratio);
+        this.fxGraphics.fillCircle(sp.x, sp.y, sp.radius * (0.4 + ratio * 0.6));
       }
     }
   }
@@ -236,6 +342,7 @@ export class ProjectileSystem {
     this.pool = [];
     this.activeZones = [];
     this.sparkParticles = [];
+    this.impactRings = [];
     if (this.fxGraphics?.scene) {
       this.fxGraphics.destroy();
     }

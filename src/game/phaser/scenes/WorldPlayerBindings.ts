@@ -51,6 +51,7 @@ export function createWorldPlayerSystems(
   playerHealthSystem: PlayerHealthSystem;
   playerProgressionSystem: PlayerProgressionSystem;
 } {
+  host.skillEffectsRenderer.setProjectileSystem(projectileSystem);
   let playerProgressionSystem!: PlayerProgressionSystem;
 
   const playerHealthSystem = new PlayerHealthSystem({
