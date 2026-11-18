@@ -25,6 +25,7 @@ import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { isSameInventory } from '../../utils/inventoryUtils';
 import { checkSanctuaryPlayerHeal } from '../../utils/sanctuaryHealUtils';
+import { MetaBonusSummary } from '../../../types/metaProgression';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
 
 export interface IWorldControllersHost {
@@ -33,6 +34,7 @@ export interface IWorldControllersHost {
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
+  getMetaBonuses?: () => MetaBonusSummary;
   setPlayerProfile: (name: string, color: PlayerColor) => void;
   getInitialZoom: () => number;
   getIslands: () => Island[];
@@ -246,6 +248,8 @@ export function createWorldControllersBundle(
     isSceneAlive: host.isSceneAlive,
     getPlayerName: host.getPlayerName,
     getPlayerColor: host.getPlayerColor,
+    getCostumeColor: () => host.getMetaBonuses?.().equippedCostumeColor ?? host.getPlayerColor(),
+    getAuraId: () => host.getMetaBonuses?.().equippedAuraId ?? 'aura_none',
     getMoveSpeed: () => host.systems.playerProgressionSystem.getTotalSpeed(),
     getInitialZoom: host.getInitialZoom,
     getBuildingColliders: () => host.territoryStructureRenderer.getBuildingColliders(),

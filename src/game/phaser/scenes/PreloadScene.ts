@@ -21,39 +21,25 @@ export class PreloadScene extends Phaser.Scene {
       GameEvents.emit('load-complete');
     });
 
-    // Player Spritesheets (192x192, 6 frames each)
-    this.load.spritesheet('bluePawnIdle', '/assets/units/blue/Pawn_Idle.png', {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    this.load.spritesheet('bluePawnRun', '/assets/units/blue/Pawn_Run.png', {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    this.load.spritesheet('bluePawnAxe', '/assets/units/blue/Pawn_Interact_Axe.png', {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    this.load.spritesheet('bluePawnPickaxe', '/assets/units/blue/Pawn_Interact_Pickaxe.png', {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-
-    this.load.spritesheet('redPawnIdle', '/assets/units/red/Pawn_Idle.png', {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    this.load.spritesheet('redPawnRun', '/assets/units/red/Pawn_Run.png', {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    this.load.spritesheet('redPawnAxe', '/assets/units/red/Pawn_Interact_Axe.png', {
-      frameWidth: 192,
-      frameHeight: 192,
-    });
-    this.load.spritesheet('redPawnPickaxe', '/assets/units/red/Pawn_Interact_Pickaxe.png', {
-      frameWidth: 192,
-      frameHeight: 192,
+    // Player Spritesheets (192x192, 6 frames each) for all costume colors
+    const costumeColors = ['blue', 'red', 'yellow', 'purple', 'black'] as const;
+    costumeColors.forEach((color) => {
+      this.load.spritesheet(`${color}PawnIdle`, `/assets/units/${color}/Pawn_Idle.png`, {
+        frameWidth: 192,
+        frameHeight: 192,
+      });
+      this.load.spritesheet(`${color}PawnRun`, `/assets/units/${color}/Pawn_Run.png`, {
+        frameWidth: 192,
+        frameHeight: 192,
+      });
+      this.load.spritesheet(`${color}PawnAxe`, `/assets/units/${color}/Pawn_Interact_Axe.png`, {
+        frameWidth: 192,
+        frameHeight: 192,
+      });
+      this.load.spritesheet(`${color}PawnPickaxe`, `/assets/units/${color}/Pawn_Interact_Pickaxe.png`, {
+        frameWidth: 192,
+        frameHeight: 192,
+      });
     });
 
     // Monster & Boss Spritesheets
@@ -169,9 +155,9 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   private createAnimations() {
-    const colors = ['blue', 'red'] as const;
+    const colors = ['blue', 'red', 'yellow', 'purple', 'black'] as const;
     colors.forEach((color) => {
-      const cap = color === 'blue' ? 'bluePawn' : 'redPawn';
+      const cap = `${color}Pawn`;
 
       this.anims.create({
         key: `${color}_idle`,

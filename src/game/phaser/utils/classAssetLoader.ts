@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { PlayerClassId, PlayerColor } from '../../../types/game';
+import { PlayerClassId } from '../../../types/game';
+import { CostumeColorKey } from '../../../types/metaProgression';
 
 interface ClassSpriteSpec {
   readonly key: string;
@@ -28,7 +29,7 @@ const CLASS_SPRITE_SPECS: Record<Exclude<PlayerClassId, 'pawn'>, ClassSpriteSpec
 
 function registerClassAnimations(
   scene: Phaser.Scene,
-  color: PlayerColor,
+  color: CostumeColorKey,
   classId: Exclude<PlayerClassId, 'pawn'>
 ): void {
   const spec = CLASS_SPRITE_SPECS[classId];
@@ -60,7 +61,7 @@ function registerClassAnimations(
  */
 export function ensureClassSpritesLoaded(
   scene: Phaser.Scene,
-  color: PlayerColor,
+  color: CostumeColorKey,
   classId: PlayerClassId,
   onReady?: () => void
 ): void {

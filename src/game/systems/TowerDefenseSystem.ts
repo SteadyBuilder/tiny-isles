@@ -25,6 +25,7 @@ export interface ITowerDefenseContext {
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
   playExplosionAt?: (x: number, y: number) => void;
   projectileSystem?: ProjectileSystem;
+  getTowerDamageMultiplier?: () => number;
 }
 
 /**
@@ -52,6 +53,7 @@ export class TowerDefenseSystem {
     const isHost = this.waveSystem.getIsHost();
     const constructedVisuals = this.ctx.getConstructedVisuals();
     const constructedBuildings = this.ctx.getConstructedBuildings();
+    const towerDamageMultiplier = this.ctx.getTowerDamageMultiplier?.() ?? 1;
 
     for (const cv of constructedVisuals.values()) {
       if (!isHost && !cv.container.visible) continue;
@@ -73,7 +75,9 @@ export class TowerDefenseSystem {
           constructedBuildings.some(
             (b) => b.territoryId === cb.territoryId && b.type === 'special_barracks'
           );
-        const finalDamage = Math.round(bp.attack * (hasBarracksBuff ? 1.25 : 1.0));
+        const finalDamage = Math.round(
+          bp.attack * (hasBarracksBuff ? 1.25 : 1.0) * towerDamageMultiplier
+        );
 
         this.fireTowerProjectile(cb, nearestMonster, finalDamage, hasBarracksBuff, cv.container.visible);
       }

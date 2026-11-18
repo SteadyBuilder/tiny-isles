@@ -1,10 +1,12 @@
 import { FIELD_MONSTER_CONFIG } from '../../data/fieldMonsters';
+import { rollMonsterDropItem } from '../../data/items';
 import { POTION_DEFINITIONS, rollMonsterLoot } from '../../data/potions';
 import { MONSTER_KILL_REWARDS } from '../../data/waves';
 import { MONSTER_SYNC_CONFIG, THREAT_WAVE_CONFIG } from '../../data/worldRules';
 import { sound } from '../../lib/sound';
 import { EquipmentItem } from '../../types/game';
 import { FieldEliteTier, PotionId } from '../../types/hunting';
+import { MetaBonusSummary } from '../../types/metaProgression';
 import { MonsterKillSyncPayload } from '../../types/monsterSync';
 import { RoomDifficultyId } from '../../types/room';
 import { GameEvents } from '../events/gameEvents';
@@ -13,6 +15,7 @@ import { MonsterKilledMeta } from './MonsterCombatAI';
 export interface MonsterRewardContext {
   isHuntingMode: () => boolean;
   getDifficultyId: () => RoomDifficultyId;
+  getMetaBonuses?: () => MetaBonusSummary;
   getLocalPlayerId: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
   addThreat: (amount: number) => void;
@@ -42,6 +45,10 @@ function distributeLootDrops(
     eliteTier?: FieldEliteTier;
   }
 ): void {
+  const metaBonuses = ctx.getMetaBonuses?.();
+  const goldBonusRatio = metaBonuses?.goldGainBonusRatio ?? 0;
+  const lootBonusChance = metaBonuses?.lootDropBonusChance ?? 0;
+
   const lootResults = rollMonsterLoot({
     ring: params.campRing ?? 2,
     isElite: params.isElite,
@@ -51,8 +58,10 @@ function distributeLootDrops(
     eliteTier: params.eliteTier,
   });
 
+  let droppedEquipment = false;
   for (const loot of lootResults) {
     if (loot.kind === 'equipment') {
+      droppedEquipment = true;
       ctx.playChestDrop(params.x, params.y, loot.item, (openedItem) => {
         ctx.grantRewardItem(openedItem);
         GameEvents.emit('game-alert', `💎 전리품 드랍! [${openedItem.name}] 획득!`);
@@ -67,7 +76,11 @@ function distributeLootDrops(
         GameEvents.emit('game-alert', `🧪 몬스터가 [${def.name}]을(를) 드랍했습니다!`);
       }
     } else if (loot.kind === 'resource') {
-      const { wood, stone, gold, label, icon, textureKey } = loot.bundle;
+      const { wood, stone, gold: baseGold, label, icon, textureKey } = loot.bundle;
+      const gold =
+        baseGold > 0 && goldBonusRatio > 0
+          ? Math.max(baseGold, Math.round(baseGold * (1 + goldBonusRatio)))
+          : baseGold;
       ctx.addResources(wood, stone, gold);
       const parts: string[] = [];
       if (wood > 0) parts.push(`🪵+${wood}`);
@@ -80,6 +93,27 @@ function distributeLootDrops(
           GameEvents.emit('game-alert', `${icon} ${label} 획득! (${parts.join(' ')})`);
         }
       }
+    }
+  }
+
+  if (
+    !droppedEquipment &&
+    ctx.isHuntingMode() &&
+    lootBonusChance > 0 &&
+    Math.random() < lootBonusChance
+  ) {
+    const bonusItem = rollMonsterDropItem({
+      ring: params.campRing ?? 2,
+      isElite: params.isElite,
+      isBoss: params.isBoss,
+      difficultyId: ctx.getDifficultyId(),
+      eliteTier: params.eliteTier,
+    });
+    if (bonusItem) {
+      ctx.playChestDrop(params.x, params.y, bonusItem, (openedItem) => {
+        ctx.grantRewardItem(openedItem);
+        GameEvents.emit('game-alert', `🍀 보물 사냥꾼 보너스! [${openedItem.name}] 획득!`);
+      });
     }
   }
 }

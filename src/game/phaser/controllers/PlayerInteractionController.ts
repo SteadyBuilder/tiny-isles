@@ -14,6 +14,7 @@ import {
   TERRITORY_CENTER_Y,
   getIslandOrigin,
 } from '../../constants';
+import { MetaBonusSummary } from '../../../types/metaProgression';
 import { GameEvents } from '../../events/gameEvents';
 import { canClaimTerritory } from '../../territoryAccessRules';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
@@ -29,6 +30,7 @@ export interface IPlayerInteractionContext {
   getPlayerPosition: () => { x: number; y: number };
   getPlayerName: () => string;
   isPlayerFainted: () => boolean;
+  getMetaBonuses?: () => MetaBonusSummary;
   getCurrentAction: () => PlayerAction;
   playPlayerAnimation: (action: PlayerAction) => void;
   markInteractTime: (now: number) => void;
@@ -262,19 +264,24 @@ export class PlayerInteractionController {
             return;
           }
 
+          const costDiscount = this.ctx.getMetaBonuses?.().costDiscountRatio ?? 0;
+          const reqWood = Math.max(0, Math.round(isl.costWood * (1 - costDiscount)));
+          const reqStone = Math.max(0, Math.round(isl.costStone * (1 - costDiscount)));
+          const reqGold = Math.max(0, Math.round(isl.costGold * (1 - costDiscount)));
+
           if (
-            inventory.wood >= isl.costWood &&
-            inventory.stone >= isl.costStone &&
-            inventory.gold >= isl.costGold
+            inventory.wood >= reqWood &&
+            inventory.stone >= reqStone &&
+            inventory.gold >= reqGold
           ) {
-            this.ctx.spendInventory(isl.costWood, isl.costStone, isl.costGold);
+            this.ctx.spendInventory(reqWood, reqStone, reqGold);
             this.ctx.unlockIslandLocally(isl.id, this.ctx.getPlayerName(), true);
             return;
           } else {
             this.ctx.showFloatingText(
               signX,
               signY - 40,
-              `자원 부족! (🪵${isl.costWood} 🪨${isl.costStone}${isl.costGold > 0 ? ` 🪙${isl.costGold}` : ''})`,
+              `자원 부족! (🪵${reqWood} 🪨${reqStone}${reqGold > 0 ? ` 🪙${reqGold}` : ''})`,
               '#ff5252'
             );
             return;
@@ -303,7 +310,9 @@ export class PlayerInteractionController {
         }
       });
 
-      const damage = 1;
+      const gatherBonus = this.ctx.getMetaBonuses?.().gatherDamageBonus ?? 0;
+      const damage = 1 + Math.floor(gatherBonus / 4);
+      const harvestAmount = Math.max(1, Math.min(ent.hp, damage));
       ent.hp -= damage;
       const isBreak = ent.hp <= 0;
       this.ctx.shakeObject(nearestVisual.container);
@@ -321,7 +330,6 @@ export class PlayerInteractionController {
 
       const resKey: keyof Inventory =
         ent.type === 'tree' ? 'wood' : ent.type === 'gold_rock' ? 'gold' : 'stone';
-      const harvestAmount = 1;
       this.ctx.addHarvestedResource(resKey, harvestAmount);
 
       const icon =

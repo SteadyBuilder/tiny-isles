@@ -89,43 +89,17 @@ export interface MissionResultPayload {
   reason?: string;
 }
 
-export type TraitId =
-  | 'starter_supplies'
-  | 'gatherer_blessing'
-  | 'guardian_might'
-  | 'citadel_fortification';
-
-export interface TraitDefinition {
-  id: TraitId;
-  name: string;
-  description: string;
-  maxLevel: number;
-  baseCost: number;
-  costStep: number;
-  effectPerLevelLabel: string;
-}
-
-export interface CosmeticTitleDefinition {
-  id: string;
-  label: string;
-  description: string;
-  costPoints: number;
-}
-
-export interface MetaProgressionState {
-  points: number;
-  totalClears: number;
-  traitLevels: Record<TraitId, number>;
-  unlockedTitleIds: string[];
-  equippedTitleId: string | null;
-  clearedMissionIds: string[];
-}
-
-export interface MetaBonusSummary {
-  bonusWood: number;
-  bonusStone: number;
-  bonusGold: number;
-  gatherDamageBonus: number;
-  combatDamageBonus: number;
-  coreHpBonusRatio: number;
-}
+export type {
+  AuraDefinition,
+  AuraEffectId,
+  CosmeticTitleDefinition,
+  CostumeColorKey,
+  CostumeDefinition,
+  CostumeId,
+  MetaBonusSummary,
+  MetaProgressionState,
+  ModeAdvantageTag,
+  TraitDefinition,
+  TraitId,
+  UpgradeCategory,
+} from './metaProgression';

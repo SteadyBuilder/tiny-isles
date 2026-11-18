@@ -33,6 +33,7 @@ import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { SkillEffectsRenderer } from '../renderers/SkillEffectsRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
+import { MetaBonusSummary } from '../../../types/metaProgression';
 import { createWorldMultiplayerSync } from './WorldMultiplayerBindings';
 import { createWorldPlayerSystems } from './WorldPlayerBindings';
 
@@ -41,6 +42,7 @@ export interface IWorldSystemsHost {
   isSceneAlive: () => boolean;
   isHuntingMode: () => boolean;
   getDifficultyConfig?: () => MissionDifficultyConfig;
+  getMetaBonuses?: () => MetaBonusSummary;
   getPlayerId: () => string;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
@@ -327,6 +329,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
       playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
       projectileSystem,
+      getTowerDamageMultiplier: () => 1 + (host.getMetaBonuses?.().towerDamageBonusRatio ?? 0),
     },
     waveSystem
   );

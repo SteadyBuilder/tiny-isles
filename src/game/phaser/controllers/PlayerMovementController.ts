@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { AURA_DEFINITIONS } from '../../../data/metaProgression';
 import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
 import {
   ConstructedBuilding,
@@ -8,6 +9,7 @@ import {
   PlayerColor,
   PlayerHpState,
 } from '../../../types/game';
+import { AuraEffectId, CostumeColorKey } from '../../../types/metaProgression';
 import {
   TERRITORY_CENTER_X,
   TERRITORY_CENTER_Y,
@@ -33,6 +35,8 @@ export interface IPlayerMovementContext {
   isSceneAlive: () => boolean;
   getPlayerName: () => string;
   getPlayerColor: () => PlayerColor;
+  getCostumeColor?: () => CostumeColorKey;
+  getAuraId?: () => AuraEffectId;
   getInitialZoom: () => number;
   getBuildingColliders: () => Phaser.Physics.Arcade.StaticGroup;
   getWallColliders: () => Phaser.Physics.Arcade.StaticGroup | null;
@@ -65,6 +69,7 @@ export class PlayerMovementController {
   private pointerController: PlayerPointerController;
   private dashController: PlayerDashController;
   private playerSprite!: Phaser.Physics.Arcade.Sprite;
+  private playerAuraRing?: Phaser.GameObjects.Ellipse;
   private playerNameTag!: Phaser.GameObjects.Text;
   private playerIndicator!: Phaser.GameObjects.Text;
   private playerHpBar!: Phaser.GameObjects.Graphics;
@@ -204,13 +209,17 @@ export class PlayerMovementController {
     this.lastInteractTime = now;
   }
 
+  private getEffectiveCostumeColor(): CostumeColorKey {
+    return this.ctx.getCostumeColor?.() ?? this.ctx.getPlayerColor();
+  }
+
   public refreshProfileVisuals(): void {
     this.playerNameTag.setText(this.ctx.getPlayerName());
     if (this.currentClassId !== 'pawn') {
       const targetClassId = this.currentClassId;
       ensureClassSpritesLoaded(
         this.ctx.scene,
-        this.ctx.getPlayerColor(),
+        this.getEffectiveCostumeColor(),
         targetClassId,
         () => {
           if (this.ctx.isSceneAlive() && this.currentClassId === targetClassId) {
@@ -233,7 +242,7 @@ export class PlayerMovementController {
     }
     ensureClassSpritesLoaded(
       this.ctx.scene,
-      this.ctx.getPlayerColor(),
+      this.getEffectiveCostumeColor(),
       classId,
       () => {
         if (this.ctx.isSceneAlive() && this.currentClassId === classId) {
@@ -245,7 +254,7 @@ export class PlayerMovementController {
 
   public playAnimation(action: PlayerAction): void {
     this.currentAction = action;
-    const color = this.ctx.getPlayerColor();
+    const color = this.getEffectiveCostumeColor();
     const classAnimKey =
       this.currentClassId !== 'pawn'
         ? `${color}_${this.currentClassId}_${action}`
@@ -292,10 +301,27 @@ export class PlayerMovementController {
     const startY = resolved.y;
     this.currentDirection = resolved.direction;
 
+    const auraId = this.ctx.getAuraId?.() ?? 'aura_none';
+    const auraDef = AURA_DEFINITIONS.find((a) => a.id === auraId);
+    if (auraDef && auraDef.id !== 'aura_none') {
+      this.playerAuraRing = scene.add.ellipse(startX, startY + 20, 48, 22, auraDef.ringColorHex, 0.22);
+      this.playerAuraRing.setStrokeStyle(2, auraDef.ringColorHex, 0.78);
+      scene.tweens.add({
+        targets: this.playerAuraRing,
+        scaleX: 1.16,
+        scaleY: 1.16,
+        alpha: 0.75,
+        duration: 950,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+
     this.playerSprite = scene.physics.add.sprite(
       startX,
       startY,
-      `${this.ctx.getPlayerColor()}PawnIdle`
+      `${this.getEffectiveCostumeColor()}PawnIdle`
     );
     this.playerSprite.setDisplaySize(128, 128);
     this.playerSprite.setCollideWorldBounds(true);
@@ -591,6 +617,10 @@ export class PlayerMovementController {
 
     const px = this.playerSprite.x;
     const py = this.playerSprite.y;
+    if (this.playerAuraRing) {
+      this.playerAuraRing.setPosition(px, py + 20);
+      setDepthIfChanged(this.playerAuraRing, ySortDepth(py, 10));
+    }
     setDepthIfChanged(this.playerSprite, ySortDepth(py, 24));
     this.playerNameTag.setPosition(px, py - 42);
     setDepthIfChanged(this.playerNameTag, ySortDepth(py, 30));

@@ -97,6 +97,9 @@ export function App() {
     handleLeaveToLobby: leaveRoomToLobby,
     handleUpgradeTrait,
     handleSelectOrUnlockTitle,
+    handleSelectOrUnlockCostume,
+    handleSelectOrUnlockAura,
+    handleResetTraits,
   } = useRoomLobbyState(playerId, profile.name, profile.color);
 
   const handleLeaveToLobby = () => {
@@ -145,6 +148,9 @@ export function App() {
           onClose={() => setShowMetaModal(false)}
           onUpgradeTrait={handleUpgradeTrait}
           onSelectOrUnlockTitle={handleSelectOrUnlockTitle}
+          onSelectOrUnlockCostume={handleSelectOrUnlockCostume}
+          onSelectOrUnlockAura={handleSelectOrUnlockAura}
+          onResetTraits={handleResetTraits}
         />
 
         <HudSettingsModal

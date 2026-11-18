@@ -18,6 +18,7 @@ import {
   PotionId,
   PotionInventory,
 } from '../../types/game';
+import { MetaBonusSummary } from '../../types/metaProgression';
 import { GameEvents } from '../events/gameEvents';
 import {
   EQUIPMENT_BAG_MAX_SIZE,
@@ -38,6 +39,7 @@ export interface IPlayerProgressionContext {
   getPlayerPosition: () => { x: number; y: number };
   getPlayerDirection?: () => 'left' | 'right';
   isPlayerFainted?: () => boolean;
+  getMetaBonuses?: () => MetaBonusSummary;
   getGold: () => number;
   spendGold: (amount: number) => void;
   addGold: (amount: number) => void;
@@ -110,7 +112,12 @@ export class PlayerProgressionSystem {
 
   public getComputedStats(): ComputedProgressionStats {
     if (!this.cachedStats) {
-      this.cachedStats = computeProgressionStats(this.level, this.getClassDef(), this.equipped);
+      this.cachedStats = computeProgressionStats(
+        this.level,
+        this.getClassDef(),
+        this.equipped,
+        this.ctx.getMetaBonuses?.()
+      );
     }
     return this.cachedStats;
   }
@@ -443,11 +450,19 @@ export class PlayerProgressionSystem {
     sound.playSkillCast(this.classId);
     this.ctx.showFloatingText(pos.x, pos.y - 58, `${cls.skillIcon} ${cls.skillName}!`, '#38bdf8');
 
-    const dealSkillHit = (targetId: string, tx: number, ty: number) => {
+    const metaBonuses = this.ctx.getMetaBonuses?.();
+    const effectiveSkillRadius = cls.skillRadius + (metaBonuses?.bonusSkillRadiusPx ?? 0);
+    const bossDamageBonusRatio = metaBonuses?.bossDamageBonusRatio ?? 0;
+
+    const dealSkillHit = (targetId: string, tx: number, ty: number, isBossOrElite: boolean) => {
       const rolled = this.rollDamageWithAffixes(baseSkillDmg);
+      const finalDamage =
+        isBossOrElite && bossDamageBonusRatio > 0
+          ? Math.round(rolled.finalDamage * (1 + bossDamageBonusRatio))
+          : rolled.finalDamage;
       this.ctx.damageMonster(
         targetId,
-        rolled.finalDamage,
+        finalDamage,
         this.ctx.getPlayerName(),
         this.ctx.getPlayerId(),
         { isSkill: true, isCrit: rolled.isCrit }
@@ -461,12 +476,12 @@ export class PlayerProgressionSystem {
     };
 
     const initialCandidates =
-      this.ctx.queryMonstersInRadius?.(pos.x, pos.y, cls.skillRadius) ??
+      this.ctx.queryMonstersInRadius?.(pos.x, pos.y, effectiveSkillRadius) ??
       this.ctx.getMonsterVisuals().values();
     const targetsInRange = Array.from(initialCandidates)
       .filter((mv) => mv.monster.hp > 0)
       .map((mv) => ({ mv, dist: Math.hypot(mv.monster.x - pos.x, mv.monster.y - pos.y) }))
-      .filter((item) => item.dist <= cls.skillRadius)
+      .filter((item) => item.dist <= effectiveSkillRadius)
       .sort((a, b) => a.dist - b.dist);
 
     if (cls.id === 'lancer') {
@@ -482,23 +497,43 @@ export class PlayerProgressionSystem {
         const chosen = targetsInRange.slice(0, 10);
         for (const { mv } of chosen) {
           if (mv.monster.hp <= 0) continue;
-          dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);
+          dealSkillHit(
+            mv.monster.id,
+            mv.monster.x,
+            mv.monster.y,
+            Boolean(mv.monster.isBoss || mv.monster.isElite)
+          );
         }
-        this.ctx.tryDamageCampCoreInRadius?.(latestPos.x, latestPos.y, cls.skillRadius, baseSkillDmg);
+        this.ctx.tryDamageCampCoreInRadius?.(
+          latestPos.x,
+          latestPos.y,
+          effectiveSkillRadius,
+          baseSkillDmg
+        );
         return;
       }
 
       const impactCandidates =
-        this.ctx.queryMonstersInRadius?.(latestPos.x, latestPos.y, cls.skillRadius) ??
+        this.ctx.queryMonstersInRadius?.(latestPos.x, latestPos.y, effectiveSkillRadius) ??
         this.ctx.getMonsterVisuals().values();
       for (const mv of impactCandidates) {
         if (mv.monster.hp <= 0) continue;
         const d = Math.hypot(mv.monster.x - latestPos.x, mv.monster.y - latestPos.y);
-        if (d <= cls.skillRadius) {
-          dealSkillHit(mv.monster.id, mv.monster.x, mv.monster.y);
+        if (d <= effectiveSkillRadius) {
+          dealSkillHit(
+            mv.monster.id,
+            mv.monster.x,
+            mv.monster.y,
+            Boolean(mv.monster.isBoss || mv.monster.isElite)
+          );
         }
       }
-      this.ctx.tryDamageCampCoreInRadius?.(latestPos.x, latestPos.y, cls.skillRadius, baseSkillDmg);
+      this.ctx.tryDamageCampCoreInRadius?.(
+        latestPos.x,
+        latestPos.y,
+        effectiveSkillRadius,
+        baseSkillDmg
+      );
     };
 
     if (this.ctx.playSkillEffect) {
@@ -507,7 +542,7 @@ export class PlayerProgressionSystem {
         casterX: pos.x,
         casterY: pos.y,
         facingDir,
-        radius: cls.skillRadius,
+        radius: effectiveSkillRadius,
         targetPoints: targetsInRange.slice(0, 10).map((t) => ({
           x: t.mv.monster.x,
           y: t.mv.monster.y,

@@ -32,7 +32,14 @@ export class LocalStorageSaveRepository implements ISaveRepository {
   public loadMetaProgression(): MetaProgressionState {
     try {
       const raw = localStorage.getItem(META_PROGRESSION_KEY);
-      if (!raw) return { ...DEFAULT_META_PROGRESSION, traitLevels: { ...DEFAULT_META_PROGRESSION.traitLevels } };
+      if (!raw) {
+        return {
+          ...DEFAULT_META_PROGRESSION,
+          traitLevels: { ...DEFAULT_META_PROGRESSION.traitLevels },
+          unlockedCostumeIds: [...DEFAULT_META_PROGRESSION.unlockedCostumeIds],
+          unlockedAuraIds: [...DEFAULT_META_PROGRESSION.unlockedAuraIds],
+        };
+      }
       const parsed = JSON.parse(raw) as Partial<MetaProgressionState>;
       return {
         points: typeof parsed.points === 'number' ? parsed.points : 0,
@@ -48,12 +55,33 @@ export class LocalStorageSaveRepository implements ISaveRepository {
           typeof parsed.equippedTitleId === 'string'
             ? parsed.equippedTitleId
             : DEFAULT_META_PROGRESSION.equippedTitleId,
+        unlockedCostumeIds:
+          Array.isArray(parsed.unlockedCostumeIds) && parsed.unlockedCostumeIds.length > 0
+            ? parsed.unlockedCostumeIds
+            : [...DEFAULT_META_PROGRESSION.unlockedCostumeIds],
+        equippedCostumeId:
+          typeof parsed.equippedCostumeId === 'string'
+            ? parsed.equippedCostumeId
+            : DEFAULT_META_PROGRESSION.equippedCostumeId,
+        unlockedAuraIds:
+          Array.isArray(parsed.unlockedAuraIds) && parsed.unlockedAuraIds.length > 0
+            ? parsed.unlockedAuraIds
+            : [...DEFAULT_META_PROGRESSION.unlockedAuraIds],
+        equippedAuraId:
+          typeof parsed.equippedAuraId === 'string'
+            ? parsed.equippedAuraId
+            : DEFAULT_META_PROGRESSION.equippedAuraId,
         clearedMissionIds: Array.isArray(parsed.clearedMissionIds)
           ? parsed.clearedMissionIds
           : [],
       };
     } catch {
-      return { ...DEFAULT_META_PROGRESSION, traitLevels: { ...DEFAULT_META_PROGRESSION.traitLevels } };
+      return {
+        ...DEFAULT_META_PROGRESSION,
+        traitLevels: { ...DEFAULT_META_PROGRESSION.traitLevels },
+        unlockedCostumeIds: [...DEFAULT_META_PROGRESSION.unlockedCostumeIds],
+        unlockedAuraIds: [...DEFAULT_META_PROGRESSION.unlockedAuraIds],
+      };
     }
   }
 

@@ -312,6 +312,7 @@ export class WorldScene extends Phaser.Scene {
       getPlayerId: () => this.playerId,
       getPlayerName: () => this.playerName,
       getPlayerColor: () => this.playerColor,
+      getMetaBonuses: () => this.metaBonuses,
       setPlayerProfile: (name, color) => {
         this.playerName = name;
         this.playerColor = color;
@@ -368,6 +369,8 @@ export class WorldScene extends Phaser.Scene {
     GameEvents.emit('scene-ready', this);
     GameEvents.emit('inventory-updated', this.inventory);
     GameEvents.emit('mission-progress-updated', this.missionSystem.getProgressState());
+    const initialMaxHp = this.systems.playerProgressionSystem.getTotalMaxHp();
+    this.systems.playerHealthSystem.setMaxHp(initialMaxHp, initialMaxHp);
     this.systems.playerProgressionSystem.emitState();
     this.persistence.emitWorldStateToReact(true);
     this.systems.waveSystem.emitWaveState();

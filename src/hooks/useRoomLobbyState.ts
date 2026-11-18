@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AURA_DEFINITIONS,
   COSMETIC_TITLES,
+  COSTUME_DEFINITIONS,
+  DEFAULT_META_PROGRESSION,
   TRAIT_DEFINITIONS,
+  calculateRefundableTraitPoints,
   computeMetaBonuses,
   getTraitUpgradeCost,
 } from '../data/metaProgression';
@@ -11,6 +15,8 @@ import { saveRepository } from '../lib/repositories/LocalStorageSaveRepository';
 import { SupabaseRoomTransport } from '../lib/transports/SupabaseRoomTransport';
 import { PlayerColor } from '../types/game';
 import {
+  AuraEffectId,
+  CostumeId,
   MetaProgressionState,
   MissionProgressState,
   MissionResultPayload,
@@ -309,6 +315,62 @@ export function useRoomLobbyState(
     });
   }, []);
 
+  const handleSelectOrUnlockCostume = useCallback((costumeId: CostumeId) => {
+    const def = COSTUME_DEFINITIONS.find((c) => c.id === costumeId);
+    if (!def) return;
+    setMeta((prev) => {
+      if (prev.unlockedCostumeIds.includes(costumeId)) {
+        const next: MetaProgressionState = { ...prev, equippedCostumeId: costumeId };
+        saveRepository.saveMetaProgression(next);
+        return next;
+      }
+      if (prev.points < def.costPoints) return prev;
+      const next: MetaProgressionState = {
+        ...prev,
+        points: prev.points - def.costPoints,
+        unlockedCostumeIds: [...prev.unlockedCostumeIds, costumeId],
+        equippedCostumeId: costumeId,
+      };
+      saveRepository.saveMetaProgression(next);
+      return next;
+    });
+  }, []);
+
+  const handleSelectOrUnlockAura = useCallback((auraId: AuraEffectId) => {
+    const def = AURA_DEFINITIONS.find((a) => a.id === auraId);
+    if (!def) return;
+    setMeta((prev) => {
+      if (prev.unlockedAuraIds.includes(auraId)) {
+        const next: MetaProgressionState = { ...prev, equippedAuraId: auraId };
+        saveRepository.saveMetaProgression(next);
+        return next;
+      }
+      if (prev.points < def.costPoints) return prev;
+      const next: MetaProgressionState = {
+        ...prev,
+        points: prev.points - def.costPoints,
+        unlockedAuraIds: [...prev.unlockedAuraIds, auraId],
+        equippedAuraId: auraId,
+      };
+      saveRepository.saveMetaProgression(next);
+      return next;
+    });
+  }, []);
+
+  const handleResetTraits = useCallback(() => {
+    setMeta((prev) => {
+      const refund = calculateRefundableTraitPoints(prev);
+      if (refund <= 0) return prev;
+      const next: MetaProgressionState = {
+        ...prev,
+        points: prev.points + refund,
+        traitLevels: { ...DEFAULT_META_PROGRESSION.traitLevels },
+      };
+      saveRepository.saveMetaProgression(next);
+      return next;
+    });
+  }, []);
+
   return {
     sessionStatus,
     roomConfig,
@@ -328,5 +390,8 @@ export function useRoomLobbyState(
     handleLeaveToLobby,
     handleUpgradeTrait,
     handleSelectOrUnlockTitle,
+    handleSelectOrUnlockCostume,
+    handleSelectOrUnlockAura,
+    handleResetTraits,
   };
 }

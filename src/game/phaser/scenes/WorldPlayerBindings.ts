@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
 import { Inventory, PlayerClassId } from '../../../types/game';
+import { MetaBonusSummary } from '../../../types/metaProgression';
 import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
 import { PlayerProgressionSystem } from '../../systems/PlayerProgressionSystem';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
@@ -19,6 +20,7 @@ export interface IWorldPlayerSystemsHost {
   getPlayerName: () => string;
   getPlayerPosition: () => { x: number; y: number };
   getPlayerDirection?: () => 'left' | 'right';
+  getMetaBonuses?: () => MetaBonusSummary;
   triggerSkillSurge?: (dirX: number, dirY: number, speedPx: number, durationMs: number) => void;
   respawnPlayerAt: (x: number, y: number) => void;
   onPlayerFaintedVisual: (fainted: boolean) => void;
@@ -90,6 +92,7 @@ export function createWorldPlayerSystems(
     getPlayerName: host.getPlayerName,
     getPlayerPosition: host.getPlayerPosition,
     getPlayerDirection: host.getPlayerDirection,
+    getMetaBonuses: host.getMetaBonuses,
     isPlayerFainted: () => playerHealthSystem.isFainted(),
     getGold: () => host.getInventory().gold,
     spendGold: (amount) => host.spendResources(0, 0, amount),

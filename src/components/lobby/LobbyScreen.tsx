@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { COSMETIC_TITLES } from '../../data/metaProgression';
+import { COSMETIC_TITLES, COSTUME_DEFINITIONS } from '../../data/metaProgression';
 import { sound, SoundSettings } from '../../lib/sound';
 import { PlayerColor } from '../../types/game';
 import { MetaProgressionState, RoomDifficultyId } from '../../types/room';
@@ -44,10 +44,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
   const equippedTitle =
     COSMETIC_TITLES.find((t) => t.id === meta.equippedTitleId)?.label ?? '초보 수호자';
+  const equippedCostume = COSTUME_DEFINITIONS.find((c) => c.id === meta.equippedCostumeId);
   const avatarSrc =
-    playerColor === 'red'
+    equippedCostume?.avatarPath ??
+    (playerColor === 'red'
       ? '/assets/ui/Human Avatars/Avatars_06.png'
-      : '/assets/ui/Human Avatars/Avatars_01.png';
+      : '/assets/ui/Human Avatars/Avatars_01.png');
 
   const handleConfirmMission = (missionId: string, difficulty: RoomDifficultyId) => {
     if (missionModalMode === 'solo') {
@@ -97,8 +99,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               onClick={() => setShowJoinModal(true)}
             />
             <PixelGameButton
-              label="원정대 특성 & 칭호"
-              subtitle={`별의 파편 ${meta.points}P 보유`}
+              label="별의 파편 성장소"
+              subtitle={`별의 파편 ${meta.points}P · 코스튬/스탯/특화`}
               iconSrc="/assets/ui/Icons/Icon_07.png"
               variant="red"
               size="md"
