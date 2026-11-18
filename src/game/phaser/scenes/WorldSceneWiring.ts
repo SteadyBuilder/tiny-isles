@@ -22,8 +22,11 @@ import { ResourceDropEffectsRenderer } from '../renderers/ResourceDropEffectsRen
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
+import { getMercenaryConfig, MERCENARY_GUILD_CONFIG } from '../../../data/mercenaries';
+import { sound } from '../../../lib/sound';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { isSameInventory } from '../../utils/inventoryUtils';
+import { checkMercenaryGuildProximity } from '../../utils/mercenaryGuildUtils';
 import { checkSanctuaryPlayerHeal } from '../../utils/sanctuaryHealUtils';
 import { MetaBonusSummary } from '../../../types/metaProgression';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
@@ -43,6 +46,7 @@ export interface IWorldControllersHost {
   setInventory: (inv: Inventory) => void;
   addResources: (wood: number, stone: number, gold: number) => void;
   spendResources: (wood: number, stone: number, gold: number) => void;
+  spendMeatAndGold: (meat: number, gold: number) => void;
   addHarvestedResource: (resKey: keyof Inventory, amount: number) => void;
   refreshTerritoryDecorations: () => void;
   drawTerrainDecorations: () => void;
@@ -334,6 +338,42 @@ export function createWorldControllersBundle(
     castActiveSkill: () => host.systems.playerProgressionSystem.castActiveSkill(),
     buyPotion: (potionId) => host.systems.playerProgressionSystem.buyPotion(potionId),
     usePotion: (potionId) => host.systems.playerProgressionSystem.usePotion(potionId),
+    hireMercenary: (mercenaryId) => {
+      const pos = playerMovement.getPosition();
+      const proximity = checkMercenaryGuildProximity(pos.x, pos.y, host.getConstructedBuildings());
+      if (!proximity.isNear || !proximity.nearestBuilding) {
+        host.effectsRenderer.showFloatingText(pos.x, pos.y - 30, '용병 길드 앞에서 고용할 수 있습니다!', '#fbbf24');
+        return;
+      }
+      const guild = proximity.nearestBuilding;
+      const currentCount = host.systems.mercenarySystem.getGuildMercenaryCount(guild.id);
+      if (currentCount >= MERCENARY_GUILD_CONFIG.maxMercenariesPerGuild) {
+        host.effectsRenderer.showFloatingText(guild.x, guild.y - 60, '용병 정원 가득 참!', '#f87171');
+        return;
+      }
+      const cfg = getMercenaryConfig(mercenaryId);
+      const inv = host.getInventory();
+      if (inv.meat < cfg.costMeat || inv.gold < cfg.costGold) {
+        host.effectsRenderer.showFloatingText(
+          guild.x,
+          guild.y - 60,
+          `자원 부족! (🍖${cfg.costMeat} 🪙${cfg.costGold})`,
+          '#f87171'
+        );
+        return;
+      }
+      const hired = host.systems.mercenarySystem.hireMercenary(guild, mercenaryId);
+      if (hired) {
+        host.spendMeatAndGold(cfg.costMeat, cfg.costGold);
+        sound.playUnlock();
+        host.effectsRenderer.showFloatingText(
+          hired.x,
+          hired.y - 40,
+          `${cfg.icon} ${cfg.name} 고용 완료!`,
+          '#fde047'
+        );
+      }
+    },
     onWindowUnload: () => {},
   });
 

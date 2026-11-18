@@ -13,6 +13,7 @@ import {
   DashCooldownState,
   Inventory,
   Island,
+  MercenaryUnit,
   PlayerColor,
   PlayerHpState,
   PlayerProgressionState,
@@ -23,6 +24,7 @@ const INITIAL_SESSION_INVENTORY: Inventory = {
   wood: 30,
   stone: 20,
   gold: 10,
+  meat: 0,
 };
 
 const INITIAL_PLAYER_PROGRESSION: PlayerProgressionState = {
@@ -105,6 +107,9 @@ export function useGameShellState() {
   const [isNearJobHall, setIsNearJobHall] = useState<boolean>(false);
   const [showToolShopModal, setShowToolShopModal] = useState<boolean>(false);
   const [isNearToolShop, setIsNearToolShop] = useState<boolean>(false);
+  const [showMercenaryGuildModal, setShowMercenaryGuildModal] = useState<boolean>(false);
+  const [isNearMercenaryGuild, setIsNearMercenaryGuild] = useState<boolean>(false);
+  const [mercenaries, setMercenaries] = useState<MercenaryUnit[]>([]);
   const [playerProgression, setPlayerProgression] = useState<PlayerProgressionState>(
     INITIAL_PLAYER_PROGRESSION
   );
@@ -149,6 +154,15 @@ export function useGameShellState() {
     const handleToolShopProximity = (isNear: boolean) => {
       setIsNearToolShop(isNear);
     };
+    const handleOpenMercGuild = () => {
+      setShowMercenaryGuildModal(true);
+    };
+    const handleMercGuildProximity = (isNear: boolean) => {
+      setIsNearMercenaryGuild(isNear);
+    };
+    const handleMercenariesUpdated = (next: MercenaryUnit[]) => {
+      setMercenaries(next);
+    };
     const handleOpenInventory = () => {
       setShowInventoryModal((prev) => !prev);
     };
@@ -162,6 +176,9 @@ export function useGameShellState() {
     GameEvents.on('job-hall-proximity-changed', handleJobHallProximity);
     GameEvents.on('open-tool-shop-modal', handleOpenToolShop);
     GameEvents.on('tool-shop-proximity-changed', handleToolShopProximity);
+    GameEvents.on('open-mercenary-guild-modal', handleOpenMercGuild);
+    GameEvents.on('mercenary-guild-proximity-changed', handleMercGuildProximity);
+    GameEvents.on('mercenaries-updated', handleMercenariesUpdated);
     GameEvents.on('open-inventory-modal', handleOpenInventory);
     GameEvents.on('player-standing-territory-changed', handleStandingTerritoryChanged);
     return () => {
@@ -172,6 +189,9 @@ export function useGameShellState() {
       GameEvents.off('job-hall-proximity-changed', handleJobHallProximity);
       GameEvents.off('open-tool-shop-modal', handleOpenToolShop);
       GameEvents.off('tool-shop-proximity-changed', handleToolShopProximity);
+      GameEvents.off('open-mercenary-guild-modal', handleOpenMercGuild);
+      GameEvents.off('mercenary-guild-proximity-changed', handleMercGuildProximity);
+      GameEvents.off('mercenaries-updated', handleMercenariesUpdated);
       GameEvents.off('open-inventory-modal', handleOpenInventory);
       GameEvents.off('player-standing-territory-changed', handleStandingTerritoryChanged);
     };
@@ -343,6 +363,10 @@ export function useGameShellState() {
     showToolShopModal,
     setShowToolShopModal,
     isNearToolShop,
+    showMercenaryGuildModal,
+    setShowMercenaryGuildModal,
+    isNearMercenaryGuild,
+    mercenaries,
     playerProgression,
     dashState,
     alertMessage,

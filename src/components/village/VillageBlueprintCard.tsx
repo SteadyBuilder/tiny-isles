@@ -22,6 +22,7 @@ export const BUILDING_SPRITE_MAP: Record<string, string> = {
   blacksmith: '/assets/buildings/Blacksmith.png',
   market: '/assets/buildings/Market.png',
   windmill: '/assets/buildings/Windmill.png',
+  mercenaryGuild: '/assets/buildings/Mercenary_Guild.png',
 };
 
 export interface VillageBlueprintCardProps {

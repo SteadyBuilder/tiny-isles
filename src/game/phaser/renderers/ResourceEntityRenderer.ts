@@ -11,6 +11,11 @@ import {
   getResourceGatherRect,
   getSpriteWorldRect,
 } from '../../utils/resourceBounds';
+import {
+  createInitialSheepWanderState,
+  SheepWanderState,
+  stepSheepWander,
+} from '../../utils/sheepWanderUtils';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import {
@@ -24,6 +29,7 @@ export interface EntityVisual {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image;
   hpBar?: Phaser.GameObjects.Graphics;
+  wander?: SheepWanderState;
 }
 
 export interface IResourceEntityContext {
@@ -218,14 +224,20 @@ export class ResourceEntityRenderer {
 
     container.add(sprite);
 
+    const wander =
+      ent.type === 'sheep'
+        ? createInitialSheepWanderState(ent.x, ent.y, scene.time.now, this.entityVisuals.size)
+        : undefined;
+
     this.entityVisuals.set(ent.id, {
       entity: ent,
       container,
       sprite,
       hpBar: undefined,
+      wander,
     });
 
-    if (ent.hp < ent.maxHp && ent.type !== 'sheep') {
+    if (ent.hp < ent.maxHp) {
       this.updateHpBar(ent.id);
     }
   }
@@ -235,7 +247,7 @@ export class ResourceEntityRenderer {
     if (!visual) return;
 
     const ent = visual.entity;
-    if (ent.hp < ent.maxHp && ent.type !== 'sheep') {
+    if (ent.hp < ent.maxHp) {
       if (!visual.hpBar) {
         visual.hpBar = this.ctx.scene.add.graphics();
         visual.container.add(visual.hpBar);
@@ -326,6 +338,34 @@ export class ResourceEntityRenderer {
     GameEvents.emit('game-alert', gm.announcementText);
   }
 
+  public updateSheepWandering(
+    time: number,
+    delta: number,
+    isWalkable?: (x: number, y: number) => boolean
+  ): void {
+    const dtSec = Math.min(0.1, delta / 1000);
+    for (const visual of this.entityVisuals.values()) {
+      if (visual.entity.type !== 'sheep' || !visual.wander) continue;
+      const step = stepSheepWander(
+        visual.entity.x,
+        visual.entity.y,
+        visual.wander,
+        time,
+        dtSec,
+        isWalkable
+      );
+      if (step.moved) {
+        visual.entity.x = step.x;
+        visual.entity.y = step.y;
+        visual.container.setPosition(step.x, step.y);
+        visual.container.setDepth(ySortDepth(step.y, 16));
+        if (Math.abs(step.dx) > 0.01) {
+          visual.sprite.setFlipX(step.dx < 0);
+        }
+      }
+    }
+  }
+
   public handleRemoteHit(entityId: string, damage: number): void {
     const visual = this.entityVisuals.get(entityId);
     if (!visual) return;
@@ -334,7 +374,7 @@ export class ResourceEntityRenderer {
     this.ctx.shakeObject(visual.container);
     this.updateHpBar(entityId);
 
-    if (visual.entity.type === 'tree') sound.playChop();
+    if (visual.entity.type === 'tree' || visual.entity.type === 'sheep') sound.playChop();
     else sound.playMine();
 
     if (visual.entity.hp <= 0) {

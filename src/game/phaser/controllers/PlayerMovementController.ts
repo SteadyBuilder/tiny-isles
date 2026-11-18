@@ -22,6 +22,7 @@ import { GameEvents } from '../../events/gameEvents';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { findTerritoryInsideWalls } from '../../territoryAccessRules';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
+import { checkMercenaryGuildProximity } from '../../utils/mercenaryGuildUtils';
 import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import {
   canPlayHitAnimation,
@@ -106,6 +107,7 @@ export class PlayerMovementController {
   private lastNearIsland: Island | null = null;
   private lastNearJobHall = false;
   private lastNearToolShop = false;
+  private lastNearMercGuild = false;
   private lastInteractTime = 0;
   private unbindInputs: Array<() => void> = [];
 
@@ -771,6 +773,12 @@ export class PlayerMovementController {
     if (toolShopStatus.isNear !== this.lastNearToolShop) {
       this.lastNearToolShop = toolShopStatus.isNear;
       GameEvents.emit('tool-shop-proximity-changed', toolShopStatus.isNear);
+    }
+
+    const mercGuildStatus = checkMercenaryGuildProximity(px, py, buildings);
+    if (mercGuildStatus.isNear !== this.lastNearMercGuild) {
+      this.lastNearMercGuild = mercGuildStatus.isNear;
+      GameEvents.emit('mercenary-guild-proximity-changed', mercGuildStatus.isNear);
     }
   }
 

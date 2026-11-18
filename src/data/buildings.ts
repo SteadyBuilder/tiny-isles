@@ -284,6 +284,21 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     description:
       '금화를 사용해 소형·중형·대형 치유 물약을 구매할 수 있는 만물 도구 상점입니다.',
   },
+  {
+    type: 'mercenary_guild',
+    category: 'special',
+    categoryLabel: '특수건물',
+    name: '용병 길드',
+    icon: '🛡️',
+    spriteKey: 'mercenaryGuild',
+    costWood: 26,
+    costStone: 20,
+    costGold: 8,
+    maxHp: 400,
+    shortEffect: '고기·금화로 용병 고용 (최대 4명) · 건물 접근 시 [E] 길드 열기',
+    description:
+      '양을 도축해 얻은 고기와 금화로 전사·궁수·창병 용병을 고용해 영지와 길드 주변을 방어합니다.',
+  },
 ];
 
 export function getBlueprint(type: ConstructableType): ConstructableBlueprint {

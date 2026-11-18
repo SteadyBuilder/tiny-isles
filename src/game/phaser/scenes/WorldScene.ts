@@ -63,7 +63,7 @@ export class WorldScene extends Phaser.Scene {
 
   private islands: Island[] = [];
   private constructedBuildings: ConstructedBuilding[] = [];
-  private inventory: Inventory = { wood: 30, stone: 20, gold: 10 };
+  private inventory: Inventory = { wood: 30, stone: 20, gold: 10, meat: 0 };
   private wallColliders: Phaser.Physics.Arcade.StaticGroup | null = null;
 
   private terrainMap!: WorldTerrainMap;
@@ -117,6 +117,7 @@ export class WorldScene extends Phaser.Scene {
       wood: 30 + this.metaBonuses.bonusWood,
       stone: 20 + this.metaBonuses.bonusStone,
       gold: 10 + this.metaBonuses.bonusGold,
+      meat: 0,
     };
   }
 
@@ -326,6 +327,7 @@ export class WorldScene extends Phaser.Scene {
       },
       addResources: (wood, stone, gold) => this.addResources(wood, stone, gold),
       spendResources: (wood, stone, gold) => this.spendResources(wood, stone, gold),
+      spendMeatAndGold: (meat, gold) => this.spendMeatAndGold(meat, gold),
       addHarvestedResource: (resKey, amount) => {
         this.inventory = { ...this.inventory, [resKey]: this.inventory[resKey] + amount };
         GameEvents.emit('inventory-updated', this.inventory);
@@ -385,6 +387,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems.fieldMonsterSystem.update(delta);
     this.systems.towerDefenseSystem.update(time, delta);
     this.systems.garrisonSystem.update(time, delta);
+    this.systems.mercenarySystem.update(time, delta);
     this.missionSystem.setCampConqueredCount(
       this.systems.monsterCampSystem.getFirstClearedCampCount()
     );
@@ -395,6 +398,11 @@ export class WorldScene extends Phaser.Scene {
     );
     this.controllers.playerMovement.update(time, delta);
     this.controllers.viewportCulling.update(time);
+    this.resourceEntityRenderer.updateSheepWandering(time, delta, (x, y) =>
+      !this.terrainMap.waterBodies.some(
+        (w) => x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h
+      )
+    );
     this.effectsRenderer.updateClouds(delta);
     this.resourceDropEffectsRenderer.update(delta);
     this.monsterIndicatorRenderer.update(time, this.systems.waveSystem.getMonsterVisuals(), {
@@ -410,6 +418,7 @@ export class WorldScene extends Phaser.Scene {
       wood: this.inventory.wood + wood,
       stone: this.inventory.stone + stone,
       gold: this.inventory.gold + gold,
+      meat: this.inventory.meat,
     };
     GameEvents.emit('inventory-updated', this.inventory);
     this.refreshTerritoryDecorations();
@@ -420,6 +429,17 @@ export class WorldScene extends Phaser.Scene {
       wood: this.inventory.wood - wood,
       stone: this.inventory.stone - stone,
       gold: this.inventory.gold - gold,
+      meat: this.inventory.meat,
+    };
+    GameEvents.emit('inventory-updated', this.inventory);
+    this.refreshTerritoryDecorations();
+  }
+
+  private spendMeatAndGold(meat: number, gold: number): void {
+    this.inventory = {
+      ...this.inventory,
+      meat: Math.max(0, this.inventory.meat - meat),
+      gold: Math.max(0, this.inventory.gold - gold),
     };
     GameEvents.emit('inventory-updated', this.inventory);
     this.refreshTerritoryDecorations();
@@ -458,6 +478,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems?.playerHealthSystem?.destroy();
     this.systems?.projectileSystem?.destroy();
     this.systems?.towerDefenseSystem?.destroy();
+    this.systems?.mercenarySystem?.destroy();
     this.systems?.monsterCampSystem?.destroy();
     this.systems?.fieldMonsterSystem?.destroy();
     this.systems?.waveSystem?.destroy();

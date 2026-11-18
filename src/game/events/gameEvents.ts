@@ -86,6 +86,10 @@ export interface GameEventPayloads {
   'open-job-hall-modal': void;
   'tool-shop-proximity-changed': boolean;
   'open-tool-shop-modal': void;
+  'mercenary-guild-proximity-changed': boolean;
+  'open-mercenary-guild-modal': void;
+  'hire-mercenary': import('../../types/mercenary').MercenaryId;
+  'mercenaries-updated': import('../../types/mercenary').MercenaryUnit[];
   'buy-potion': import('../../types/hunting').PotionId;
   'use-potion': import('../../types/hunting').PotionId;
   'open-inventory-modal': void;

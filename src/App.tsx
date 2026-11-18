@@ -11,6 +11,7 @@ import { PlayerProgressionHud } from './components/PlayerProgressionHud';
 import { InventoryModal } from './components/InventoryModal';
 import { JobAdvancementModal } from './components/JobAdvancementModal';
 import { ToolShopModal } from './components/ToolShopModal';
+import { MercenaryGuildModal } from './components/MercenaryGuildModal';
 import { HudSettingsModal } from './components/HudSettingsModal';
 import { HudHelpModal } from './components/HudHelpModal';
 import { SoundModal } from './components/SoundModal';
@@ -53,6 +54,10 @@ export function App() {
     showToolShopModal,
     setShowToolShopModal,
     isNearToolShop,
+    showMercenaryGuildModal,
+    setShowMercenaryGuildModal,
+    isNearMercenaryGuild,
+    mercenaries,
     playerProgression,
     dashState,
     alertMessage,
@@ -311,6 +316,16 @@ export function App() {
         gold={inventory.gold}
         hasToolShopBuilt={constructedBuildings.some((b) => b.type === 'tool_shop' && b.hp > 0)}
         isNearToolShop={isNearToolShop}
+      />
+
+      <MercenaryGuildModal
+        isOpen={showMercenaryGuildModal}
+        onClose={() => setShowMercenaryGuildModal(false)}
+        meat={inventory.meat}
+        gold={inventory.gold}
+        hasGuildBuilt={constructedBuildings.some((b) => b.type === 'mercenary_guild' && b.hp > 0)}
+        isNearGuild={isNearMercenaryGuild}
+        mercenaries={mercenaries}
       />
 
       {sessionStatus === 'paused' && (

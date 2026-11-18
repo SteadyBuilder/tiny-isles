@@ -54,6 +54,7 @@ const DEFAULT_INVENTORY: Inventory = {
   wood: 30,
   stone: 20,
   gold: 10,
+  meat: 0,
 };
 
 export const storage = {
@@ -95,7 +96,12 @@ export const storage = {
           typeof parsed.stone === 'number' &&
           typeof parsed.gold === 'number'
         ) {
-          return parsed;
+          return {
+            wood: parsed.wood,
+            stone: parsed.stone,
+            gold: parsed.gold,
+            meat: typeof parsed.meat === 'number' ? parsed.meat : 0,
+          };
         }
       }
     } catch (e) {

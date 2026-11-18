@@ -12,6 +12,7 @@ import { CampFortificationSystem } from '../../systems/CampFortificationSystem';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { FieldMonsterSystem } from '../../systems/FieldMonsterSystem';
 import { GarrisonSystem } from '../../systems/GarrisonSystem';
+import { MercenarySystem } from '../../systems/MercenarySystem';
 import { MonsterCampSystem } from '../../systems/MonsterCampSystem';
 import {
   MonsterRewardContext,
@@ -112,6 +113,7 @@ export interface WorldSystemsBundle {
   waveSystem: WaveSystem;
   towerDefenseSystem: TowerDefenseSystem;
   garrisonSystem: GarrisonSystem;
+  mercenarySystem: MercenarySystem;
   multiplayerSync: MultiplayerSyncController;
 }
 
@@ -339,6 +341,15 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     waveSystem
   );
 
+  const mercenarySystem = new MercenarySystem(
+    {
+      scene: host.scene,
+      projectileSystem,
+      showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+    },
+    waveSystem
+  );
+
   multiplayerSync = createWorldMultiplayerSync(host, {
     coreGemSystem,
     playerHealthSystem,
@@ -360,6 +371,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     waveSystem,
     towerDefenseSystem,
     garrisonSystem,
+    mercenarySystem,
     multiplayerSync,
   };
 }

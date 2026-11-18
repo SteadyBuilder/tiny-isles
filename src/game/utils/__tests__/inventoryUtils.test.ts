@@ -4,19 +4,38 @@ import { isSameInventory } from '../inventoryUtils';
 
 test('isSameInventory compares resource fields by value', () => {
   assert.equal(
-    isSameInventory({ wood: 30, stone: 20, gold: 10 }, { wood: 30, stone: 20, gold: 10 }),
+    isSameInventory(
+      { wood: 30, stone: 20, gold: 10, meat: 5 },
+      { wood: 30, stone: 20, gold: 10, meat: 5 }
+    ),
     true
   );
   assert.equal(
-    isSameInventory({ wood: 31, stone: 20, gold: 10 }, { wood: 30, stone: 20, gold: 10 }),
+    isSameInventory(
+      { wood: 31, stone: 20, gold: 10, meat: 0 },
+      { wood: 30, stone: 20, gold: 10, meat: 0 }
+    ),
     false
   );
   assert.equal(
-    isSameInventory({ wood: 30, stone: 21, gold: 10 }, { wood: 30, stone: 20, gold: 10 }),
+    isSameInventory(
+      { wood: 30, stone: 21, gold: 10, meat: 0 },
+      { wood: 30, stone: 20, gold: 10, meat: 0 }
+    ),
     false
   );
   assert.equal(
-    isSameInventory({ wood: 30, stone: 20, gold: 11 }, { wood: 30, stone: 20, gold: 10 }),
+    isSameInventory(
+      { wood: 30, stone: 20, gold: 11, meat: 0 },
+      { wood: 30, stone: 20, gold: 10, meat: 0 }
+    ),
+    false
+  );
+  assert.equal(
+    isSameInventory(
+      { wood: 30, stone: 20, gold: 10, meat: 2 },
+      { wood: 30, stone: 20, gold: 10, meat: 0 }
+    ),
     false
   );
 });

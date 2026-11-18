@@ -140,6 +140,18 @@ export class ConstructedBuildingRenderer {
           })
           .setOrigin(0.5);
         container.add(badge);
+      } else if (cb.type === 'mercenary_guild') {
+        const badge = this.scene.add
+          .text(0, -104, '🛡️ 용병 길드 [E]', {
+            fontFamily: 'Pretendard, sans-serif',
+            fontSize: '12px',
+            fontStyle: 'bold',
+            color: '#fda4af',
+            stroke: '#000000',
+            strokeThickness: 3,
+          })
+          .setOrigin(0.5);
+        container.add(badge);
       }
 
       const footBox = getConstructedBuildingFootprintBox(cb);

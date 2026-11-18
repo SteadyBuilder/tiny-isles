@@ -96,6 +96,18 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('goldResource', '/assets/resources/Gold_Stone_6.png');
     this.load.image('goldResource2', '/assets/resources/Gold_Stone_5.png');
     this.load.image('woodResource', '/assets/resources/Wood Resource.png');
+    this.load.image('meatResource', '/assets/resources/Meat_Resource.png');
+
+    // Mercenary Unit Spritesheets (Yellow Faction)
+    this.load.spritesheet('yellowWarriorIdle', '/assets/units/yellow/Warrior_Idle.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('yellowWarriorRun', '/assets/units/yellow/Warrior_Run.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('yellowWarriorAttack', '/assets/units/yellow/Warrior_Attack.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('yellowArcherIdle', '/assets/units/yellow/Archer_Idle.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('yellowArcherRun', '/assets/units/yellow/Archer_Run.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('yellowArcherAttack', '/assets/units/yellow/Archer_Attack.png', { frameWidth: 192, frameHeight: 192 });
+    this.load.spritesheet('yellowLancerIdle', '/assets/units/yellow/Lancer_Idle.png', { frameWidth: 320, frameHeight: 320 });
+    this.load.spritesheet('yellowLancerRun', '/assets/units/yellow/Lancer_Run.png', { frameWidth: 320, frameHeight: 320 });
+    this.load.spritesheet('yellowLancerAttack', '/assets/units/yellow/Lancer_Attack.png', { frameWidth: 320, frameHeight: 320 });
 
     // Buildings
     this.load.image('castle', '/assets/buildings/Castle.png');
@@ -121,6 +133,7 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('blacksmith', '/assets/buildings/Blacksmith.png');
     this.load.image('market', '/assets/buildings/Market.png');
     this.load.image('windmill', '/assets/buildings/Windmill.png');
+    this.load.image('mercenaryGuild', '/assets/buildings/Mercenary_Guild.png');
     this.load.image('stoneWall', '/assets/buildings/Stone_Wall.png');
     this.load.image('stoneWallH', '/assets/buildings/Stone_Wall_H.png');
     this.load.image('stoneWallV', '/assets/buildings/Stone_Wall_V.png');
@@ -266,5 +279,42 @@ export class PreloadScene extends Phaser.Scene {
         repeat: -1,
       });
     }
+
+    // Mercenary Unit Animations
+    const registerMercAnims = (
+      prefix: string,
+      idleEnd: number,
+      runEnd: number,
+      attackEnd: number
+    ) => {
+      if (this.textures.exists(`${prefix}Idle`)) {
+        this.anims.create({
+          key: `${prefix}_idle`,
+          frames: this.anims.generateFrameNumbers(`${prefix}Idle`, { start: 0, end: idleEnd }),
+          frameRate: 7,
+          repeat: -1,
+        });
+      }
+      if (this.textures.exists(`${prefix}Run`)) {
+        this.anims.create({
+          key: `${prefix}_run`,
+          frames: this.anims.generateFrameNumbers(`${prefix}Run`, { start: 0, end: runEnd }),
+          frameRate: 9,
+          repeat: -1,
+        });
+      }
+      if (this.textures.exists(`${prefix}Attack`)) {
+        this.anims.create({
+          key: `${prefix}_attack`,
+          frames: this.anims.generateFrameNumbers(`${prefix}Attack`, { start: 0, end: attackEnd }),
+          frameRate: 12,
+          repeat: 0,
+        });
+      }
+    };
+
+    registerMercAnims('yellowWarrior', 7, 5, 3);
+    registerMercAnims('yellowArcher', 5, 3, 7);
+    registerMercAnims('yellowLancer', 11, 5, 2);
   }
 }

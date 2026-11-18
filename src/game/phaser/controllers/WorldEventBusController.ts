@@ -2,6 +2,7 @@ import {
   ConstructableType,
   EquipmentSlot,
   Inventory,
+  MercenaryId,
   PlayerClassId,
   PlayerColor,
   PotionId,
@@ -42,6 +43,7 @@ export interface IWorldEventBusContext {
   castActiveSkill?: () => void;
   buyPotion?: (potionId: PotionId) => void;
   usePotion?: (potionId: PotionId) => void;
+  hireMercenary?: (mercenaryId: MercenaryId) => void;
   onWindowUnload: () => void;
 }
 
@@ -163,6 +165,10 @@ export class WorldEventBusController {
 
     this.register('use-potion', (potionId) => {
       this.ctx.usePotion?.(potionId);
+    });
+
+    this.register('hire-mercenary', (mercenaryId) => {
+      this.ctx.hireMercenary?.(mercenaryId);
     });
 
     if (typeof window !== 'undefined') {

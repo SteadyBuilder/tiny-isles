@@ -55,17 +55,17 @@ test('checkWallRepair validates max hp, inventory and calculates nextHp', () => 
 
   // Full hp
   const fullWall = { ...wall, hp: 280 };
-  const resFull = checkWallRepair(fullWall, { wood: 10, stone: 10, gold: 10 });
+  const resFull = checkWallRepair(fullWall, { wood: 10, stone: 10, gold: 10, meat: 0 });
   assert.equal(resFull.canRepair, false);
   assert.match(resFull.reason || '', /최대치/);
 
   // Insufficient resources (wood_wall needs 2 wood, 1 stone)
-  const resNoRes = checkWallRepair(wall, { wood: 1, stone: 0, gold: 0 });
+  const resNoRes = checkWallRepair(wall, { wood: 1, stone: 0, gold: 0, meat: 0 });
   assert.equal(resNoRes.canRepair, false);
   assert.match(resNoRes.reason || '', /수리 자원 부족/);
 
   // Sufficient resources
-  const resOk = checkWallRepair(wall, { wood: 10, stone: 5, gold: 0 });
+  const resOk = checkWallRepair(wall, { wood: 10, stone: 5, gold: 0, meat: 0 });
   assert.equal(resOk.canRepair, true);
   assert.equal(resOk.nextHp, 280); // 200 + 100 clamped to 280
   assert.equal(resOk.cost?.wood, WALL_REPAIR_CONFIG.wood_wall.wood);

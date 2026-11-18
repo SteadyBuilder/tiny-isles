@@ -30,6 +30,13 @@ export const HUD_RESOURCE_SLOTS: ReadonlyArray<HudResourceSlotMeta> = [
     desktopSpanId: 'hud-gold-count',
     textColorClass: 'text-yellow-300',
   },
+  {
+    key: 'meat',
+    iconSrc: '/assets/resources/Meat_Resource.png',
+    alt: 'Meat',
+    desktopSpanId: 'hud-meat-count',
+    textColorClass: 'text-rose-300',
+  },
 ];
 
 export function formatHudSeconds(sec: number): string {

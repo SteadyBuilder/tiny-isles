@@ -1,13 +1,15 @@
 export * from './hunting';
 export * from './combat';
+export * from './mercenary';
 import { MonsterCombatRole, PlayerClassId } from './hunting';
 
-export type ResourceType = 'wood' | 'stone' | 'gold';
+export type ResourceType = 'wood' | 'stone' | 'gold' | 'meat';
 
 export interface Inventory {
   wood: number;
   stone: number;
   gold: number;
+  meat: number;
 }
 
 export type PlayerAction = 'idle' | 'run' | 'axe' | 'pickaxe' | 'cast' | 'hit' | 'stun';
@@ -69,7 +71,8 @@ export type BuildingType =
   | 'stoneWall'
   | 'blackCastle'
   | 'blackTower'
-  | 'purpleCastle';
+  | 'purpleCastle'
+  | 'mercenaryGuild';
 
 export interface Building {
   id: string;
@@ -119,7 +122,8 @@ export type ConstructableType =
   | 'special_sanctuary'
   | 'special_goldmine'
   | 'job_hall'
-  | 'tool_shop';
+  | 'tool_shop'
+  | 'mercenary_guild';
 
 export interface ConstructableBlueprint {
   type: ConstructableType;

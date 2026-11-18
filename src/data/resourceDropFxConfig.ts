@@ -1,6 +1,6 @@
 import { EntityType } from '../types/game';
 
-export type GatherableResourceType = Exclude<EntityType, 'sheep'>;
+export type GatherableResourceType = EntityType;
 
 export interface ResourceDropVisualSpec {
   /** 드랍 파티클로 사용할 텍스처 키 후보 (존재하는 첫 번째 키 사용) */
@@ -20,6 +20,7 @@ export interface ResourceDropPhysicsConfig {
   maxActiveParticles: number;
   /** 자원 중심으로부터 수평 분산 반경 범위 (px) */
   scatterMinPx: number;
+  /** 자원 중심으로부터 최대 수평 분산 반경 (px) */
   scatterMaxPx: number;
   /** 포물선 드랍 점프 높이 (px) */
   jumpArcHeightPx: number;
@@ -27,6 +28,7 @@ export interface ResourceDropPhysicsConfig {
   dropDurationMs: number;
   /** 착지 후 자석 호밍 시작 전 대기 시간 (ms) */
   idleHoldMinMs: number;
+  /** 착지 후 자석 호밍 시작 전 최대 대기 시간 (ms) */
   idleHoldMaxMs: number;
   /** 자석 호밍 초기 속도 (px/s) */
   magnetInitialSpeedPx: number;
@@ -43,7 +45,7 @@ export interface ResourceDropPhysicsConfig {
 }
 
 /**
- * 자원 채집 시 드랍 파티클(잘려진 통나무, 작은 광석) 및 자석 습득 이펙트 설정
+ * 자원 채집 시 드랍 파티클(잘려진 통나무, 작은 광석, 고기) 및 자석 습득 이펙트 설정
  * [AI Guideline]: 파티클 수량, 속도, 텍스처, 색상은 로직이 아닌 이 데이터 파일에서 조정하세요.
  */
 export const RESOURCE_DROP_VISUALS: Record<GatherableResourceType, ResourceDropVisualSpec> = {
@@ -67,6 +69,13 @@ export const RESOURCE_DROP_VISUALS: Record<GatherableResourceType, ResourceDropV
     glowColor: 0xfbbf24,
     hitDropCount: 2,
     breakBonusCount: 3,
+  },
+  sheep: {
+    textureKeys: ['meatResource', 'woodResource'],
+    displaySizePx: 24,
+    glowColor: 0xf43f5e,
+    hitDropCount: 1,
+    breakBonusCount: 2,
   },
 };
 

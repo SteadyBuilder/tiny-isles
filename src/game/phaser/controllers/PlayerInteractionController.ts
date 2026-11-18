@@ -19,6 +19,7 @@ import { MetaBonusSummary } from '../../../types/metaProgression';
 import { GameEvents } from '../../events/gameEvents';
 import { canClaimTerritory } from '../../territoryAccessRules';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
+import { checkMercenaryGuildProximity } from '../../utils/mercenaryGuildUtils';
 import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { MonsterVisual } from '../../systems/WaveSystem';
@@ -260,6 +261,13 @@ export class PlayerInteractionController {
       return;
     }
 
+    const mercGuildStatus = checkMercenaryGuildProximity(px, py, buildings);
+    if (mercGuildStatus.isNear) {
+      sound.playUnlock();
+      GameEvents.emit('open-mercenary-guild-modal');
+      return;
+    }
+
     // 2-B. 손상된 목책 및 성벽 수리 (Wall Repair)
     if (now - this.lastGatherActionTime >= RESOURCE_GATHER_COOLDOWN_MS) {
       if (this.ctx.tryRepairNearestWall?.(px, py)) {
@@ -319,17 +327,11 @@ export class PlayerInteractionController {
     if (nearestVisual) {
       const ent = nearestVisual.entity;
 
-      if (ent.type === 'sheep') {
-        sound.playClick();
-        this.ctx.shakeObject(nearestVisual.container);
-        this.ctx.showFloatingText(ent.x + 16, ent.y - 20, '🐑 음메에~ ❤️', '#f472b6');
-        return;
-      }
-
       if (now - this.lastGatherActionTime < RESOURCE_GATHER_COOLDOWN_MS) return;
       this.lastGatherActionTime = now;
 
-      const toolAction: PlayerAction = ent.type === 'tree' ? 'axe' : 'pickaxe';
+      const toolAction: PlayerAction =
+        ent.type === 'tree' || ent.type === 'sheep' ? 'axe' : 'pickaxe';
       this.ctx.playPlayerAnimation(toolAction, RESOURCE_GATHER_COOLDOWN_MS);
 
       const gatherBonus = this.ctx.getMetaBonuses?.().gatherDamageBonus ?? 0;
@@ -340,7 +342,7 @@ export class PlayerInteractionController {
       this.ctx.shakeObject(nearestVisual.container);
       this.ctx.updateEntityHpBar(ent.id);
 
-      if (ent.type === 'tree') sound.playChop();
+      if (ent.type === 'tree' || ent.type === 'sheep') sound.playChop();
       else sound.playMine();
 
       this.ctx.spawnResourceDropFx?.({
@@ -351,7 +353,13 @@ export class PlayerInteractionController {
       });
 
       const resKey: keyof Inventory =
-        ent.type === 'tree' ? 'wood' : ent.type === 'gold_rock' ? 'gold' : 'stone';
+        ent.type === 'tree'
+          ? 'wood'
+          : ent.type === 'gold_rock'
+          ? 'gold'
+          : ent.type === 'sheep'
+          ? 'meat'
+          : 'stone';
       this.ctx.addHarvestedResource(resKey, harvestAmount);
 
       const icon =
@@ -359,8 +367,17 @@ export class PlayerInteractionController {
           ? `🪵 +${harvestAmount}`
           : resKey === 'gold'
           ? `🪙 +${harvestAmount}`
+          : resKey === 'meat'
+          ? `🍖 +${harvestAmount}`
           : `🪨 +${harvestAmount}`;
-      const color = resKey === 'wood' ? '#8bc34a' : resKey === 'gold' ? '#ffd700' : '#cfd8dc';
+      const color =
+        resKey === 'wood'
+          ? '#8bc34a'
+          : resKey === 'gold'
+          ? '#ffd700'
+          : resKey === 'meat'
+          ? '#fb7185'
+          : '#cfd8dc';
       this.ctx.showFloatingText(ent.x + 16, ent.y, icon, color);
 
       this.ctx.broadcastEntityHit(ent.id, damage);
