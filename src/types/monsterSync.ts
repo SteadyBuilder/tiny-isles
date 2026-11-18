@@ -1,5 +1,5 @@
 import { Monster, MonsterCombatRole } from './game';
-import { FieldEliteTier } from './hunting';
+import { DungeonPortalState, FieldEliteTier } from './hunting';
 
 /**
  * 호스트 AI가 추격/공격 대상으로 삼을 수 있는 활성 플레이어 위치 정보
@@ -85,4 +85,16 @@ export interface MonsterPlayerAttackPayload {
   telegraphRadius?: number;
   telegraphDurationMs?: number;
   telegraphColor?: number;
+}
+
+export interface ThreatSyncPayload {
+  threatPercent: number;
+  waveCount: number;
+  bossWaveCount: number;
+  countdownSecondsRemaining?: number | null;
+  nextWaveIsBoss?: boolean;
+}
+
+export interface DungeonPortalSyncPayload {
+  portal: DungeonPortalState | null;
 }

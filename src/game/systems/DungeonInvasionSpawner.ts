@@ -19,6 +19,7 @@ export interface IDungeonInvasionContext {
   getIslands: () => Island[];
   playExplosionAt: (x: number, y: number) => void;
   onPulseSpawned: () => void;
+  onPortalStateChanged?: (portal: DungeonPortalState | null) => void;
 }
 
 const DUNGEON_ARMY_ROSTER: Array<{
@@ -67,7 +68,7 @@ export class DungeonInvasionSpawner {
     const edgeSpawn = pickRandomMapEdgeSpawn(islands);
     if (!edgeSpawn) return null;
 
-    this.clearTimersAndPortal();
+    this.clearTimersAndPortal(false);
 
     const scaling = getDynamicScalingProfile(params.onlineCount);
     const totalToSpawn = Math.round(
@@ -99,6 +100,7 @@ export class DungeonInvasionSpawner {
       totalToSpawn
     );
     GameEvents.emit('dungeon-portal-updated', { ...this.portalState });
+    this.ctx.onPortalStateChanged?.({ ...this.portalState });
 
     // 즉시 1차 펄스 스폰 후 일정 간격으로 나머지 4차례 펄스 스폰 (총 totalToSpawn마리)
     this.spawnPulseBatch(edgeSpawn.spawnX, edgeSpawn.spawnY, perPulse, 0, finalHpMult, finalAtkMult, eliteChance, false);
@@ -216,6 +218,7 @@ export class DungeonInvasionSpawner {
     if (this.portalState) {
       this.portalState.remainingSpawns = Math.max(0, this.portalState.remainingSpawns - count);
       GameEvents.emit('dungeon-portal-updated', { ...this.portalState });
+      this.ctx.onPortalStateChanged?.({ ...this.portalState });
     }
     this.ctx.onPulseSpawned();
   }
@@ -263,7 +266,22 @@ export class DungeonInvasionSpawner {
     this.portalContainer = container;
   }
 
-  public clearTimersAndPortal(): void {
+  public setRemotePortalState(portal: DungeonPortalState | null): void {
+    this.clearTimersAndPortal(false);
+    if (!portal || !portal.active) {
+      return;
+    }
+    this.portalState = { ...portal };
+    this.createPortalVisual(
+      portal.x,
+      portal.y,
+      portal.directionLabel,
+      portal.totalSpawns
+    );
+    GameEvents.emit('dungeon-portal-updated', { ...this.portalState });
+  }
+
+  public clearTimersAndPortal(notifyCallback = true): void {
     for (const t of this.pulseTimers) {
       t.remove(false);
     }
@@ -275,6 +293,9 @@ export class DungeonInvasionSpawner {
     if (this.portalState) {
       this.portalState = null;
       GameEvents.emit('dungeon-portal-updated', null);
+      if (notifyCallback) {
+        this.ctx.onPortalStateChanged?.(null);
+      }
     }
   }
 }

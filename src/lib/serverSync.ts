@@ -112,7 +112,7 @@ export const serverSync = {
     if (!eventId) return true;
     if (recentEvents.has(eventId)) return false;
     recentEvents.add(eventId);
-    if (recentEvents.size > 320) {
+    if (recentEvents.size > 1024) {
       const oldest = recentEvents.values().next().value;
       if (oldest) recentEvents.delete(oldest);
     }
@@ -135,6 +135,11 @@ export const serverSync = {
 
   removePlayerCache: (playerId: string) => {
     lastMoveTimestamps.delete(playerId);
+  },
+
+  clearEventCaches: () => {
+    recentEvents.clear();
+    lastMoveTimestamps.clear();
   },
 };
 
