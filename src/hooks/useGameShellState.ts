@@ -272,6 +272,7 @@ export function useGameShellState() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (isEditableDomTarget(e.target) || isEditableDomTarget(document.activeElement)) return;
       if (hasBlockingModifier(e)) return;
       if (e.code === 'KeyB' || e.key === 'b' || e.key === 'B') {

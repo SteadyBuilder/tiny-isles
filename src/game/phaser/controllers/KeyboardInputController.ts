@@ -29,6 +29,7 @@ export class KeyboardInputController {
   private callbacks: IKeyboardInputCallbacks;
   private pressedCodes = new Set<string>();
   private isPaused = false;
+  private isModalLocked = false;
   private attached = false;
   private unbindFns: Array<() => void> = [];
 
@@ -94,17 +95,24 @@ export class KeyboardInputController {
     this.resetKeys();
   }
 
+  public setModalLocked(locked: boolean): void {
+    this.isModalLocked = locked;
+    if (locked) {
+      this.resetKeys();
+    }
+  }
+
   public resetKeys(): void {
     this.pressedCodes.clear();
   }
 
   public getDirectionalVector(): { vx: number; vy: number } {
-    if (this.isPaused) return { vx: 0, vy: 0 };
+    if (this.isPaused || this.isModalLocked) return { vx: 0, vy: 0 };
     return resolveDirectionalVectorFromCodes(this.pressedCodes);
   }
 
   public isInteractHeld(): boolean {
-    if (this.isPaused) return false;
+    if (this.isPaused || this.isModalLocked) return false;
     return isInteractHoldActive(this.pressedCodes);
   }
 
@@ -121,7 +129,7 @@ export class KeyboardInputController {
       return;
     }
 
-    if (this.isPaused) {
+    if (this.isPaused || this.isModalLocked) {
       return;
     }
 

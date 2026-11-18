@@ -115,6 +115,7 @@ export interface GameEventPayloads {
   'mission-progress-updated': MissionProgressState;
   'mission-ended': MissionResultPayload;
   'game-pause-toggled': boolean;
+  'ui-modal-keyboard-lock': boolean;
   'room-members-updated': RoomMember[];
 
   // 자원 및 인벤토리

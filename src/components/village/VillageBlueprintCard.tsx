@@ -31,6 +31,7 @@ export interface VillageBlueprintCardProps {
   isTowerPlacement: boolean;
   isEnabled: boolean;
   statusText: string;
+  shortcutKey?: number;
   onBuild: () => void;
 }
 
@@ -40,6 +41,7 @@ export const VillageBlueprintCard: React.FC<VillageBlueprintCardProps> = ({
   isTowerPlacement,
   isEnabled,
   statusText,
+  shortcutKey,
   onBuild,
 }) => {
   return (
@@ -63,7 +65,23 @@ export const VillageBlueprintCard: React.FC<VillageBlueprintCardProps> = ({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1.5">
-            <span className="font-black text-xs text-[#2b1810] leading-snug">{bp.name}</span>
+            <div className="flex items-center gap-1 min-w-0">
+              {shortcutKey !== undefined && (
+                <kbd
+                  className={`hidden sm:inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-black border shrink-0 tabular-nums ${
+                    isEnabled
+                      ? 'bg-[#29150b] text-[#fde68a] border-[#92400e]'
+                      : 'bg-[#78634d]/60 text-[#e7d8c1] border-[#8c745a]'
+                  }`}
+                  title={`단축키 [${shortcutKey}]`}
+                >
+                  {shortcutKey}
+                </kbd>
+              )}
+              <span className="font-black text-xs text-[#2b1810] leading-snug truncate">
+                {bp.name}
+              </span>
+            </div>
             <span
               className={`px-1.5 py-0.5 rounded text-[9px] font-black shrink-0 border ${
                 isEnabled

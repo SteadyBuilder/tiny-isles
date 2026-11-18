@@ -602,6 +602,9 @@ export class PlayerMovementController {
     const handlePauseToggled = (paused: boolean) => {
       this.keyboardController.setPaused(paused);
     };
+    const handleModalKeyboardLock = (locked: boolean) => {
+      this.keyboardController.setModalLocked(locked);
+    };
 
     GameEvents.on('player-action-start', handleActionStart);
     GameEvents.on('player-action-stop', handleActionStop);
@@ -609,6 +612,7 @@ export class PlayerMovementController {
     GameEvents.on('trigger-dash', handleTriggerDash);
     GameEvents.on('toggle-auto-interact', handleToggleAutoInteract);
     GameEvents.on('game-pause-toggled', handlePauseToggled);
+    GameEvents.on('ui-modal-keyboard-lock', handleModalKeyboardLock);
 
     this.unbindInputs.push(() => {
       GameEvents.off('player-action-start', handleActionStart);
@@ -617,6 +621,7 @@ export class PlayerMovementController {
       GameEvents.off('trigger-dash', handleTriggerDash);
       GameEvents.off('toggle-auto-interact', handleToggleAutoInteract);
       GameEvents.off('game-pause-toggled', handlePauseToggled);
+      GameEvents.off('ui-modal-keyboard-lock', handleModalKeyboardLock);
     });
 
     GameEvents.emit('auto-interact-changed', this.isAutoInteractEnabled);

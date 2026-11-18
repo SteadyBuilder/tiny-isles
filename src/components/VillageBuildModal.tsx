@@ -15,6 +15,11 @@ import { WoodModalFrame } from './ui/WoodModalFrame';
 import { PixelGameButton } from './ui/PixelGameButton';
 import { VillageBlueprintCard } from './village/VillageBlueprintCard';
 import { useEscapeToClose } from '../hooks/useEscapeToClose';
+import { useVillageBuildModalShortcuts } from '../hooks/useVillageBuildModalShortcuts';
+import {
+  cycleCategoryIndex,
+  getBlueprintShortcutNumber,
+} from '../game/utils/buildModalKeyboardUtils';
 
 interface VillageBuildModalProps {
   isOpen: boolean;
@@ -71,19 +76,14 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
   }, [playerStandingTerritoryId, isOpen]);
 
   const isModalVisible = isOpen && Boolean(curTerritory) && access.allowed;
-  useEscapeToClose(isModalVisible, onClose);
-
-  if (!isModalVisible || !curTerritory) return null;
-
-  const curTier = curTerritory.villageTier;
-  const tierCfg = VILLAGE_TIER_CONFIGS[curTier];
-  const upgrade = BuildingSystem.checkUpgrade(curTerritory, inventory);
-  const slotStates = BuildingSystem.getSlotStates(curTerritory.id, curTier, constructedBuildings);
-  const maxSlots = BuildingSystem.getMaxSlots(curTier);
-  const existingCount = BuildingSystem.getOccupiedSlotCount(curTerritory.id, constructedBuildings);
   const blueprints = CONSTRUCTABLE_BLUEPRINTS.filter((b) => b.category === activeCategory);
+  const maxSlots = curTerritory ? BuildingSystem.getMaxSlots(curTerritory.villageTier) : 0;
+  const existingCount = curTerritory
+    ? BuildingSystem.getOccupiedSlotCount(curTerritory.id, constructedBuildings)
+    : 0;
 
   const handleBuild = (type: ConstructableType) => {
+    if (!curTerritory) return;
     const bp = blueprints.find((b) => b.type === type);
     if (bp && onSelectTowerPlacement) {
       const canAfford =
@@ -111,6 +111,31 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
     onConstructBuilding(curTerritory.id, type, check.slotIndex!);
     setSelectedSlotIndex(null);
   };
+
+  useEscapeToClose(isModalVisible, onClose);
+  useVillageBuildModalShortcuts({
+    isActive: isModalVisible,
+    onClose,
+    onChangeCategory: (delta) => {
+      setActiveCategory((prev) => {
+        const curIdx = CATEGORIES.findIndex((c) => c.key === prev);
+        const nextIdx = cycleCategoryIndex(curIdx === -1 ? 0 : curIdx, delta, CATEGORIES.length);
+        return CATEGORIES[nextIdx].key;
+      });
+    },
+    onSelectBlueprintIndex: (index) => {
+      const target = blueprints[index];
+      if (!target) return;
+      handleBuild(target.type);
+    },
+  });
+
+  if (!isModalVisible || !curTerritory) return null;
+
+  const curTier = curTerritory.villageTier;
+  const tierCfg = VILLAGE_TIER_CONFIGS[curTier];
+  const upgrade = BuildingSystem.checkUpgrade(curTerritory, inventory);
+  const slotStates = BuildingSystem.getSlotStates(curTerritory.id, curTier, constructedBuildings);
 
   const shortTerritoryName = curTerritory.name.split(' (')[0];
 
@@ -253,6 +278,24 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
         })}
       </div>
 
+      {/* PC Keyboard Shortcut Hint */}
+      <div className="hidden sm:flex items-center justify-between gap-2 px-2.5 py-1 rounded-lg bg-[#29150b]/80 border border-[#85532a] text-[10px] font-bold text-[#f3e4c7]">
+        <span>
+          <kbd className="px-1 py-0.5 rounded bg-[#3d2314] border border-[#b89568] text-[#fde68a]">Q / E</kbd>{' '}
+          <kbd className="px-1 py-0.5 rounded bg-[#3d2314] border border-[#b89568] text-[#fde68a]">← / →</kbd>{' '}
+          <kbd className="px-1 py-0.5 rounded bg-[#3d2314] border border-[#b89568] text-[#fde68a]">Tab</kbd>{' '}
+          탭 전환
+        </span>
+        <span>
+          <kbd className="px-1 py-0.5 rounded bg-[#3d2314] border border-[#b89568] text-[#fde68a]">1~8</kbd>{' '}
+          건물 즉시 선택
+        </span>
+        <span>
+          <kbd className="px-1 py-0.5 rounded bg-[#3d2314] border border-[#b89568] text-[#fde68a]">B / ESC</kbd>{' '}
+          닫기
+        </span>
+      </div>
+
       {/* Wall Status & Direct Repair Section */}
       {activeCategory === 'wall' && (
         <TerritoryWallRepairCard
@@ -267,8 +310,8 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
 
       {/* Blueprints Grid */}
       <div className="ts-paper-sheet p-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {blueprints.map((bp) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[42vh] sm:max-h-[46vh] overflow-y-auto overscroll-contain touch-pan-y pr-1 wood-modal-scroll">
+          {blueprints.map((bp, index) => {
             const isTower = bp.category === 'tower' && Boolean(onSelectTowerPlacement);
             const hasSlot = existingCount < maxSlots;
             const canAfford =
@@ -305,6 +348,7 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                 isTowerPlacement={isTower}
                 isEnabled={isEnabled}
                 statusText={statusText}
+                shortcutKey={getBlueprintShortcutNumber(index) ?? undefined}
                 onBuild={() => handleBuild(bp.type)}
               />
             );

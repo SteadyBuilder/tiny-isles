@@ -41,6 +41,7 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
       id={id}
       className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/65 backdrop-blur-[2px] p-3 sm:p-5 animate-fadeIn`}
       onClick={closeOnBackdrop ? onClose : undefined}
+      onWheel={(e) => e.stopPropagation()}
     >
       <div
         className={`relative w-full ${maxWidthClass} ${frameClass} max-h-[88vh] flex flex-col pt-3`}
@@ -48,7 +49,7 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
       >
         {/* Top Overlapping Tiny Swords Ribbon Title */}
         <div
-          className={`relative -mt-10 mb-2 flex items-center justify-center ${
+          className={`relative -mt-10 mb-2 flex items-center justify-center shrink-0 ${
             onTitleClick ? 'pointer-events-auto cursor-default select-none' : 'pointer-events-none'
           }`}
           onClick={onTitleClick}
@@ -67,7 +68,7 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
 
         {/* Optional Secondary Header Bar (Points / Close Button) */}
         {(headerRight || onClose) && (
-          <div className="flex items-center justify-between gap-2 mb-2 px-1">
+          <div className="flex items-center justify-between gap-2 mb-2 px-1 shrink-0">
             <div className="flex items-center gap-2 min-w-0">{headerRight}</div>
             {onClose && (
               <PixelRoundButton
@@ -82,7 +83,9 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
         )}
 
         {/* Scrollable Content Body */}
-        <div className="overflow-y-auto pr-0.5 space-y-3">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 space-y-3 wood-modal-scroll">
+          {children}
+        </div>
       </div>
     </div>
   );
