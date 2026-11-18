@@ -115,6 +115,10 @@ export function createWorldMultiplayerSync(
     onRemoteBuildingConstructed: host.onRemoteBuildingConstructed,
     onRemoteWaveSpawned: (isBossWave) => {
       sound.playBreak();
+      GameEvents.emit('wave-spawned', {
+        isBossWave,
+        waveNumber: waveSystem.getWaveState().waveCount,
+      });
       GameEvents.emit(
         'game-alert',
         isBossWave

@@ -53,6 +53,21 @@ export const PLAYER_DAMAGED_OVERLAY_CONFIG = {
   heavyDamageRatioThreshold: 0.22,
 } as const;
 
+export const WAVE_INVASION_OVERLAY_CONFIG = {
+  /** 일반 웨이브 침공 시 1회 점멸(펄스) 지속 시간 (ms) */
+  regularPulseDurationMs: 650,
+  /** 일반 웨이브 점멸 반복 횟수 */
+  regularPulseCount: 2,
+  /** 일반 웨이브 붉은 비네트 최대 투명도 */
+  regularMaxAlpha: 0.55,
+  /** 보스/던전 웨이브 침공 시 1회 점멸(펄스) 지속 시간 (ms) */
+  bossPulseDurationMs: 700,
+  /** 보스/던전 웨이브 점멸 반복 횟수 */
+  bossPulseCount: 3,
+  /** 보스/던전 웨이브 붉은 비네트 최대 투명도 */
+  bossMaxAlpha: 0.72,
+} as const;
+
 export const PLAYER_DASH_CONFIG = {
   /** 대시 지속 시간 (ms) */
   durationMs: 185,

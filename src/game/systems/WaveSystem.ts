@@ -291,6 +291,10 @@ export class WaveSystem {
     if (isBossSound) sound.playBossRoar();
     else sound.playWaveHorn();
     GameEvents.emit('game-alert', msg);
+    GameEvents.emit('wave-spawned', {
+      isBossWave: isBossSound,
+      waveNumber: this.threatTracker.getWaveCount(),
+    });
     this.emitWaveState();
     if (isLocalTrigger) this.ctx.broadcastWaveSpawn?.(isBossSound);
     if (flushDelta && this.isHost) this.flushDeltaSyncNow();
