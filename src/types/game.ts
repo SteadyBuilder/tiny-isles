@@ -25,6 +25,8 @@ export interface Player {
   color: PlayerColor;
   classId?: PlayerClassId;
   level?: number;
+  hp?: number;
+  maxHp?: number;
   isFainted?: boolean;
   lastUpdated: number;
 }

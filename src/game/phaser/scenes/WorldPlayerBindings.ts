@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
+import { RemotePlayerSkillCastPayload } from '../../../types/combat';
 import { Inventory, PlayerClassId } from '../../../types/game';
 import { MetaBonusSummary } from '../../../types/metaProgression';
 import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
@@ -46,6 +47,7 @@ export function createWorldPlayerSystems(
   deps: {
     getWaveSystem: () => WaveSystem | undefined;
     tryDamageCampCoreInRadius: (x: number, y: number, r: number, dmg: number) => boolean;
+    onBroadcastSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
   }
 ): {
   playerHealthSystem: PlayerHealthSystem;
@@ -115,6 +117,19 @@ export function createWorldPlayerSystems(
         host.onPlayerCastVisual?.(chargeMs);
       }
       host.skillEffectsRenderer.playClassSkill(fxCtx);
+      deps.onBroadcastSkillCast?.({
+        casterId: host.getPlayerId(),
+        casterName: host.getPlayerName(),
+        classId: fxCtx.classId,
+        casterX: Math.round(fxCtx.casterX),
+        casterY: Math.round(fxCtx.casterY),
+        facingDir: fxCtx.facingDir,
+        radius: Math.round(fxCtx.radius),
+        targetPoints: fxCtx.targetPoints?.slice(0, 10).map((pt) => ({
+          x: Math.round(pt.x),
+          y: Math.round(pt.y),
+        })),
+      });
     },
     triggerSkillSurge: host.triggerSkillSurge,
     getJobHallStatus: () => {

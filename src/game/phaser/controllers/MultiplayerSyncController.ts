@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYER_SYNC_CONFIG } from '../../../data/worldRules';
+import { PLAYER_COMBAT_CONFIG, PLAYER_SYNC_CONFIG } from '../../../data/worldRules';
 import {
   CampCoreHitPayload,
   CampCoreSyncPayload,
@@ -7,6 +7,7 @@ import {
   CampStructureHitPayload,
   CampStructureHpSyncPayload,
 } from '../../../types/campSync';
+import { RemotePlayerSkillCastPayload } from '../../../types/combat';
 import {
   ConstructedBuilding,
   DungeonPortalState,
@@ -36,6 +37,7 @@ export interface IMultiplayerSyncContext {
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
   isLocalPlayerFainted?: () => boolean;
+  getLocalPlayerHp?: () => { hp: number; maxHp: number };
   getLocalPlayerState: () => {
     x: number;
     y: number;
@@ -44,6 +46,7 @@ export interface IMultiplayerSyncContext {
   };
   onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
   onHostStatusChanged?: (isHost: boolean) => void;
+  onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteEntityRespawned?: (entity: Entity) => void;
   onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
@@ -87,6 +90,8 @@ interface LastSentMoveSnapshot {
   y: number;
   direction: 'left' | 'right';
   action: PlayerAction;
+  hp: number;
+  maxHp: number;
   isFainted: boolean;
   name: string;
   color: PlayerColor;
@@ -117,6 +122,7 @@ export class MultiplayerSyncController {
       onRemotePlayerMove: (player) =>
         this.remoteRenderer.updatePlayer(player, this.ctx.getPlayerId()),
       onRemotePlayerLeave: (playerId) => this.remoteRenderer.removePlayer(playerId),
+      onRemotePlayerSkillCast: (payload) => this.ctx.onRemotePlayerSkillCast?.(payload),
       onRemoteEntityHit: (entityId, damage, hitByName) =>
         this.ctx.onRemoteEntityHit(entityId, damage, hitByName),
       onRemoteEntityRespawned: (entity) => this.ctx.onRemoteEntityRespawned?.(entity),
@@ -192,6 +198,9 @@ export class MultiplayerSyncController {
     const rx = Math.round(state.x);
     const ry = Math.round(state.y);
     const isFainted = this.ctx.isLocalPlayerFainted?.() ?? false;
+    const hpState = this.ctx.getLocalPlayerHp?.();
+    const maxHp = Math.max(1, Math.round(hpState?.maxHp ?? PLAYER_COMBAT_CONFIG.maxHp));
+    const hp = Math.max(0, Math.min(maxHp, Math.round(hpState?.hp ?? (isFainted ? 0 : maxHp))));
     const name = this.ctx.getPlayerName();
     const color = this.ctx.getPlayerColor();
 
@@ -202,6 +211,8 @@ export class MultiplayerSyncController {
       prev.y !== ry ||
       prev.direction !== state.direction ||
       prev.action !== state.action ||
+      prev.hp !== hp ||
+      prev.maxHp !== maxHp ||
       prev.isFainted !== isFainted ||
       prev.name !== name ||
       prev.color !== color;
@@ -217,6 +228,8 @@ export class MultiplayerSyncController {
       y: ry,
       direction: state.direction,
       action: state.action,
+      hp,
+      maxHp,
       isFainted,
       name,
       color,
@@ -230,10 +243,17 @@ export class MultiplayerSyncController {
       direction: state.direction,
       action: state.action,
       color,
+      hp,
+      maxHp,
       isFainted,
       lastUpdated: Date.now(),
     };
     this.router.emit('player_move', 'player_move', payload);
+  }
+
+  public broadcastPlayerSkillCast(payload: RemotePlayerSkillCastPayload): void {
+    if (this.ctx.getRoomMode?.() === 'solo') return;
+    this.router.emit('player_skill_cast', 'player_skill_cast', payload);
   }
 
   public broadcastHit(entityId: string, damage: number): void {

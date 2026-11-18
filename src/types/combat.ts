@@ -46,3 +46,17 @@ export interface SkillEffectContext {
   targetPoints?: ReadonlyArray<{ x: number; y: number }>;
   onImpact?: () => void;
 }
+
+/**
+ * 멀티플레이 원격 플레이어 액티브 스킬 이펙트 동기화 페이로드
+ */
+export interface RemotePlayerSkillCastPayload {
+  casterId: string;
+  casterName: string;
+  classId: PlayerClassId;
+  casterX: number;
+  casterY: number;
+  facingDir: 'left' | 'right';
+  radius: number;
+  targetPoints?: Array<{ x: number; y: number }>;
+}

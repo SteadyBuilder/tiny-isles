@@ -5,6 +5,7 @@ import {
   CampStructureHitPayload,
   CampStructureHpSyncPayload,
 } from '../../../types/campSync';
+import { RemotePlayerSkillCastPayload } from '../../../types/combat';
 import {
   ConstructedBuilding,
   DungeonPortalState,
@@ -32,6 +33,7 @@ export interface IMultiplayerChannelCallbacks {
   onHostStatusChanged?: (isHost: boolean) => void;
   onRemotePlayerMove: (player: Player) => void;
   onRemotePlayerLeave: (playerId: string) => void;
+  onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteEntityRespawned?: (entity: Entity) => void;
   onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
@@ -72,6 +74,7 @@ export interface IMultiplayerChannelCallbacks {
 
 export const SHARED_CHANNEL_EVENTS = [
   'player_move',
+  'player_skill_cast',
   'entity_hit',
   'island_unlocked',
   'village_upgraded',
@@ -107,6 +110,9 @@ export function dispatchSharedChannelEvent(
   switch (eventName) {
     case 'player_move':
       callbacks.onRemotePlayerMove(payload as Player);
+      break;
+    case 'player_skill_cast':
+      callbacks.onRemotePlayerSkillCast?.(payload as RemotePlayerSkillCastPayload);
       break;
     case 'entity_hit': {
       const p = payload as { entityId: string; damage: number; hitBy: string };

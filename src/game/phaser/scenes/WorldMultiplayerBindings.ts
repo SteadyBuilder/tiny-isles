@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PLAYER_CLASS_DEFINITIONS } from '../../../data/classes';
 import { sound } from '../../../lib/sound';
 import { ConstructedBuilding, PlayerAction, PlayerColor } from '../../../types/game';
 import { RoomMode } from '../../../types/room';
@@ -11,6 +12,8 @@ import { PlayerHealthSystem } from '../../systems/PlayerHealthSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
+import { SkillEffectsRenderer } from '../renderers/SkillEffectsRenderer';
+import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
 
 export interface IWorldMultiplayerHost {
   scene: Phaser.Scene;
@@ -38,6 +41,8 @@ export interface IWorldMultiplayerHost {
   onRemoteRepairTerritoryRequest?: (territoryId: number) => void;
   onCoreDestroyed?: () => void;
   resourceEntityRenderer: ResourceEntityRenderer;
+  skillEffectsRenderer: SkillEffectsRenderer;
+  effectsRenderer: WorldEffectsRenderer;
 }
 
 export interface IWorldMultiplayerSystems {
@@ -74,6 +79,7 @@ export function createWorldMultiplayerSync(
     getRoomId: host.getRoomId,
     getRoomMode: host.getRoomMode,
     isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
+    getLocalPlayerHp: () => playerHealthSystem.getState(),
     getLocalPlayerState: host.getLocalPlayerState,
     onOnlineCountChanged: (count, hasNewPeer) => {
       waveSystem.setOnlineCount(count);
@@ -103,6 +109,26 @@ export function createWorldMultiplayerSync(
       } else {
         fieldMonsterSystem.resetForGuest();
         monsterCampSystem.resetGuestGarrisonState();
+      }
+    },
+    onRemotePlayerSkillCast: (payload) => {
+      if (!payload || payload.casterId === host.getPlayerId()) return;
+      host.skillEffectsRenderer.playClassSkill({
+        classId: payload.classId,
+        casterX: payload.casterX,
+        casterY: payload.casterY,
+        facingDir: payload.facingDir,
+        radius: payload.radius,
+        targetPoints: payload.targetPoints,
+      });
+      const cls = PLAYER_CLASS_DEFINITIONS[payload.classId];
+      if (cls) {
+        host.effectsRenderer.showFloatingText(
+          payload.casterX,
+          payload.casterY - 58,
+          `${cls.skillIcon} ${cls.skillName}!`,
+          '#38bdf8'
+        );
       }
     },
     onRemoteEntityHit: (entityId, damage) =>

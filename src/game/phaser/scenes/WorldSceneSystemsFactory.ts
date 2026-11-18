@@ -134,6 +134,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       getWaveSystem: () => waveSystem,
       tryDamageCampCoreInRadius: (x, y, r, dmg) =>
         monsterCampSystem?.damageCampCoresInRadius(x, y, r, dmg, true) ?? false,
+      onBroadcastSkillCast: (payload) => multiplayerSync?.broadcastPlayerSkillCast(payload),
     }
   );
 
