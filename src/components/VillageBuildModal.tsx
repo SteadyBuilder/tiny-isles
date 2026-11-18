@@ -14,6 +14,7 @@ import { canBuildInTerritory } from '../game/territoryAccessRules';
 import { WoodModalFrame } from './ui/WoodModalFrame';
 import { PixelGameButton } from './ui/PixelGameButton';
 import { VillageBlueprintCard } from './village/VillageBlueprintCard';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface VillageBuildModalProps {
   isOpen: boolean;
@@ -69,7 +70,10 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
     setSelectedSlotIndex(null);
   }, [playerStandingTerritoryId, isOpen]);
 
-  if (!isOpen || !curTerritory || !access.allowed) return null;
+  const isModalVisible = isOpen && Boolean(curTerritory) && access.allowed;
+  useEscapeToClose(isModalVisible, onClose);
+
+  if (!isModalVisible || !curTerritory) return null;
 
   const curTier = curTerritory.villageTier;
   const tierCfg = VILLAGE_TIER_CONFIGS[curTier];

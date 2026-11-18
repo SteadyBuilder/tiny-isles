@@ -182,7 +182,7 @@ export function useRoomLobbyState(
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (sessionStatus === 'playing' || sessionStatus === 'paused') {
         toggleSoloPause();
       }

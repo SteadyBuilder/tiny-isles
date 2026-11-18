@@ -5,6 +5,7 @@ import { GameEvents } from '../game/events/gameEvents';
 import { ADMIN_RESET_CONFIG } from '../data/adminReset';
 import { TEST_MENU_EASTER_EGG_CONFIG } from '../data/testMenuEasterEgg';
 import { useMultiClickTrigger } from '../hooks/useMultiClickTrigger';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import { AdminResetEasterEggModal } from './AdminResetEasterEggModal';
 import { WoodModalFrame } from './ui/WoodModalFrame';
 import { PixelGameButton } from './ui/PixelGameButton';
@@ -25,6 +26,7 @@ interface HudSettingsModalProps {
   onOpenHelp: () => void;
   isTestMenuVisible?: boolean;
   onToggleTestMenu?: () => void;
+  hasSubModalOpen?: boolean;
 }
 
 const ZOOM_PRESETS: ReadonlyArray<number> = [0.75, 1.0, 1.25, 1.5];
@@ -43,6 +45,7 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
   onOpenHelp,
   isTestMenuVisible = false,
   onToggleTestMenu,
+  hasSubModalOpen = false,
 }) => {
   const [tempName, setTempName] = useState(playerName);
   const [selectedZoom, setSelectedZoom] = useState<number>(1.0);
@@ -51,6 +54,8 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
   useEffect(() => {
     setTempName(playerName);
   }, [playerName]);
+
+  useEscapeToClose(isOpen && !showAdminReset && !hasSubModalOpen, onClose);
 
   const handleSecretTitleClick = useMultiClickTrigger({
     requiredClicks: ADMIN_RESET_CONFIG.requiredClicks,

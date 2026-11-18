@@ -1,6 +1,7 @@
 import React from 'react';
 import { WoodModalFrame } from './ui/WoodModalFrame';
 import { PixelGameButton } from './ui/PixelGameButton';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface HudHelpModalProps {
   isOpen: boolean;
@@ -35,6 +36,8 @@ const GUIDE_ITEMS: ReadonlyArray<{
 ];
 
 export const HudHelpModal: React.FC<HudHelpModalProps> = ({ isOpen, onClose }) => {
+  useEscapeToClose(isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (

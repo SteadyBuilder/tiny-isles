@@ -3,6 +3,7 @@ import { sound, BGM_TRACKS, BgmTrackId, SoundSettings } from '../lib/sound';
 import { WoodModalFrame } from './ui/WoodModalFrame';
 import { PixelGameButton } from './ui/PixelGameButton';
 import { PixelRangeSlider } from './ui/PixelRangeSlider';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface SoundModalProps {
   isOpen: boolean;
@@ -35,6 +36,8 @@ export const SoundModal: React.FC<SoundModalProps> = ({ isOpen, onClose }) => {
     const unsub = sound.subscribe((updated) => setSettings(updated));
     return () => unsub();
   }, []);
+
+  useEscapeToClose(isOpen, onClose);
 
   if (!isOpen) return null;
 

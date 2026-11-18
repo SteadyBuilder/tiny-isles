@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { resetAllPlayData, verifyAdminResetCode } from '../lib/adminResetService';
 import { WoodModalFrame } from './ui/WoodModalFrame';
 import { PixelGameButton } from './ui/PixelGameButton';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface AdminResetEasterEggModalProps {
   isOpen: boolean;
@@ -16,14 +17,16 @@ export const AdminResetEasterEggModal: React.FC<AdminResetEasterEggModalProps> =
   const [error, setError] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
 
-  if (!isOpen) return null;
-
   const handleClose = () => {
     if (isResetting) return;
     setPasscode('');
     setError(null);
     onClose();
   };
+
+  useEscapeToClose(isOpen, handleClose);
+
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -150,6 +150,7 @@ export const HUD: React.FC<HUDProps> = ({
         onOpenHelp={() => setShowHelp(true)}
         isTestMenuVisible={showTestMenu}
         onToggleTestMenu={() => setShowTestMenu((prev) => !prev)}
+        hasSubModalOpen={showSoundModal || showHelp}
       />
 
       <HudHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
