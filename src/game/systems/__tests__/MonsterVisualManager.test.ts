@@ -189,3 +189,63 @@ test('MonsterVisualManager shares elite badge textures and cleans settled trails
     MonsterVisualManager.clearTrackedVisuals();
   }
 });
+
+test('MonsterVisualManager playAttackAnimation faces target, plays attack anim, and restores run anim on complete', () => {
+  const existingAnims = new Set([
+    'monster_zombie_run',
+    'monster_zombie_attack',
+    'monster_lancer_run',
+    'monster_lancer_attack',
+  ]);
+  const played: Array<{ key: string; ignoreIfPlaying?: boolean }> = [];
+  const listeners = new Map<string, Array<() => void>>();
+  let flipped = false;
+
+  const mockSprite = {
+    active: true,
+    scene: {
+      anims: {
+        exists: (key: string) => existingAnims.has(key),
+      },
+    },
+    setFlipX: (val: boolean) => {
+      flipped = val;
+    },
+    play: (key: string, ignoreIfPlaying?: boolean) => {
+      played.push({ key, ignoreIfPlaying });
+    },
+    off: (event: string) => {
+      listeners.delete(event);
+    },
+    once: (event: string, fn: () => void) => {
+      const list = listeners.get(event) ?? [];
+      list.push(fn);
+      listeners.set(event, list);
+    },
+  };
+
+  const mv = {
+    monster: makeMonster({ id: 'atk_1', type: 'lancer', role: 'lancer', x: 200, direction: 'right' }),
+    container: {} as Phaser.GameObjects.Container,
+    sprite: mockSprite as unknown as Phaser.GameObjects.Sprite,
+    hpBar: null,
+    baseTint: null,
+    hpTrailRatio: 1,
+    hpFlashUntil: 0,
+    lastAttackTime: 0,
+  };
+
+  MonsterVisualManager.playAttackAnimation(mv, 120);
+  assert.equal(mv.monster.direction, 'left');
+  assert.equal(flipped, true);
+  assert.deepEqual(played, [{ key: 'monster_lancer_attack', ignoreIfPlaying: true }]);
+
+  const completeCbs = listeners.get('animationcomplete') ?? [];
+  assert.equal(completeCbs.length, 1);
+  completeCbs[0]();
+  assert.deepEqual(played, [
+    { key: 'monster_lancer_attack', ignoreIfPlaying: true },
+    { key: 'monster_lancer_run', ignoreIfPlaying: true },
+  ]);
+});
+

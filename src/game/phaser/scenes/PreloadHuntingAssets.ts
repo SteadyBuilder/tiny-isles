@@ -12,6 +12,10 @@ export function preloadHuntingModeAssets(scene: Phaser.Scene, isHuntingMode = tr
     frameWidth: 320,
     frameHeight: 320,
   });
+  scene.load.spritesheet('enemyLancerAttack', '/assets/units/enemies/Black_Lancer_Attack.png', {
+    frameWidth: 320,
+    frameHeight: 320,
+  });
   scene.load.spritesheet('enemyArchmageRun', '/assets/units/enemies/Black_Archmage_Run.png', {
     frameWidth: 192,
     frameHeight: 192,
@@ -204,6 +208,14 @@ export function registerHuntingModeAnimations(scene: Phaser.Scene): void {
       frames: scene.anims.generateFrameNumbers('enemyLancerRun', { start: 0, end: 5 }),
       frameRate: 9,
       repeat: -1,
+    });
+  }
+  if (scene.textures.exists('enemyLancerAttack')) {
+    scene.anims.create({
+      key: 'monster_lancer_attack',
+      frames: scene.anims.generateFrameNumbers('enemyLancerAttack', { start: 0, end: 2 }),
+      frameRate: 10,
+      repeat: 0,
     });
   }
   if (scene.textures.exists('enemyArchmageRun')) {

@@ -107,6 +107,7 @@ export class BossSkillSystem {
     isCoop: boolean
   ): void {
     const m = mv.monster;
+    MonsterVisualManager.playAttackAnimation(mv, targetX);
     const ps = this.ctx.projectileSystem;
 
     switch (skillId) {

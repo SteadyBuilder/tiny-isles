@@ -63,6 +63,10 @@ export class PreloadScene extends Phaser.Scene {
       frameWidth: 192,
       frameHeight: 192,
     });
+    this.load.spritesheet('enemyArcherAttack', '/assets/units/enemies/Black_Archer_Attack.png', {
+      frameWidth: 192,
+      frameHeight: 192,
+    });
 
     // Projectiles & FX
     this.load.image('arrowProj', '/assets/fx/Arrow.png');
@@ -224,6 +228,14 @@ export class PreloadScene extends Phaser.Scene {
         frames: this.anims.generateFrameNumbers('enemyArcherRun', { start: 0, end: 3 }),
         frameRate: 9,
         repeat: -1,
+      });
+    }
+    if (this.textures.exists('enemyArcherAttack')) {
+      this.anims.create({
+        key: 'monster_skeleton_attack',
+        frames: this.anims.generateFrameNumbers('enemyArcherAttack', { start: 0, end: 7 }),
+        frameRate: 14,
+        repeat: 0,
       });
     }
     if (this.textures.exists('enemyPurpleWarriorRun')) {

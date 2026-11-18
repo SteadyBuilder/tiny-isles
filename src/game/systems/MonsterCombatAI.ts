@@ -372,6 +372,7 @@ export class MonsterCombatAI {
 
       if (canAttackNow && time - mv.lastAttackTime >= 1150) {
         mv.lastAttackTime = time;
+        MonsterVisualManager.playAttackAnimation(mv, targetX);
         if (!this.ctx.isHost()) continue;
 
         if ((m.role === 'ranged' || m.role === 'mage') && this.ctx.projectileSystem) {

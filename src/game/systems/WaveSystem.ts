@@ -332,6 +332,12 @@ export class WaveSystem {
       damageLocalPlayer: (dmg, attacker) => this.ctx.damageLocalPlayer(dmg, attacker),
       playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
       projectileSystem: this.ctx.projectileSystem,
+      onMonsterAttackVisual: (monsterId, targetX) => {
+        const mv = this.monsters.get(monsterId);
+        if (mv) {
+          MonsterVisualManager.playAttackAnimation(mv, targetX);
+        }
+      },
     });
   }
 

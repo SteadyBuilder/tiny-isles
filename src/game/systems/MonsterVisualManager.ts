@@ -3,6 +3,7 @@ import { MONSTER_HIT_FEEDBACK_CONFIG } from '../../data/combatFeedbackConfig';
 import { ELITE_AFFIXES } from '../../data/elites';
 import { Monster } from '../../types/game';
 import { ySortDepth } from '../depthLayers';
+import { resolveMonsterAnimKeys } from '../utils/monsterAnimationUtils';
 
 export interface MonsterVisual {
   monster: Monster;
@@ -199,6 +200,42 @@ export class MonsterVisualManager {
 
     this.updateHpBar(visual, false);
     return visual;
+  }
+
+  /**
+   * 몬스터가 공격/스킬 시전 시 목표 방향을 바라보며 무기 휘두르기/공격 애니메이션을 1회 재생한 뒤 이동 모션으로 복귀합니다.
+   */
+  public static playAttackAnimation(mv: MonsterVisual, targetX?: number): void {
+    const sprite = mv.sprite;
+    const anims = sprite?.scene?.anims;
+    if (!sprite || !sprite.active || !anims) return;
+
+    if (typeof targetX === 'number' && Number.isFinite(targetX) && targetX !== mv.monster.x) {
+      const nextDir = targetX < mv.monster.x ? 'left' : 'right';
+      mv.monster.direction = nextDir;
+      sprite.setFlipX(nextDir === 'left');
+    }
+
+    const { runAnimKey, attackAnimKey } = resolveMonsterAnimKeys(mv.monster);
+    const resolvedAttackKey = anims.exists(attackAnimKey)
+      ? attackAnimKey
+      : anims.exists('monster_zombie_attack')
+      ? 'monster_zombie_attack'
+      : null;
+    if (!resolvedAttackKey) return;
+
+    const spriteEvents = sprite as unknown as {
+      off?: (event: string) => void;
+      once?: (event: string, fn: () => void) => void;
+    };
+    spriteEvents.off?.('animationcomplete');
+    sprite.play(resolvedAttackKey, true);
+    spriteEvents.once?.('animationcomplete', () => {
+      const currentAnims = sprite.scene?.anims;
+      if (sprite.active && currentAnims?.exists(runAnimKey)) {
+        sprite.play(runAnimKey, true);
+      }
+    });
   }
 
   public static updateHpBar(mv: MonsterVisual, isDamageEvent = true): void {

@@ -29,6 +29,7 @@ export interface RemoteMonsterPlayerAttackDeps {
   damageLocalPlayer: (damage: number, attackerName: string) => void;
   playExplosionAt: (x: number, y: number) => void;
   projectileSystem?: IRemoteAttackProjectilePlayer;
+  onMonsterAttackVisual?: (monsterId: string, targetX: number) => void;
 }
 
 /**
@@ -40,6 +41,8 @@ export function executeRemoteMonsterPlayerAttack(
 ): void {
   const localId = deps.getLocalPlayerId();
   if (payload.targetPlayerId !== '*' && payload.targetPlayerId !== localId) return;
+
+  deps.onMonsterAttackVisual?.(payload.monsterId, payload.targetX);
 
   const ps = deps.projectileSystem;
   if (payload.telegraphRadius && payload.telegraphDurationMs && ps) {

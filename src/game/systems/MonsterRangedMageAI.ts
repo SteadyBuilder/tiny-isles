@@ -255,14 +255,6 @@ export class MonsterRangedMageAI {
     if (m.role === 'mage' && this.ctx.projectileSystem) {
       const strikeX = targetX;
       const strikeY = targetY;
-      if (mv.sprite.scene?.anims.exists('monster_archmage_cast')) {
-        mv.sprite.play('monster_archmage_cast', true);
-        mv.sprite.once('animationcomplete', () => {
-          if (mv.sprite.active && mv.sprite.scene?.anims.exists('monster_archmage_run')) {
-            mv.sprite.play('monster_archmage_run', true);
-          }
-        });
-      }
       if (this.ctx.broadcastMonsterPlayerAttack && this.resolveActivePlayers().length > 1) {
         this.ctx.broadcastMonsterPlayerAttack({
           targetPlayerId: '*',
