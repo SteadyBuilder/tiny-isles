@@ -13,6 +13,7 @@ import { BagItemCard } from './inventory/BagItemCard';
 import { EquipmentSlotCard } from './inventory/EquipmentSlotCard';
 import { PixelGameButton } from './ui/PixelGameButton';
 import { WoodModalFrame } from './ui/WoodModalFrame';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface InventoryModalProps {
   isOpen: boolean;
@@ -66,6 +67,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       ),
     [progression.bagItems, progression.equipped, progression.classId]
   );
+
+  useEscapeToClose(isOpen, onClose);
 
   if (!isOpen) return null;
 

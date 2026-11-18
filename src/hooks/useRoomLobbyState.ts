@@ -13,6 +13,7 @@ import { INSTANCE_ROOM_DEFAULTS } from '../data/missions';
 import { GameEvents } from '../game/events/gameEvents';
 import { saveRepository } from '../lib/repositories/LocalStorageSaveRepository';
 import { SupabaseRoomTransport } from '../lib/transports/SupabaseRoomTransport';
+import { shouldTriggerSoloPauseOnEscape } from './useEscapeToClose';
 import { PlayerColor } from '../types/game';
 import {
   AuraEffectId,
@@ -182,7 +183,7 @@ export function useRoomLobbyState(
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (!shouldTriggerSoloPauseOnEscape(e)) return;
       if (sessionStatus === 'playing' || sessionStatus === 'paused') {
         toggleSoloPause();
       }

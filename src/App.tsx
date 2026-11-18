@@ -123,6 +123,12 @@ export function App() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (sessionStatus !== 'playing' && showInventoryModal) {
+      setShowInventoryModal(false);
+    }
+  }, [sessionStatus, showInventoryModal, setShowInventoryModal]);
+
   if (sessionStatus === 'lobby' || sessionStatus === 'waiting') {
     return (
       <>
@@ -295,7 +301,7 @@ export function App() {
       />
 
       <InventoryModal
-        isOpen={showInventoryModal}
+        isOpen={showInventoryModal && sessionStatus === 'playing'}
         onClose={() => setShowInventoryModal(false)}
         progression={playerProgression}
       />
