@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { DEDICATED_MONSTER_SPRITES } from '../../../data/monsterSprites';
 import { GameEvents } from '../../events/gameEvents';
 import {
   preloadHuntingModeAssets,
@@ -42,7 +43,19 @@ export class PreloadScene extends Phaser.Scene {
       });
     });
 
-    // Monster & Boss Spritesheets
+    // Dedicated Normal Monster Spritesheets (Zombie, Skeleton, Goblin, Lizardman, Slime)
+    for (const spec of Object.values(DEDICATED_MONSTER_SPRITES)) {
+      this.load.spritesheet(spec.runTexKey, spec.runPath, {
+        frameWidth: spec.frameWidth,
+        frameHeight: spec.frameHeight,
+      });
+      this.load.spritesheet(spec.attackTexKey, spec.attackPath, {
+        frameWidth: spec.frameWidth,
+        frameHeight: spec.frameHeight,
+      });
+    }
+
+    // Boss & Faction Spritesheets
     this.load.spritesheet('enemyBlackWarriorRun', '/assets/units/enemies/Black_Warrior_Run.png', {
       frameWidth: 192,
       frameHeight: 192,
@@ -205,8 +218,34 @@ export class PreloadScene extends Phaser.Scene {
       });
     });
 
-    // Enemy Monster Animations
-    if (this.textures.exists('enemyBlackWarriorRun')) {
+    // Dedicated Normal Monster Animations (Zombie, Skeleton, Goblin, Lizardman, Slime)
+    for (const spec of Object.values(DEDICATED_MONSTER_SPRITES)) {
+      if (this.textures.exists(spec.runTexKey)) {
+        this.anims.create({
+          key: spec.runAnimKey,
+          frames: this.anims.generateFrameNumbers(spec.runTexKey, {
+            start: 0,
+            end: spec.runFrames - 1,
+          }),
+          frameRate: spec.runFrameRate,
+          repeat: -1,
+        });
+      }
+      if (this.textures.exists(spec.attackTexKey)) {
+        this.anims.create({
+          key: spec.attackAnimKey,
+          frames: this.anims.generateFrameNumbers(spec.attackTexKey, {
+            start: 0,
+            end: spec.attackFrames - 1,
+          }),
+          frameRate: spec.attackFrameRate,
+          repeat: 0,
+        });
+      }
+    }
+
+    // Fallback & Boss Animations
+    if (!this.anims.exists('monster_zombie_run') && this.textures.exists('enemyBlackWarriorRun')) {
       this.anims.create({
         key: 'monster_zombie_run',
         frames: this.anims.generateFrameNumbers('enemyBlackWarriorRun', { start: 0, end: 5 }),
@@ -214,7 +253,7 @@ export class PreloadScene extends Phaser.Scene {
         repeat: -1,
       });
     }
-    if (this.textures.exists('enemyBlackWarriorAttack')) {
+    if (!this.anims.exists('monster_zombie_attack') && this.textures.exists('enemyBlackWarriorAttack')) {
       this.anims.create({
         key: 'monster_zombie_attack',
         frames: this.anims.generateFrameNumbers('enemyBlackWarriorAttack', { start: 0, end: 3 }),
@@ -222,7 +261,7 @@ export class PreloadScene extends Phaser.Scene {
         repeat: 0,
       });
     }
-    if (this.textures.exists('enemyArcherRun')) {
+    if (!this.anims.exists('monster_skeleton_run') && this.textures.exists('enemyArcherRun')) {
       this.anims.create({
         key: 'monster_skeleton_run',
         frames: this.anims.generateFrameNumbers('enemyArcherRun', { start: 0, end: 3 }),
@@ -230,7 +269,7 @@ export class PreloadScene extends Phaser.Scene {
         repeat: -1,
       });
     }
-    if (this.textures.exists('enemyArcherAttack')) {
+    if (!this.anims.exists('monster_skeleton_attack') && this.textures.exists('enemyArcherAttack')) {
       this.anims.create({
         key: 'monster_skeleton_attack',
         frames: this.anims.generateFrameNumbers('enemyArcherAttack', { start: 0, end: 7 }),

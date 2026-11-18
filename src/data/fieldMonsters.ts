@@ -91,6 +91,27 @@ export const FIELD_NEAR_VILLAGE_PACK_TEMPLATES: FieldMonsterPackTemplate[] = [
     ],
   },
   {
+    id: 'nv_solo_slime',
+    ring: 1,
+    zone: 'near_village',
+    label: '외곽 통통 슬라임',
+    guaranteedElite: false,
+    eliteTier: 'none',
+    units: [
+      {
+        type: 'slime',
+        role: 'melee',
+        name: '💧 들판 슬라임',
+        count: 2,
+        hp: 110,
+        attack: 15,
+        speed: 64,
+        expReward: 18,
+        eliteChance: 0,
+      },
+    ],
+  },
+  {
     id: 'nv_duo_goblins',
     ring: 1,
     zone: 'near_village',
@@ -317,14 +338,14 @@ export const FIELD_PACK_TEMPLATES: Record<1 | 2 | 3 | 4, FieldMonsterPackTemplat
       eliteTier: 'empowered',
       units: [
         {
-          type: 'goblin',
+          type: 'lizardman',
           role: 'melee',
-          name: '🗡️ 황야 약탈병',
+          name: '🦎 황야 리자드맨',
           count: 3,
-          hp: 340,
-          attack: 38,
+          hp: 360,
+          attack: 40,
           speed: 78,
-          expReward: 38,
+          expReward: 40,
           eliteChance: 0.5,
         },
         {

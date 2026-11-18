@@ -74,6 +74,28 @@ export const REGULAR_MONSTER_TEMPLATES: MonsterDataTemplate[] = [
     speed: 52,
     description: '원거리 마력탄과 심연 마력진 폭발을 퍼붓는 흑마법 지원병',
   },
+  {
+    type: 'slime',
+    role: 'melee',
+    name: '💧 점액 슬라임',
+    baseHp: 65,
+    hpPerWave: 11,
+    baseAttack: 12,
+    attackPerWave: 2,
+    speed: 52,
+    description: '작고 탄력 있는 몸으로 떼 지어 몰려오는 기본 필드 마물',
+  },
+  {
+    type: 'lizardman',
+    role: 'melee',
+    name: '🦎 파충류 리자드맨',
+    baseHp: 105,
+    hpPerWave: 17,
+    baseAttack: 19,
+    attackPerWave: 3,
+    speed: 62,
+    description: '단단한 비늘과 청동 창으로 무장해 근접 교전에 강한 파충류 전사',
+  },
 ];
 
 /**

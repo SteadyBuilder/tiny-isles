@@ -120,14 +120,14 @@ export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
     },
     garrisonSpecs: [
       {
-        type: 'goblin',
+        type: 'lizardman',
         role: 'melee',
-        name: '🗡️ 흑기사 선봉대',
+        name: '🦎 리자드맨 창병',
         count: 9,
-        hp: 390,
-        attack: 42,
+        hp: 400,
+        attack: 43,
         speed: 78,
-        expReward: 38,
+        expReward: 40,
       },
       {
         type: 'lancer',

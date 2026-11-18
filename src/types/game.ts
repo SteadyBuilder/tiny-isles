@@ -190,6 +190,8 @@ export type MonsterType =
   | 'zombie'
   | 'skeleton'
   | 'goblin'
+  | 'lizardman'
+  | 'slime'
   | 'lancer'
   | 'archmage'
   | 'boss_deathlord';

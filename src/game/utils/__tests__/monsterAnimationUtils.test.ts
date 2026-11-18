@@ -5,11 +5,19 @@ import { resolveMonsterAnimKeys } from '../monsterAnimationUtils';
 test('resolveMonsterAnimKeys maps melee, lancer, ranged, and mage monsters to run/attack anim pairs', () => {
   assert.deepEqual(
     resolveMonsterAnimKeys({ isBoss: false, type: 'goblin', role: 'melee' }),
-    { runAnimKey: 'monster_zombie_run', attackAnimKey: 'monster_zombie_attack' }
+    { runAnimKey: 'monster_goblin_run', attackAnimKey: 'monster_goblin_attack' }
   );
   assert.deepEqual(
     resolveMonsterAnimKeys({ isBoss: false, type: 'zombie', role: 'melee' }),
     { runAnimKey: 'monster_zombie_run', attackAnimKey: 'monster_zombie_attack' }
+  );
+  assert.deepEqual(
+    resolveMonsterAnimKeys({ isBoss: false, type: 'lizardman', role: 'melee' }),
+    { runAnimKey: 'monster_lizardman_run', attackAnimKey: 'monster_lizardman_attack' }
+  );
+  assert.deepEqual(
+    resolveMonsterAnimKeys({ isBoss: false, type: 'slime', role: 'melee' }),
+    { runAnimKey: 'monster_slime_run', attackAnimKey: 'monster_slime_attack' }
   );
   assert.deepEqual(
     resolveMonsterAnimKeys({ isBoss: false, type: 'lancer', role: 'lancer' }),

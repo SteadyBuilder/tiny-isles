@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { MONSTER_HIT_FEEDBACK_CONFIG } from '../../data/combatFeedbackConfig';
 import { ELITE_AFFIXES } from '../../data/elites';
+import { DEDICATED_MONSTER_SPRITES } from '../../data/monsterSprites';
 import { Monster } from '../../types/game';
 import { ySortDepth } from '../depthLayers';
 import { resolveMonsterAnimKeys } from '../utils/monsterAnimationUtils';
@@ -97,6 +98,10 @@ export class MonsterVisualManager {
     let texKey = 'enemyBlackWarriorRun';
     let animKey = 'monster_zombie_run';
     let displaySize = monster.isBoss ? 190 : 120;
+    const dedicatedSpec =
+      !monster.isBoss && monster.type in DEDICATED_MONSTER_SPRITES
+        ? DEDICATED_MONSTER_SPRITES[monster.type as keyof typeof DEDICATED_MONSTER_SPRITES]
+        : null;
 
     if (monster.isBoss) {
       const candidateKey = monster.bossSpriteKey || 'enemyPurpleWarriorRun';
@@ -113,9 +118,16 @@ export class MonsterVisualManager {
         animKey = 'monster_boss_run';
       }
       displaySize = Math.round(190 * (monster.bossScale ?? 1));
-    } else if (monster.type === 'skeleton' || monster.role === 'ranged') {
-      texKey = 'enemyArcherRun';
-      animKey = 'monster_skeleton_run';
+    } else if (dedicatedSpec) {
+      texKey = scene.textures.exists(dedicatedSpec.runTexKey)
+        ? dedicatedSpec.runTexKey
+        : monster.type === 'skeleton'
+        ? 'enemyArcherRun'
+        : 'enemyBlackWarriorRun';
+      animKey = scene.anims.exists(dedicatedSpec.runAnimKey)
+        ? dedicatedSpec.runAnimKey
+        : 'monster_zombie_run';
+      displaySize = dedicatedSpec.displaySize;
     } else if (monster.type === 'lancer' || monster.role === 'lancer') {
       texKey = scene.textures.exists('enemyLancerRun')
         ? 'enemyLancerRun'
@@ -132,6 +144,9 @@ export class MonsterVisualManager {
         ? 'monster_archmage_run'
         : 'monster_boss_run';
       displaySize = 128;
+    } else if (monster.role === 'ranged') {
+      texKey = 'enemyArcherRun';
+      animKey = 'monster_skeleton_run';
     }
 
     if (monster.isElite && !monster.isBoss) {
@@ -146,14 +161,14 @@ export class MonsterVisualManager {
       baseTint = monster.bossTintHex ?? 0xfca5a5;
     } else if (monster.isElite && eliteDef) {
       baseTint = eliteDef.auraColorHex;
-    } else if (monster.type === 'zombie') {
-      baseTint = 0x86efac;
-    } else if (monster.type === 'skeleton' || monster.role === 'ranged') {
-      baseTint = 0xe2e8f0;
+    } else if (dedicatedSpec) {
+      baseTint = dedicatedSpec.defaultTintHex;
     } else if (monster.type === 'lancer' || monster.role === 'lancer') {
       baseTint = 0xfbbf24;
     } else if (monster.type === 'archmage' || monster.role === 'mage') {
       baseTint = 0xd8b4fe;
+    } else if (monster.role === 'ranged') {
+      baseTint = 0xe2e8f0;
     }
     if (baseTint !== null) {
       sprite.setTint(baseTint);

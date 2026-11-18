@@ -1,3 +1,4 @@
+import { DEDICATED_MONSTER_SPRITES } from '../../data/monsterSprites';
 import { Monster } from '../../types/game';
 
 export interface MonsterAnimPair {
@@ -39,15 +40,27 @@ export function resolveMonsterAnimKeys(monster: MonsterAnimDescriptor): MonsterA
     return TEX_TO_ANIM_MAP[candidateKey] ?? TEX_TO_ANIM_MAP.enemyPurpleWarriorRun;
   }
 
-  if (monster.type === 'skeleton' || monster.role === 'ranged') {
-    return TEX_TO_ANIM_MAP.enemyArcherRun;
+  if (monster.type in DEDICATED_MONSTER_SPRITES) {
+    const spec =
+      DEDICATED_MONSTER_SPRITES[monster.type as keyof typeof DEDICATED_MONSTER_SPRITES];
+    return {
+      runAnimKey: spec.runAnimKey,
+      attackAnimKey: spec.attackAnimKey,
+    };
   }
+
   if (monster.type === 'lancer' || monster.role === 'lancer') {
     return TEX_TO_ANIM_MAP.enemyLancerRun;
   }
   if (monster.type === 'archmage' || monster.role === 'mage') {
     return TEX_TO_ANIM_MAP.enemyArchmageRun;
   }
+  if (monster.role === 'ranged') {
+    return TEX_TO_ANIM_MAP.enemyArcherRun;
+  }
 
-  return TEX_TO_ANIM_MAP.enemyBlackWarriorRun;
+  return {
+    runAnimKey: DEDICATED_MONSTER_SPRITES.goblin.runAnimKey,
+    attackAnimKey: DEDICATED_MONSTER_SPRITES.goblin.attackAnimKey,
+  };
 }
