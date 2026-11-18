@@ -13,6 +13,7 @@ export interface MonsterVisual {
   hpTrailRatio: number;
   hpFlashUntil: number;
   lastAttackTime: number;
+  firstAttackReadyAt?: number;
   lastHealTime?: number;
   lastShieldTime?: number;
 }

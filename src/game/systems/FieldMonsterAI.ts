@@ -1,9 +1,13 @@
 import { FIELD_MONSTER_CONFIG } from '../../data/fieldMonsters';
-import { DUNGEON_INVASION_CONFIG } from '../../data/monsterCamps';
 import { ConstructedBuilding } from '../../types/game';
 import { ActivePlayerTarget } from '../../types/monsterSync';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
 import { isInsideCenterVillageSafeZone } from '../utils/fieldSpawnUtils';
+import {
+  canMonsterStrikeInRange,
+  resetMonsterAttackEntry,
+  resolveMonsterPlayerAttackRange,
+} from '../utils/monsterCombatRangeUtils';
 import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { resolveMonsterWallClamping } from '../wallCollisionGeometry';
 import { MonsterVisual } from './MonsterVisualManager';
@@ -98,6 +102,7 @@ export class FieldMonsterAI {
     }
 
     if (this.returningHome.has(m.id)) {
+      resetMonsterAttackEntry(mv);
       if (distFromHome <= FIELD_MONSTER_CONFIG.fieldReturnArrivalRadiusPx && !enteredCenterSafeZone) {
         this.returningHome.delete(m.id);
       } else {
@@ -122,27 +127,21 @@ export class FieldMonsterAI {
     );
 
     if (!targetMatch) {
+      resetMonsterAttackEntry(mv);
       this.updatePatrolOrReturn(mv, time, dt, homeX, homeY, distFromHome, aliveWalls);
       return true;
     }
 
     const targetPlayer = targetMatch.player;
     const distToPlayer = targetMatch.dist;
-
-    const desiredRange =
-      m.role === 'mage'
-        ? DUNGEON_INVASION_CONFIG.mageAttackRangePx
-        : m.role === 'ranged'
-        ? DUNGEON_INVASION_CONFIG.rangedAttackRangePx
-        : m.role === 'lancer'
-        ? 95
-        : 58;
+    const desiredRange = resolveMonsterPlayerAttackRange(m.role, m.isBoss);
 
     if (m.role === 'ranged' && distToPlayer < 110 && distFromHome < 420) {
       const vx = ((m.x - targetPlayer.x) / Math.max(1, distToPlayer)) * m.speed * 0.75 + sepX;
       const vy = ((m.y - targetPlayer.y) / Math.max(1, distToPlayer)) * m.speed * 0.75 + sepY;
       this.moveMonster(mv, vx, vy, dt, aliveWalls, targetPlayer.x < m.x ? 'left' : 'right');
     } else if (distToPlayer > desiredRange) {
+      resetMonsterAttackEntry(mv);
       const vx = ((targetPlayer.x - m.x) / Math.max(1, distToPlayer)) * m.speed + sepX;
       const vy = ((targetPlayer.y - m.y) / Math.max(1, distToPlayer)) * m.speed + sepY;
       this.moveMonster(mv, vx, vy, dt, aliveWalls);
@@ -151,7 +150,7 @@ export class FieldMonsterAI {
 
     const baseCooldownMs = m.role === 'mage' ? 1800 : m.role === 'ranged' ? 1350 : 1080;
     const cooldownMs = m.eliteAffix === 'berserker' ? Math.round(baseCooldownMs * 0.8) : baseCooldownMs;
-    if (time - mv.lastAttackTime >= cooldownMs) {
+    if (canMonsterStrikeInRange(mv, time, cooldownMs)) {
       mv.lastAttackTime = time;
       this.ctx.executeRoleAttackOnPlayer(mv, targetPlayer.x, targetPlayer.y, targetPlayer.id);
     }

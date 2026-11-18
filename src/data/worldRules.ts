@@ -113,10 +113,10 @@ export const PLAYER_COMBAT_CONFIG = {
   maxHp: 100,
   /** 플레이어 근접 공격 기본 데미지 */
   meleeDamage: 28,
-  /** 일반 몬스터 근접 공격 사거리 (px) - 자원 채집 거리와 동일 수준 */
-  meleeRangeRegular: 60,
+  /** 일반 몬스터 근접 공격 사거리 (px) - 견습 모험가 기본 사거리와 동일 */
+  meleeRangeRegular: 72,
   /** 보스 몬스터 근접 공격 사거리 (px) */
-  meleeRangeBoss: 80,
+  meleeRangeBoss: 95,
   /** 기절 후 메인 마을 리스폰 대기 시간 (ms) */
   faintRespawnDelayMs: 1500,
   /** 리스폰 직후 무적 유지 시간 (ms) */
@@ -125,10 +125,14 @@ export const PLAYER_COMBAT_CONFIG = {
   monsterAggroMaxDistance: 350,
   /** 어그로 최대 유지 시간 (ms) */
   monsterAggroDurationMs: 10_000,
-  /** 일반 몬스터의 플레이어 공격 사거리 (px) */
-  monsterPlayerAttackRange: 58,
+  /** 일반 근접 몬스터의 플레이어 공격 사거리 (px) */
+  monsterPlayerAttackRange: 44,
+  /** 창병 몬스터의 플레이어 공격 사거리 (px) */
+  monsterLancerPlayerAttackRange: 56,
   /** 보스 몬스터의 플레이어 공격 사거리 (px) */
-  monsterBossPlayerAttackRange: 75,
+  monsterBossPlayerAttackRange: 64,
+  /** 몬스터가 사거리에 처음 진입했을 때 첫 공격까지의 반응 유예 시간 (ms) */
+  monsterFirstStrikeDelayMs: 400,
   /** 몬스터의 플레이어/건물 공격 쿨다운 (ms) */
   monsterAttackCooldownMs: 1100,
   /** 메인 마을 리스폰 좌표 */

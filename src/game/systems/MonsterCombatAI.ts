@@ -17,6 +17,10 @@ import {
   getTerritoryMainBuilding,
 } from '../constants';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import {
+  canMonsterStrikeInRange,
+  resetMonsterAttackEntry,
+} from '../utils/monsterCombatRangeUtils';
 import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { MonsterSpatialGrid } from '../utils/spatialGrid';
 import { findNextInwardTargetTerritory } from '../utils/waveUtils';
@@ -730,7 +734,10 @@ export class MonsterCombatAI {
       }
     }
 
-    if (!targetMatch) return false;
+    if (!targetMatch) {
+      resetMonsterAttackEntry(mv);
+      return false;
+    }
 
     const playerPos = targetMatch.player;
     const dist = targetMatch.dist;
@@ -741,6 +748,7 @@ export class MonsterCombatAI {
     const attackRange = this.rangedMageAI.getWaveRoleAttackRange(mv, baseRange);
 
     if (dist > attackRange) {
+      resetMonsterAttackEntry(mv);
       const vx = ((playerPos.x - m.x) / dist) * m.speed + sepX;
       const vy = ((playerPos.y - m.y) / dist) * m.speed + sepY;
       const clamp = resolveMonsterWallClamping(
@@ -760,7 +768,7 @@ export class MonsterCombatAI {
       return true;
     }
 
-    if (time - mv.lastAttackTime >= PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs) {
+    if (canMonsterStrikeInRange(mv, time, PLAYER_COMBAT_CONFIG.monsterAttackCooldownMs)) {
       mv.lastAttackTime = time;
       this.rangedMageAI.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y, playerPos.id);
     }

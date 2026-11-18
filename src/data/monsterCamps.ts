@@ -318,9 +318,13 @@ export const DUNGEON_INVASION_CONFIG = {
   /** 던전 스폰 진형 반경 (px) */
   portalSpreadRadiusPx: 260,
   /** 원거리 몬스터 사거리 (px) */
-  rangedAttackRangePx: 265,
+  rangedAttackRangePx: 215,
   /** 마법사 몬스터 사거리 (px) */
-  mageAttackRangePx: 295,
+  mageAttackRangePx: 240,
+  /** 웨이브 진격 원거리 몬스터 사거리 (px) */
+  waveRangedAttackRangePx: 185,
+  /** 웨이브 진격 마법사 몬스터 사거리 (px) */
+  waveMageAttackRangePx: 205,
   /** 마법사 주술 치유량 (주변 아군 마물/부락 본진 회복) */
   mageHealAmount: 28,
 } as const;

@@ -1,7 +1,13 @@
 import { DUNGEON_INVASION_CONFIG, HUNTING_AI_CONFIG } from '../../data/monsterCamps';
+import { PLAYER_COMBAT_CONFIG } from '../../data/worldRules';
 import { ConstructedBuilding } from '../../types/game';
 import { ActivePlayerTarget, MonsterPlayerAttackPayload } from '../../types/monsterSync';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import {
+  canMonsterStrikeInRange,
+  resetMonsterAttackEntry,
+  resolveMonsterPlayerAttackRange,
+} from '../utils/monsterCombatRangeUtils';
 import { findTargetPlayerForMonster } from '../utils/monsterSyncUtils';
 import { resolveMonsterWallClamping } from '../wallCollisionGeometry';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
@@ -91,6 +97,7 @@ export class MonsterRangedMageAI {
     }
 
     if (this.returningHome.has(m.id)) {
+      resetMonsterAttackEntry(mv);
       if (distFromHome <= HUNTING_AI_CONFIG.campReturnArrivalRadiusPx) {
         this.returningHome.delete(m.id);
       } else {
@@ -121,6 +128,7 @@ export class MonsterRangedMageAI {
 
     // 플레이어가 기절했거나 탐지 반경을 벗어난 경우 본래 위치로 귀환
     if (!targetMatch) {
+      resetMonsterAttackEntry(mv);
       if (distFromHome > 18) {
         const vx = ((homeX - m.x) / distFromHome) * m.speed * 1.1;
         const vy = ((homeY - m.y) / distFromHome) * m.speed * 1.1;
@@ -136,16 +144,7 @@ export class MonsterRangedMageAI {
 
     const playerPos = targetMatch.player;
     const distToPlayer = targetMatch.dist;
-
-    // 병과별 사거리 산정 (근접 56px, 창병 95px, 원거리 265px, 마법사 295px)
-    const desiredRange =
-      m.role === 'mage'
-        ? DUNGEON_INVASION_CONFIG.mageAttackRangePx
-        : m.role === 'ranged'
-        ? DUNGEON_INVASION_CONFIG.rangedAttackRangePx
-        : m.role === 'lancer'
-        ? 95
-        : 58;
+    const desiredRange = resolveMonsterPlayerAttackRange(m.role, m.isBoss);
 
     // 원거리 궁수 카이팅: 플레이어가 너무 붙으면(110px 이내) 뒤로 물러남
     if (m.role === 'ranged' && distToPlayer < 110 && distFromHome < 420) {
@@ -159,6 +158,7 @@ export class MonsterRangedMageAI {
       setDepthIfChanged(mv.container, ySortDepth(m.y, 28));
       mv.sprite.setFlipX(m.direction === 'left');
     } else if (distToPlayer > desiredRange) {
+      resetMonsterAttackEntry(mv);
       const vx = ((playerPos.x - m.x) / distToPlayer) * m.speed + sepX;
       const vy = ((playerPos.y - m.y) / distToPlayer) * m.speed + sepY;
       const clamp = resolveMonsterWallClamping(m.x, m.y, m.x + vx * dt, m.y + vy * dt, 16, aliveWalls);
@@ -173,7 +173,7 @@ export class MonsterRangedMageAI {
 
     const baseCooldownMs = m.role === 'mage' ? 1850 : m.role === 'ranged' ? 1400 : 1100;
     const cooldownMs = m.eliteAffix === 'berserker' ? Math.round(baseCooldownMs * 0.8) : baseCooldownMs;
-    if (time - mv.lastAttackTime >= cooldownMs) {
+    if (canMonsterStrikeInRange(mv, time, cooldownMs)) {
       mv.lastAttackTime = time;
       this.executeRoleAttackOnPlayer(mv, playerPos.x, playerPos.y, playerPos.id);
     }
@@ -181,13 +181,13 @@ export class MonsterRangedMageAI {
   }
 
   /**
-   * 웨이브 진격 몬스터 중 원거리/마법사 병과가 성벽이나 본진을 원거리에서 포격할 수 있도록 사거리 반환
+   * 웨이브 진격 몬스터 중 원거리/마법사/창병 병과별 공격 사거리 반환
    */
   public getWaveRoleAttackRange(mv: MonsterVisual, defaultRange: number): number {
     const role = mv.monster.role;
-    if (role === 'mage') return 220;
-    if (role === 'ranged') return 195;
-    if (role === 'lancer') return 82;
+    if (role === 'mage') return DUNGEON_INVASION_CONFIG.waveMageAttackRangePx;
+    if (role === 'ranged') return DUNGEON_INVASION_CONFIG.waveRangedAttackRangePx;
+    if (role === 'lancer') return PLAYER_COMBAT_CONFIG.monsterLancerPlayerAttackRange;
     return defaultRange;
   }
 
