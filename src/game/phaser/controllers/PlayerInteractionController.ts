@@ -21,6 +21,7 @@ import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { MonsterVisual } from '../../systems/WaveSystem';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
+import { ResourceDropSpawnParams } from '../renderers/ResourceDropEffectsRenderer';
 
 export interface IPlayerInteractionContext {
   scene: Phaser.Scene;
@@ -69,6 +70,7 @@ export interface IPlayerInteractionContext {
   emitWorldStateToReact: (immediate?: boolean) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
+  spawnResourceDropFx?: (params: ResourceDropSpawnParams) => void;
 }
 
 /**
@@ -295,11 +297,19 @@ export class PlayerInteractionController {
 
       const damage = 1;
       ent.hp -= damage;
+      const isBreak = ent.hp <= 0;
       this.ctx.shakeObject(nearestVisual.container);
       this.ctx.updateEntityHpBar(ent.id);
 
       if (ent.type === 'tree') sound.playChop();
       else sound.playMine();
+
+      this.ctx.spawnResourceDropFx?.({
+        resourceType: ent.type,
+        x: ent.x,
+        y: ent.y,
+        isBreak,
+      });
 
       const resKey: keyof Inventory =
         ent.type === 'tree' ? 'wood' : ent.type === 'gold_rock' ? 'gold' : 'stone';
@@ -317,7 +327,7 @@ export class PlayerInteractionController {
 
       this.ctx.broadcastEntityHit(ent.id, damage);
 
-      if (ent.hp <= 0) {
+      if (isBreak) {
         sound.playBreak();
         this.ctx.removeAndRespawnEntity(ent);
         this.ctx.emitThreatOrb?.(ent.x, ent.y, THREAT_WAVE_CONFIG.gatherThreatGain);

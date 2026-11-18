@@ -18,6 +18,7 @@ import { WorldPersistenceController } from '../controllers/WorldPersistenceContr
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
+import { ResourceDropEffectsRenderer } from '../renderers/ResourceDropEffectsRenderer';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
@@ -51,6 +52,7 @@ export interface IWorldControllersHost {
   territoryStructureRenderer: TerritoryStructureRenderer;
   constructedBuildingRenderer: ConstructedBuildingRenderer;
   resourceEntityRenderer: ResourceEntityRenderer;
+  resourceDropEffectsRenderer: ResourceDropEffectsRenderer;
   systems: WorldSystemsBundle;
   persistence: WorldPersistenceController;
 }
@@ -202,6 +204,7 @@ export function createWorldControllersBundle(
     emitWorldStateToReact: (immediate = false) => host.persistence.emitWorldStateToReact(immediate),
     shakeObject: (target) => host.effectsRenderer.shakeObject(target),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+    spawnResourceDropFx: (params) => host.resourceDropEffectsRenderer.spawnResourceDrops(params),
   });
 
   const towerPlacement = new TowerPlacementController({

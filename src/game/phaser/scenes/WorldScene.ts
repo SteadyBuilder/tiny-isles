@@ -23,6 +23,7 @@ import { LootChestDropRenderer } from '../renderers/LootChestDropRenderer';
 import { MonsterTargetIndicatorRenderer } from '../renderers/MonsterTargetIndicatorRenderer';
 import { PlayerCelebrationEffects } from '../renderers/PlayerCelebrationEffects';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
+import { ResourceDropEffectsRenderer } from '../renderers/ResourceDropEffectsRenderer';
 import { SkillEffectsRenderer } from '../renderers/SkillEffectsRenderer';
 import { TerrainRenderer } from '../renderers/TerrainRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
@@ -76,6 +77,7 @@ export class WorldScene extends Phaser.Scene {
   private territoryStructureRenderer!: TerritoryStructureRenderer;
   private constructedBuildingRenderer!: ConstructedBuildingRenderer;
   private resourceEntityRenderer!: ResourceEntityRenderer;
+  private resourceDropEffectsRenderer!: ResourceDropEffectsRenderer;
   private monsterIndicatorRenderer!: MonsterTargetIndicatorRenderer;
 
   private systems!: WorldSystemsBundle;
@@ -171,6 +173,12 @@ export class WorldScene extends Phaser.Scene {
     this.combatFeedbackRenderer = new CombatFeedbackRenderer(this, () => this.isSceneAlive());
     this.skillEffectsRenderer = new SkillEffectsRenderer(this, () => this.isSceneAlive());
     this.lootChestRenderer = new LootChestDropRenderer(this, () => this.isSceneAlive());
+    this.resourceDropEffectsRenderer = new ResourceDropEffectsRenderer({
+      scene: this,
+      isSceneAlive: () => this.isSceneAlive(),
+      getPlayerPosition: () =>
+        this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
+    });
     this.celebrationEffects = new PlayerCelebrationEffects(this, () => this.isSceneAlive());
     this.monsterIndicatorRenderer = new MonsterTargetIndicatorRenderer(this, () => this.isSceneAlive());
     this.drawTerrainDecorations();
@@ -331,6 +339,7 @@ export class WorldScene extends Phaser.Scene {
       territoryStructureRenderer: this.territoryStructureRenderer,
       constructedBuildingRenderer: this.constructedBuildingRenderer,
       resourceEntityRenderer: this.resourceEntityRenderer,
+      resourceDropEffectsRenderer: this.resourceDropEffectsRenderer,
       systems: this.systems,
       persistence: this.persistence,
     });
@@ -382,6 +391,7 @@ export class WorldScene extends Phaser.Scene {
     this.controllers.playerMovement.update(time, delta);
     this.controllers.viewportCulling.update(time);
     this.effectsRenderer.updateClouds(delta);
+    this.resourceDropEffectsRenderer.update(delta);
     this.monsterIndicatorRenderer.update(time, this.systems.waveSystem.getMonsterVisuals(), {
       isHuntingMode: this.missionSystem.isHuntingMode(),
       campTargets: this.systems.monsterCampSystem.getActiveCampTargets(),
@@ -452,6 +462,7 @@ export class WorldScene extends Phaser.Scene {
     this.effectsRenderer?.destroy();
     this.skillEffectsRenderer?.destroy();
     this.lootChestRenderer?.destroy();
+    this.resourceDropEffectsRenderer?.destroy();
     this.celebrationEffects?.destroy();
     this.monsterIndicatorRenderer?.destroy();
     this.systems?.multiplayerSync?.destroy();
