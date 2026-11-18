@@ -23,6 +23,12 @@ import { MonsterVisual } from '../../systems/WaveSystem';
 import { findTerritoryInsideWalls } from '../../territoryAccessRules';
 import { checkJobHallProximity } from '../../utils/jobHallUtils';
 import { checkToolShopProximity } from '../../utils/toolShopUtils';
+import {
+  canPlayHitAnimation,
+  computeOneShotAnimTimeScale,
+  isOneShotPlayerAction,
+  resolvePostOneShotAction,
+} from '../../utils/playerAnimationUtils';
 import { resolveSafeSpawnPosition } from '../../utils/playerSpawnUtils';
 import { WaterRect } from '../../world/MapTerrainGenerator';
 import { EntityVisual } from '../renderers/ResourceEntityRenderer';
@@ -80,6 +86,8 @@ export class PlayerMovementController {
   private currentDirection: 'left' | 'right' = 'right';
   private currentClassId: PlayerClassId = 'pawn';
   private isFainted = false;
+  private lastMoveInputActive = false;
+  private oneShotFallbackTimer?: Phaser.Time.TimerEvent;
   private currentHp: number = PLAYER_COMBAT_CONFIG.maxHp;
   private currentMaxHp: number = PLAYER_COMBAT_CONFIG.maxHp;
 
@@ -252,8 +260,16 @@ export class PlayerMovementController {
     );
   }
 
-  public playAnimation(action: PlayerAction): void {
-    this.currentAction = action;
+  private clearOneShotFallbackTimer(): void {
+    this.oneShotFallbackTimer?.remove(false);
+    this.oneShotFallbackTimer = undefined;
+  }
+
+  private resolveAnimationKeys(action: PlayerAction): {
+    targetKey: string;
+    classIdleKey: string;
+    hasDedicatedAnim: boolean;
+  } {
     const color = this.getEffectiveCostumeColor();
     const classAnimKey =
       this.currentClassId !== 'pawn'
@@ -265,14 +281,76 @@ export class PlayerMovementController {
         : `${color}_idle`;
     const baseFallbackKey = `${color}_${action}`;
 
-    const targetKey = this.ctx.scene.anims.exists(classAnimKey)
+    const hasClassAnim = this.ctx.scene.anims.exists(classAnimKey);
+    const hasBaseFallback = this.ctx.scene.anims.exists(baseFallbackKey);
+    const targetKey = hasClassAnim
       ? classAnimKey
-      : this.ctx.scene.anims.exists(baseFallbackKey)
+      : hasBaseFallback
       ? baseFallbackKey
       : classIdleKey;
 
-    if (this.ctx.scene.anims.exists(targetKey)) {
-      this.playerSprite.play(targetKey, true);
+    return {
+      targetKey,
+      classIdleKey,
+      hasDedicatedAnim: hasClassAnim || hasBaseFallback,
+    };
+  }
+
+  private handleOneShotAnimationComplete(completedAnimKey: string): void {
+    if (!isOneShotPlayerAction(this.currentAction)) return;
+    const activeKey = this.playerSprite?.anims?.currentAnim?.key;
+    if (activeKey && activeKey !== completedAnimKey) return;
+
+    this.clearOneShotFallbackTimer();
+    if (this.playerSprite?.anims) {
+      this.playerSprite.anims.timeScale = 1;
+    }
+    this.playAnimation(resolvePostOneShotAction(this.isFainted, this.lastMoveInputActive));
+  }
+
+  public playAnimation(action: PlayerAction, targetDurationMs?: number): void {
+    this.currentAction = action;
+    this.clearOneShotFallbackTimer();
+
+    if (!this.playerSprite?.active) return;
+
+    const { targetKey, classIdleKey, hasDedicatedAnim } = this.resolveAnimationKeys(action);
+    const isOneShot = isOneShotPlayerAction(action);
+
+    if (!this.ctx.scene.anims.exists(targetKey)) {
+      return;
+    }
+
+    if (isOneShot && hasDedicatedAnim && targetKey !== classIdleKey) {
+      const animObj = this.ctx.scene.anims.get(targetKey);
+      const naturalDurationMs = animObj?.duration ?? 0;
+      const timeScale = computeOneShotAnimTimeScale(naturalDurationMs, targetDurationMs);
+      this.playerSprite.anims.timeScale = timeScale;
+      this.playerSprite.play(targetKey, false);
+
+      const expectedDurationMs =
+        naturalDurationMs > 0 ? Math.ceil(naturalDurationMs / timeScale) : targetDurationMs ?? 300;
+      this.oneShotFallbackTimer = this.ctx.scene.time.delayedCall(expectedDurationMs + 80, () => {
+        if (!this.ctx.isSceneAlive() || !this.playerSprite?.active) return;
+        if (this.currentAction === action) {
+          this.playerSprite.anims.timeScale = 1;
+          this.playAnimation(resolvePostOneShotAction(this.isFainted, this.lastMoveInputActive));
+        }
+      });
+      return;
+    }
+
+    this.playerSprite.anims.timeScale = 1;
+    this.playerSprite.play(targetKey, true);
+
+    if (isOneShot) {
+      const fallbackMs = targetDurationMs && targetDurationMs > 0 ? targetDurationMs : 240;
+      this.oneShotFallbackTimer = this.ctx.scene.time.delayedCall(fallbackMs, () => {
+        if (!this.ctx.isSceneAlive() || !this.playerSprite?.active) return;
+        if (this.currentAction === action) {
+          this.playAnimation(resolvePostOneShotAction(this.isFainted, this.lastMoveInputActive));
+        }
+      });
     }
   }
 
@@ -362,6 +440,13 @@ export class PlayerMovementController {
     this.playerCastBar = scene.add.graphics();
     this.updateHpBar(this.currentHp, this.currentMaxHp);
 
+    this.playerSprite.on(
+      Phaser.Animations.Events.ANIMATION_COMPLETE,
+      (anim: Phaser.Animations.Animation) => {
+        this.handleOneShotAnimationComplete(anim.key);
+      }
+    );
+
     this.playAnimation('idle');
     this.checkTerritoryAndGridUpdates();
   }
@@ -436,15 +521,12 @@ export class PlayerMovementController {
   public playHitVisual(): void {
     if (!this.playerSprite || this.isFainted) return;
     this.playerSprite.setTint(0xf87171);
-    if (this.currentAction !== 'cast') {
-      this.playAnimation('hit');
+    if (canPlayHitAnimation(this.currentAction) && this.resolveAnimationKeys('hit').hasDedicatedAnim) {
+      this.playAnimation('hit', 220);
     }
     this.ctx.scene.time.delayedCall(220, () => {
       if (!this.isFainted && this.playerSprite?.active && !this.dashController.getIsDashing()) {
         this.playerSprite.clearTint();
-        if (this.currentAction === 'hit') {
-          this.playAnimation('idle');
-        }
       }
     });
   }
@@ -457,18 +539,8 @@ export class PlayerMovementController {
       this.updateCastBar(this.playerSprite.x, this.playerSprite.y);
     }
 
-    const color = this.ctx.getPlayerColor();
-    const classCastKey =
-      this.currentClassId !== 'pawn'
-        ? `${color}_${this.currentClassId}_cast`
-        : `${color}_cast`;
-    if (this.ctx.scene.anims.exists(classCastKey)) {
-      this.playAnimation('cast');
-      this.ctx.scene.time.delayedCall(durationMs, () => {
-        if (!this.isFainted && this.playerSprite?.active && this.currentAction === 'cast') {
-          this.playAnimation('idle');
-        }
-      });
+    if (this.resolveAnimationKeys('cast').hasDedicatedAnim) {
+      this.playAnimation('cast', durationMs);
     }
   }
 
@@ -585,7 +657,10 @@ export class PlayerMovementController {
         }
       }
 
-      if (vx !== 0 || vy !== 0) {
+      const isMoving = vx !== 0 || vy !== 0;
+      this.lastMoveInputActive = isMoving;
+
+      if (isMoving) {
         const len = Math.hypot(vx, vy);
         const factor = dirInput.usingJoystick
           ? len >= 0.45
@@ -613,6 +688,8 @@ export class PlayerMovementController {
           this.playAnimation('idle');
         }
       }
+    } else {
+      this.lastMoveInputActive = false;
     }
 
     const px = this.playerSprite.x;
@@ -698,6 +775,7 @@ export class PlayerMovementController {
   }
 
   public destroy(): void {
+    this.clearOneShotFallbackTimer();
     for (const unbind of this.unbindInputs) {
       unbind();
     }

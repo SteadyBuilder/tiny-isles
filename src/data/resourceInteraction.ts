@@ -1,5 +1,11 @@
 import { Entity } from '../types/game';
 
+/**
+ * 자원 채집·성벽 수리·허공 휘두르기 기본 쿨타임 (ms)
+ * - 홀드 입력 주기(240ms)보다 약간 여유를 두어 연속 채집 시 애니메이션이 끊기지 않도록 동기화합니다.
+ */
+export const RESOURCE_GATHER_COOLDOWN_MS = 260;
+
 export interface GatherRectRatio {
   /** 스프라이트 표시 너비 대비 채집 판정 영역 너비 비율 (0~1) */
   widthRatio: number;

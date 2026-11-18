@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { RESOURCE_GATHER_COOLDOWN_MS } from '../../../data/resourceInteraction';
 import { PLAYER_COMBAT_CONFIG, THREAT_WAVE_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import {
@@ -32,7 +33,7 @@ export interface IPlayerInteractionContext {
   isPlayerFainted: () => boolean;
   getMetaBonuses?: () => MetaBonusSummary;
   getCurrentAction: () => PlayerAction;
-  playPlayerAnimation: (action: PlayerAction) => void;
+  playPlayerAnimation: (action: PlayerAction, targetDurationMs?: number) => void;
   markInteractTime: (now: number) => void;
   getIslands: () => Island[];
   getConstructedBuildings?: () => ConstructedBuilding[];
@@ -82,6 +83,7 @@ export interface IPlayerInteractionContext {
 export class PlayerInteractionController {
   private ctx: IPlayerInteractionContext;
   private lastCombatAttackTime = 0;
+  private lastGatherActionTime = 0;
 
   constructor(ctx: IPlayerInteractionContext) {
     this.ctx = ctx;
@@ -145,12 +147,7 @@ export class PlayerInteractionController {
       if (now - this.lastCombatAttackTime < attackCooldownMs) return;
       this.lastCombatAttackTime = now;
 
-      this.ctx.playPlayerAnimation('axe');
-      scene.time.delayedCall(250, () => {
-        if (this.ctx.getCurrentAction() === 'axe') {
-          this.ctx.playPlayerAnimation('idle');
-        }
-      });
+      this.ctx.playPlayerAnimation('axe', attackCooldownMs);
 
       const primary = targetsInRange[0].mv;
       if (classDef?.isRanged && this.ctx.projectileSystem) {
@@ -207,12 +204,7 @@ export class PlayerInteractionController {
     if (now - this.lastCombatAttackTime >= attackCooldownMs) {
       if (this.ctx.tryAttackCampCore?.(px, py, baseRange, attackDamage)) {
         this.lastCombatAttackTime = now;
-        this.ctx.playPlayerAnimation('axe');
-        scene.time.delayedCall(250, () => {
-          if (this.ctx.getCurrentAction() === 'axe') {
-            this.ctx.playPlayerAnimation('idle');
-          }
-        });
+        this.ctx.playPlayerAnimation('axe', attackCooldownMs);
         sound.playChop();
         return;
       }
@@ -235,14 +227,12 @@ export class PlayerInteractionController {
     }
 
     // 2-B. 손상된 목책 및 성벽 수리 (Wall Repair)
-    if (this.ctx.tryRepairNearestWall?.(px, py)) {
-      this.ctx.playPlayerAnimation('axe');
-      scene.time.delayedCall(250, () => {
-        if (this.ctx.getCurrentAction() === 'axe') {
-          this.ctx.playPlayerAnimation('idle');
-        }
-      });
-      return;
+    if (now - this.lastGatherActionTime >= RESOURCE_GATHER_COOLDOWN_MS) {
+      if (this.ctx.tryRepairNearestWall?.(px, py)) {
+        this.lastGatherActionTime = now;
+        this.ctx.playPlayerAnimation('axe', RESOURCE_GATHER_COOLDOWN_MS);
+        return;
+      }
     }
 
     // 3. 미점령 영지 개척 제단 확인 (몬스터 부락은 제외)
@@ -302,13 +292,11 @@ export class PlayerInteractionController {
         return;
       }
 
+      if (now - this.lastGatherActionTime < RESOURCE_GATHER_COOLDOWN_MS) return;
+      this.lastGatherActionTime = now;
+
       const toolAction: PlayerAction = ent.type === 'tree' ? 'axe' : 'pickaxe';
-      this.ctx.playPlayerAnimation(toolAction);
-      scene.time.delayedCall(280, () => {
-        if (this.ctx.getCurrentAction() === toolAction) {
-          this.ctx.playPlayerAnimation('idle');
-        }
-      });
+      this.ctx.playPlayerAnimation(toolAction, RESOURCE_GATHER_COOLDOWN_MS);
 
       const gatherBonus = this.ctx.getMetaBonuses?.().gatherDamageBonus ?? 0;
       const damage = 1 + Math.floor(gatherBonus / 4);
@@ -352,11 +340,8 @@ export class PlayerInteractionController {
       return;
     }
 
-    this.ctx.playPlayerAnimation('axe');
-    scene.time.delayedCall(280, () => {
-      if (this.ctx.getCurrentAction() === 'axe') {
-        this.ctx.playPlayerAnimation('idle');
-      }
-    });
+    if (now - this.lastGatherActionTime < RESOURCE_GATHER_COOLDOWN_MS) return;
+    this.lastGatherActionTime = now;
+    this.ctx.playPlayerAnimation('axe', RESOURCE_GATHER_COOLDOWN_MS);
   }
 }

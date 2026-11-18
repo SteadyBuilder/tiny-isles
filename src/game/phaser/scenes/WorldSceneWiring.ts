@@ -185,7 +185,8 @@ export function createWorldControllersBundle(
     getPlayerName: host.getPlayerName,
     isPlayerFainted: () => host.systems.playerHealthSystem.isFainted(),
     getCurrentAction: () => playerMovement.getCurrentAction(),
-    playPlayerAnimation: (action) => playerMovement.playAnimation(action),
+    playPlayerAnimation: (action, targetDurationMs) =>
+      playerMovement.playAnimation(action, targetDurationMs),
     markInteractTime: (now) => playerMovement.markInteractTime(now),
     getIslands: host.getIslands,
     getConstructedBuildings: host.getConstructedBuildings,
