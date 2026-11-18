@@ -1,9 +1,18 @@
 import Phaser from 'phaser';
-import { CAMP_RING_TEMPLATES } from '../../data/monsterCamps';
+import {
+  CampStructureHitPayload,
+  CampStructureHpSyncPayload,
+  CampStructureSnapshot,
+} from '../../types/campSync';
 import { MonsterCampState } from '../../types/game';
 import { sound } from '../../lib/sound';
-import { TERRITORY_CENTER_X, TERRITORY_CENTER_Y, getIslandOrigin } from '../constants';
-import { ySortDepth } from '../depthLayers';
+import {
+  createCampStructureVisual,
+  updateCampStructureHpBar,
+} from '../phaser/renderers/CampVisualHelper';
+import { CampFortificationSyncPlan } from '../utils/campSyncUtils';
+import { CampStructureSpec, buildCampFortificationSpecs } from './CampFortificationLayout';
+import { CampStructureSyncCallbacks, CampStructureSyncHelper } from './CampStructureSyncHelper';
 import { ProjectileSystem } from './ProjectileSystem';
 
 export interface CampStructure {
@@ -27,29 +36,63 @@ export interface ICampFortificationContext {
   scene: Phaser.Scene;
   wallColliders?: Phaser.Physics.Arcade.StaticGroup;
   projectileSystem?: ProjectileSystem;
+  isHost?: () => boolean;
+  getLocalPlayerId?: () => string;
   getLocalPlayerPosition: () => { x: number; y: number };
   isLocalPlayerFainted: () => boolean;
   damageLocalPlayer: (damage: number, attackerName: string) => void;
-  onStructureDamaged?: (territoryId: number) => void;
-  onStructureHitFeedback?: (x: number, y: number, isSkill: boolean) => void;
+  onStructureDamaged?: (territoryId: number, attackerId?: string) => void;
+  onStructureHitFeedback?: (x: number, y: number, isSkill: boolean, isLocalAttack?: boolean) => void;
+  onStructureSyncBroadcast?: (payload: CampStructureHpSyncPayload) => void;
+  onRemoteStructureHit?: (payload: CampStructureHitPayload) => void;
   playExplosionAt: (x: number, y: number) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
   showFloatingText: (x: number, y: number, text: string, color: string) => void;
 }
 
 /**
- * 사냥 특화 모드: 몬스터 부락의 방어벽(4방향) 및 적 방어 타워 관리 시스템
+ * 사냥 특화 모드: 몬스터 부락의 방어벽(4방향) 및 적 방어 타워 관리/동기화 시스템
  */
 export class CampFortificationSystem {
   private ctx: ICampFortificationContext;
   private structures = new Map<string, CampStructure>();
+  private syncHelper = new CampStructureSyncHelper();
+  private syncCallbacks: CampStructureSyncCallbacks;
 
   constructor(ctx: ICampFortificationContext) {
     this.ctx = ctx;
+    this.syncCallbacks = {
+      getLocalPlayerId: () => this.ctx.getLocalPlayerId?.() ?? '',
+      playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
+      shakeObject: (target) => this.ctx.shakeObject(target),
+      showFloatingText: (x, y, text, color) => this.ctx.showFloatingText(x, y, text, color),
+      removeStructure: (id, refreshCollider) => this.removeStructure(id, refreshCollider),
+      spawnForCamp: (camp, hpMult, atkMult, refresh) =>
+        this.spawnForCamp(camp, hpMult, atkMult, refresh),
+      refreshWallColliders: () => this.refreshWallColliders(),
+    };
+  }
+
+  private isHost(): boolean {
+    return this.ctx.isHost?.() ?? true;
   }
 
   public getStructures(): ReadonlyMap<string, CampStructure> {
     return this.structures;
+  }
+
+  public exportSnapshots(): CampStructureSnapshot[] {
+    return this.syncHelper.exportSnapshots(this.structures);
+  }
+
+  public getSnapshotsForCamp(territoryId: number): Array<{ id: string }> {
+    const list: Array<{ id: string }> = [];
+    for (const st of this.structures.values()) {
+      if (st.territoryId === territoryId) {
+        list.push({ id: st.id });
+      }
+    }
+    return list;
   }
 
   public refreshWallColliders(): void {
@@ -63,132 +106,27 @@ export class CampFortificationSystem {
     refreshColliders = true
   ): void {
     this.clearForCamp(camp.territoryId, false);
-
-    const tpl = CAMP_RING_TEMPLATES[camp.ring];
-    const fort = tpl.fortification;
-    const clearScale = 1 + camp.clearCount * 0.25;
-    const origin = getIslandOrigin(camp.gridX, camp.gridY);
-    const cx = origin.x + TERRITORY_CENTER_X;
-    const cy = origin.y + TERRITORY_CENTER_Y;
-
-    // 1. 4방향 방어벽 (북, 남, 동, 서 반경 215px)
-    const wallOffsets = [
-      { dx: 0, dy: -215, isHoriz: true },
-      { dx: 0, dy: 215, isHoriz: true },
-      { dx: 215, dy: 0, isHoriz: false },
-      { dx: -215, dy: 0, isHoriz: false },
-    ];
-    const wallHp = Math.round(fort.wallHp * clearScale * hpMult);
-    wallOffsets.forEach((wo, idx) => {
-      const wx = cx + wo.dx;
-      const wy = cy + wo.dy;
-      const id = `cwall_${camp.territoryId}_${idx}`;
-      this.createStructure({
-        id,
-        territoryId: camp.territoryId,
-        kind: 'wall',
-        x: wx,
-        y: wy,
-        hp: wallHp,
-        spriteKey: fort.wallSprite,
-        isHoriz: wo.isHoriz,
-        ring: camp.ring,
-        attack: 0,
-        rangePx: 0,
-        fireRateMs: 0,
-      }, false);
-    });
-
-    // 2. 적 방어 타워 (본진 주변 대각선 2~4개)
-    const towerOffsets = [
-      { dx: -135, dy: -135 },
-      { dx: 135, dy: 135 },
-      { dx: 135, dy: -135 },
-      { dx: -135, dy: 135 },
-    ].slice(0, fort.towerCount);
-    const towerHp = Math.round(fort.towerHp * clearScale * hpMult);
-    const towerAtk = Math.round(fort.towerAttack * clearScale * atkMult);
-
-    towerOffsets.forEach((to, idx) => {
-      const tx = cx + to.dx;
-      const ty = cy + to.dy;
-      const id = `ctower_${camp.territoryId}_${idx}`;
-      this.createStructure({
-        id,
-        territoryId: camp.territoryId,
-        kind: 'tower',
-        x: tx,
-        y: ty,
-        hp: towerHp,
-        spriteKey: 'blackTower',
-        isHoriz: true,
-        ring: camp.ring,
-        attack: towerAtk,
-        rangePx: fort.towerRangePx,
-        fireRateMs: fort.towerFireRateMs,
-      }, false);
-    });
-
+    const specs = buildCampFortificationSpecs(camp, hpMult, atkMult);
+    for (const spec of specs) {
+      this.createStructure(spec);
+    }
     if (refreshColliders) {
       this.refreshWallColliders();
     }
   }
 
-  private createStructure(
-    params: {
-      id: string;
-      territoryId: number;
-      kind: 'wall' | 'tower';
-      x: number;
-      y: number;
-      hp: number;
-      spriteKey: string;
-      isHoriz: boolean;
-      ring: 1 | 2 | 3 | 4;
-      attack: number;
-      rangePx: number;
-      fireRateMs: number;
-    },
-    refreshCollider = true
-  ): void {
-    const { scene } = this.ctx;
-    const container = scene.add.container(params.x, params.y);
-    container.setDepth(ySortDepth(params.y, params.kind === 'tower' ? 140 : 60));
-
-    const directionalKey =
-      params.kind === 'wall'
-        ? `${params.spriteKey}${params.isHoriz ? 'H' : 'V'}`
-        : params.spriteKey;
-    const resolvedKey = scene.textures.exists(directionalKey) ? directionalKey : params.spriteKey;
-    const tex = scene.textures.exists(resolvedKey) ? resolvedKey : 'tower';
-    const sprite = scene.add.image(0, params.kind === 'tower' ? -18 : -8, tex);
-    if (params.kind === 'tower') {
-      sprite.setDisplaySize(96, 136);
-      sprite.setTint(params.ring >= 3 ? 0xc084fc : 0xfca5a5);
-    } else {
-      const w = params.isHoriz ? 165 : 52;
-      const h = params.isHoriz ? 58 : 145;
-      sprite.setDisplaySize(w, h);
-      sprite.setTint(params.ring >= 3 ? 0xc084fc : 0xfca5a5);
-    }
-    container.add(sprite);
-
-    const hpBar = scene.add.graphics();
-    container.add(hpBar);
-
-    let collider: Phaser.Physics.Arcade.Sprite | undefined;
-    if (this.ctx.wallColliders) {
-      const colW = params.kind === 'tower' ? 68 : params.isHoriz ? 155 : 46;
-      const colH = params.kind === 'tower' ? 64 : params.isHoriz ? 44 : 135;
-      collider = scene.physics.add.staticSprite(params.x, params.y, '');
-      collider.setVisible(false);
-      collider.setDisplaySize(colW, colH);
-      collider.refreshBody();
-      this.ctx.wallColliders.add(collider);
-      if (refreshCollider) {
-        this.ctx.wallColliders.refresh();
-      }
-    }
+  private createStructure(params: CampStructureSpec): void {
+    const visual = createCampStructureVisual({
+      scene: this.ctx.scene,
+      wallColliders: this.ctx.wallColliders,
+      kind: params.kind,
+      x: params.x,
+      y: params.y,
+      spriteKey: params.spriteKey,
+      isHoriz: params.isHoriz,
+      ring: params.ring,
+      refreshCollider: false,
+    });
 
     const st: CampStructure = {
       id: params.id,
@@ -202,15 +140,16 @@ export class CampFortificationSystem {
       rangePx: params.rangePx,
       fireRateMs: params.fireRateMs,
       lastFireTime: 0,
-      container,
-      hpBar,
-      collider,
+      container: visual.container,
+      hpBar: visual.hpBar,
+      collider: visual.collider,
     };
     this.structures.set(params.id, st);
-    this.updateHpBar(st);
+    updateCampStructureHpBar(st.hpBar, st.kind, st.hp, st.maxHp);
   }
 
   public update(time: number): void {
+    this.syncHelper.flushDeferred(this.structures);
     if (this.structures.size === 0 || this.ctx.isLocalPlayerFainted()) return;
     const ps = this.ctx.projectileSystem;
     if (!ps) return;
@@ -220,8 +159,7 @@ export class CampFortificationSystem {
       if (st.kind !== 'tower' || st.hp <= 0) continue;
       if (time - st.lastFireTime < st.fireRateMs) continue;
 
-      const d = Math.hypot(px - st.x, py - st.y);
-      if (d <= st.rangePx) {
+      if (Math.hypot(px - st.x, py - st.y) <= st.rangePx) {
         st.lastFireTime = time;
         ps.fireProjectile({
           startX: st.x,
@@ -250,7 +188,7 @@ export class CampFortificationSystem {
       if (st.hp <= 0) continue;
       const hitPad = st.kind === 'wall' ? 70 : 45;
       if (Math.hypot(px - st.x, py - st.y) <= rangePx + hitPad) {
-        this.damageStructure(st, damage, false);
+        this.applyLocalAttack(st, damage, false);
         return true;
       }
     }
@@ -263,40 +201,115 @@ export class CampFortificationSystem {
       if (st.hp <= 0) continue;
       const hitPad = st.kind === 'wall' ? 60 : 40;
       if (Math.hypot(x - st.x, y - st.y) <= radiusPx + hitPad) {
-        this.damageStructure(st, damage, true);
+        this.applyLocalAttack(st, damage, true);
         hitAny = true;
       }
     }
     return hitAny;
   }
 
-  private damageStructure(st: CampStructure, damage: number, isSkill: boolean): void {
-    st.hp = Math.max(0, st.hp - damage);
-    this.ctx.shakeObject(st.container);
-    this.ctx.onStructureHitFeedback?.(st.x, st.y, isSkill);
-    this.ctx.showFloatingText(st.x, st.y - 36, `💥 -${damage}`, '#fb923c');
-    this.ctx.onStructureDamaged?.(st.territoryId);
-    this.updateHpBar(st);
+  private applyLocalAttack(st: CampStructure, damage: number, isSkill: boolean): void {
+    const localPlayerId = this.ctx.getLocalPlayerId?.() ?? 'local';
+    if (this.isHost()) {
+      this.applyAuthoritativeDamage(st, damage, isSkill, localPlayerId, true);
+      return;
+    }
 
-    if (st.hp <= 0) {
+    // 게스트 낙관적 선타격: 호스트 승인 전 0으로 로컬 파괴하지 않고 HP >= 1로 유지
+    st.hp = Math.max(1, st.hp - damage);
+    this.syncHelper.markLocalHit(st.id);
+    this.ctx.shakeObject(st.container);
+    this.ctx.onStructureHitFeedback?.(st.x, st.y, isSkill, true);
+    this.ctx.showFloatingText(st.x, st.y - 36, `💥 -${damage}`, '#fb923c');
+    updateCampStructureHpBar(st.hpBar, st.kind, st.hp, st.maxHp);
+    this.ctx.onRemoteStructureHit?.({
+      structureId: st.id,
+      territoryId: st.territoryId,
+      damage,
+      attackerId: localPlayerId,
+      isSkill,
+    });
+  }
+
+  public applyRemoteStructureHit(payload: CampStructureHitPayload): void {
+    if (!this.isHost()) return;
+    const st = this.structures.get(payload.structureId);
+    if (!st || st.hp <= 0) return;
+
+    const damage = Math.max(1, Math.round(payload.damage));
+    this.applyAuthoritativeDamage(
+      st,
+      damage,
+      Boolean(payload.isSkill),
+      payload.attackerId,
+      false
+    );
+  }
+
+  private applyAuthoritativeDamage(
+    st: CampStructure,
+    damage: number,
+    isSkill: boolean,
+    attackerId: string,
+    isLocalAttack: boolean
+  ): void {
+    const prevHp = st.hp;
+    st.hp = Math.max(0, st.hp - damage);
+    const damageDelta = Math.max(0, prevHp - st.hp);
+    const destroyed = st.hp <= 0;
+
+    this.ctx.shakeObject(st.container);
+    this.ctx.onStructureHitFeedback?.(st.x, st.y, isSkill, isLocalAttack);
+    this.ctx.showFloatingText(st.x, st.y - 36, `💥 -${damage}`, '#fb923c');
+    this.ctx.onStructureDamaged?.(st.territoryId, attackerId);
+    updateCampStructureHpBar(st.hpBar, st.kind, st.hp, st.maxHp);
+
+    this.ctx.onStructureSyncBroadcast?.({
+      structureId: st.id,
+      territoryId: st.territoryId,
+      hp: st.hp,
+      maxHp: st.maxHp,
+      destroyed,
+      damageDelta,
+      attackerId,
+    });
+
+    if (destroyed) {
       this.ctx.playExplosionAt(st.x, st.y);
       sound.playBreak();
       this.removeStructure(st.id);
     }
   }
 
-  private updateHpBar(st: CampStructure): void {
-    const ratio = Math.max(0, Math.min(1, st.hp / Math.max(1, st.maxHp)));
-    const w = st.kind === 'tower' ? 64 : 84;
-    const y = st.kind === 'tower' ? -72 : -44;
-    st.hpBar.clear();
-    st.hpBar.fillStyle(0x0f172a, 0.9);
-    st.hpBar.fillRect(-w / 2 - 1, y - 1, w + 2, 7);
-    st.hpBar.fillStyle(0xf43f5e, 1);
-    st.hpBar.fillRect(-w / 2, y, Math.max(2, w * ratio), 5);
+  public applyRemoteStructureHpSync(payload: CampStructureHpSyncPayload): void {
+    if (this.isHost()) return;
+    this.syncHelper.applyRemoteHpSync(this.structures, payload, this.syncCallbacks);
+  }
+
+  public applySyncPlan(
+    camp: MonsterCampState,
+    plan: CampFortificationSyncPlan,
+    hpMult: number,
+    atkMult: number,
+    refreshColliders = false
+  ): void {
+    if (plan.action === 'clear') {
+      this.clearForCamp(camp.territoryId, refreshColliders);
+      return;
+    }
+    this.syncHelper.applySyncPlan(
+      this.structures,
+      camp,
+      plan,
+      hpMult,
+      atkMult,
+      refreshColliders,
+      this.syncCallbacks
+    );
   }
 
   private removeStructure(id: string, refreshCollider = true): boolean {
+    this.syncHelper.clearStructure(id);
     const st = this.structures.get(id);
     if (!st) return false;
     let removedCollider = false;
@@ -330,5 +343,6 @@ export class CampFortificationSystem {
     for (const id of Array.from(this.structures.keys())) {
       this.removeStructure(id, false);
     }
+    this.syncHelper.clearAll();
   }
 }

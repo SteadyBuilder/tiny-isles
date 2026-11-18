@@ -1,74 +1,37 @@
-import Phaser from 'phaser';
-import { pickRandomEliteAffix } from '../../data/elites';
-import { rollCampRewardItem } from '../../data/items';
+import { CAMP_RING_TEMPLATES } from '../../data/monsterCamps';
 import {
-  CAMP_RING_TEMPLATES,
-  computeCampRing,
-} from '../../data/monsterCamps';
-import { sound } from '../../lib/sound';
-import {
-  EquipmentItem,
-  Island,
-  Monster,
-  MonsterCampState,
-} from '../../types/game';
-import { MissionDifficultyConfig } from '../../types/room';
-import {
-  TERRITORY_CENTER_X,
-  TERRITORY_CENTER_Y,
-  getIslandOrigin,
-} from '../constants';
-import { ySortDepth } from '../depthLayers';
-import { GameEvents } from '../events/gameEvents';
+  CampCoreHitPayload,
+  CampCoreSyncPayload,
+  CampFullSyncPayload,
+} from '../../types/campSync';
+import { MonsterCampState } from '../../types/game';
 import { HuntingScalingFactors } from '../../types/hunting';
+import { IMonsterCampContext } from '../../types/monsterCamp';
+import {
+  CampVisualNode,
+  updateCampHpVisualNode,
+} from '../phaser/renderers/CampVisualHelper';
 import { computeHuntingScaling } from '../utils/huntingScalingUtils';
-import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
-import type { CampFortificationSystem } from './CampFortificationSystem';
+import { spawnCampGarrisonMonsters } from './CampGarrisonSpawner';
+import {
+  drainCampHpTrails,
+  executeCampClearedPresentationAndRewards,
+  initializeCampVisualNodes,
+  scaleCampsForOnlineCount,
+  tickDestroyedCampRespawns,
+} from './CampLifecycleHelper';
+import { CampSyncCoordinator } from './CampSyncCoordinator';
 
-export interface CampVisualNode {
-  camp: MonsterCampState;
-  container: Phaser.GameObjects.Container;
-  sprite: Phaser.GameObjects.Image;
-  hpBar: Phaser.GameObjects.Graphics;
-  titleText: Phaser.GameObjects.Text;
-  statusText: Phaser.GameObjects.Text;
-  hpTrailRatio: number;
-  hpFlashUntil: number;
-}
-
-export interface IMonsterCampContext {
-  scene: Phaser.Scene;
-  isHuntingMode: () => boolean;
-  isHost?: () => boolean;
-  getDifficultyConfig?: () => MissionDifficultyConfig;
-  getIslands: () => Island[];
-  getMonsters: () => Map<string, MonsterVisual>;
-  fortification?: CampFortificationSystem;
-  addResources: (wood: number, stone: number, gold: number) => void;
-  addThreat: (amount: number) => void;
-  gainExp: (amount: number) => void;
-  grantRewardItem: (item: EquipmentItem) => void;
-  playChestDropAt?: (
-    x: number,
-    y: number,
-    item: EquipmentItem,
-    onOpened: (item: EquipmentItem) => void
-  ) => void;
-  onCampCoreDamaged?: (territoryId: number) => void;
-  onCampCoreHitFeedback?: (x: number, y: number, isSkill: boolean) => void;
-  playExplosionAt: (x: number, y: number) => void;
-  shakeObject: (target: Phaser.GameObjects.Container) => void;
-  showFloatingText: (x: number, y: number, text: string, color: string) => void;
-  emitTerritoriesUpdated: () => void;
-}
+export type { CampVisualNode, IMonsterCampContext };
 
 /**
- * 사냥 특화 모드 전용: 주변 20개 영지를 병과별(근거리/창병/원거리/마법사) 몬스터 부락으로 전환하고
- * 부락 본진 파괴 시 개인별 장비 보상 지급 및 3분 후 강화 리스폰을 담당하는 시스템
+ * 사냥 특화 모드 전용: 주변 20개 영지를 병과별 몬스터 부락으로 전환하고
+ * 부락 본진 파괴 보상, 강화 리스폰, 호스트-게스트 부락 동기화를 담당하는 시스템
  */
 export class MonsterCampSystem {
   private ctx: IMonsterCampContext;
   private campNodes = new Map<number, CampVisualNode>();
+  private syncCoordinator = new CampSyncCoordinator();
   private respawnAccumMs = 0;
   private onlineCount = 1;
   private appliedHpMult = 1;
@@ -98,7 +61,6 @@ export class MonsterCampSystem {
     const prevHpMult = this.appliedHpMult;
     const prevAtkMult = this.appliedAtkMult;
     this.onlineCount = nextCount;
-
     if (!this.ctx.isHuntingMode() || this.campNodes.size === 0) return;
 
     const scaling = this.getDifficultyMultipliers();
@@ -106,86 +68,40 @@ export class MonsterCampSystem {
     const atkRatio = prevAtkMult > 0 ? scaling.atkMult / prevAtkMult : 1;
     this.appliedHpMult = scaling.hpMult;
     this.appliedAtkMult = scaling.atkMult;
-
     if (Math.abs(hpRatio - 1) <= 0.01 && Math.abs(atkRatio - 1) <= 0.01) return;
 
-    const islands = this.ctx.getIslands();
-    for (const node of this.campNodes.values()) {
-      const { camp } = node;
-      if (!camp.destroyed) {
-        const coreRatio = camp.coreHp / Math.max(1, camp.coreMaxHp);
-        camp.coreMaxHp = Math.max(1, Math.round(camp.coreMaxHp * hpRatio));
-        camp.coreHp = Math.max(1, Math.round(camp.coreMaxHp * coreRatio));
-        this.updateCampHpVisual(node, false);
-        const isl = islands.find((i) => i.id === camp.territoryId);
-        if (isl) {
-          isl.coreMaxHp = camp.coreMaxHp;
-          isl.coreHp = camp.coreHp;
-        }
-      }
-    }
-
-    if (!this.isHost()) return;
-
-    for (const mv of this.ctx.getMonsters().values()) {
-      const m = mv.monster;
-      if (!m.isCampMonster || m.hp <= 0) continue;
-      const hpPct = m.hp / Math.max(1, m.maxHp);
-      m.maxHp = Math.max(1, Math.round(m.maxHp * hpRatio));
-      m.hp = Math.max(1, Math.round(m.maxHp * hpPct));
-      m.attack = Math.max(1, Math.round(m.attack * atkRatio));
-      MonsterVisualManager.updateHpBar(mv, false);
-    }
+    scaleCampsForOnlineCount({
+      campNodes: this.campNodes,
+      islands: this.ctx.getIslands(),
+      monsters: this.ctx.getMonsters(),
+      hpRatio,
+      atkRatio,
+      isHost: this.isHost(),
+    });
   }
 
   public initializeCamps(): void {
     if (!this.ctx.isHuntingMode()) return;
 
-    const { hpMult, atkMult } = this.getDifficultyMultipliers();
-    this.appliedHpMult = hpMult;
-    this.appliedAtkMult = atkMult;
+    this.syncCoordinator.clearAll();
+    const scaling = this.getDifficultyMultipliers();
+    this.appliedHpMult = scaling.hpMult;
+    this.appliedAtkMult = scaling.atkMult;
     const hostAuthoritative = this.isHost();
-    const islands = this.ctx.getIslands();
-    for (const isl of islands) {
-      if (isl.id === 0) continue; // 중앙 본거지(id: 0)만 유일한 수호 마을로 유지
-      const ring = computeCampRing(isl.gridX, isl.gridY);
-      const tpl = CAMP_RING_TEMPLATES[ring];
-      const scaledCoreHp = Math.round(tpl.coreMaxHp * hpMult);
 
-      isl.unlocked = false;
-      isl.isMonsterCamp = true;
-      isl.campRing = ring;
-      isl.campLevel = tpl.baseLevel;
-      isl.campDestroyed = false;
-      isl.campRespawnSec = null;
-      isl.coreHp = scaledCoreHp;
-      isl.coreMaxHp = scaledCoreHp;
+    initializeCampVisualNodes({
+      scene: this.ctx.scene,
+      islands: this.ctx.getIslands(),
+      campNodes: this.campNodes,
+      scaling,
+      hostAuthoritative,
+      onSpawnFortification: (campState, hp, atk) =>
+        this.ctx.fortification?.spawnForCamp(campState, hp, atk, false),
+      onSpawnGarrison: (campState) => this.spawnCampGarrison(campState),
+    });
 
-      const campState: MonsterCampState = {
-        territoryId: isl.id,
-        gridX: isl.gridX,
-        gridY: isl.gridY,
-        name: isl.name.replace('마을터', '마물 부락'),
-        ring,
-        level: tpl.baseLevel,
-        coreHp: scaledCoreHp,
-        coreMaxHp: scaledCoreHp,
-        destroyed: false,
-        respawnRemainingSec: null,
-        firstCleared: false,
-        clearCount: 0,
-      };
-
-      const node = this.createCampVisual(campState, tpl.buildingSprite);
-      this.campNodes.set(isl.id, node);
-      this.ctx.fortification?.spawnForCamp(campState, hpMult, atkMult, false);
-      if (hostAuthoritative) {
-        this.spawnCampGarrison(campState);
-      }
-    }
     this.ctx.fortification?.refreshWallColliders();
     this.garrisonsInitialized = hostAuthoritative;
-
     this.ctx.emitTerritoriesUpdated();
   }
 
@@ -208,244 +124,28 @@ export class MonsterCampSystem {
 
   public resetGuestGarrisonState(): void {
     this.garrisonsInitialized = false;
-  }
-
-  private createCampVisual(
-    camp: MonsterCampState,
-    spriteKey: 'blackTower' | 'blackCastle' | 'purpleCastle'
-  ): CampVisualNode {
-    const { scene } = this.ctx;
-    const origin = getIslandOrigin(camp.gridX, camp.gridY);
-    const cx = origin.x + TERRITORY_CENTER_X;
-    const cy = origin.y + TERRITORY_CENTER_Y;
-
-    const container = scene.add.container(cx, cy);
-    container.setDepth(ySortDepth(cy, 26));
-
-    const tex = scene.textures.exists(spriteKey) ? spriteKey : 'tower';
-    const sprite = scene.add.image(0, -20, tex);
-    const size = camp.ring >= 3 ? 210 : 165;
-    sprite.setDisplaySize(size, size);
-    container.add(sprite);
-
-    const titleText = scene.add
-      .text(0, -118, `💀 Lv.${camp.level} ${camp.name}`, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color: camp.ring >= 3 ? '#f43f5e' : '#fb923c',
-        stroke: '#000000',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5);
-    container.add(titleText);
-
-    const statusText = scene.add
-      .text(0, -98, `부락 본진 (${camp.coreHp}/${camp.coreMaxHp})`, {
-        fontFamily: 'Pretendard, sans-serif',
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#fde047',
-        stroke: '#000000',
-        strokeThickness: 2.5,
-      })
-      .setOrigin(0.5);
-    container.add(statusText);
-
-    const hpBar = scene.add.graphics();
-    container.add(hpBar);
-
-    const node: CampVisualNode = {
-      camp,
-      container,
-      sprite,
-      hpBar,
-      titleText,
-      statusText,
-      hpTrailRatio: 1,
-      hpFlashUntil: 0,
-    };
-    this.updateCampHpVisual(node, false);
-    return node;
-  }
-
-  private updateCampHpVisual(node: CampVisualNode, isDamageEvent = false): void {
-    const { camp, hpBar, titleText, statusText, sprite } = node;
-    titleText.setText(
-      camp.destroyed
-        ? `🏳️ [토벌됨] ${camp.name}`
-        : `💀 Lv.${camp.level} ${camp.name}`
-    );
-
-    if (camp.destroyed) {
-      sprite.setAlpha(0.35);
-      sprite.setTint(0x64748b);
-      statusText.setText(`⏳ 재건까지 ${camp.respawnRemainingSec ?? 0}초`);
-      statusText.setColor('#94a3b8');
-      hpBar.clear();
-      return;
-    }
-
-    sprite.setAlpha(1);
-    sprite.clearTint();
-    statusText.setText(`부락 본진 (${camp.coreHp}/${camp.coreMaxHp})`);
-    statusText.setColor('#fde047');
-
-    const ratio = Math.max(0, Math.min(1, camp.coreHp / Math.max(1, camp.coreMaxHp)));
-    if (ratio > node.hpTrailRatio) {
-      node.hpTrailRatio = ratio;
-    } else if (isDamageEvent && ratio < node.hpTrailRatio) {
-      node.hpFlashUntil = performance.now() + 240;
-    }
-
-    const now = performance.now();
-    const isFlashing = now < node.hpFlashUntil;
-    const barW = 104;
-    const barH = 8;
-    const barY = -83 - (isFlashing ? 3 : 0);
-
-    hpBar.clear();
-    hpBar.fillStyle(0x0f172a, 0.92);
-    hpBar.fillRect(-barW / 2 - 1, barY - 1, barW + 2, barH + 2);
-    if (isFlashing) {
-      hpBar.lineStyle(1.5, 0xfef08a, 0.95);
-      hpBar.strokeRect(-barW / 2 - 1.5, barY - 1.5, barW + 3, barH + 3);
-    }
-    if (node.hpTrailRatio > ratio + 0.002) {
-      hpBar.fillStyle(0xfef08a, 0.92);
-      hpBar.fillRect(-barW / 2, barY, Math.max(2, barW * node.hpTrailRatio), barH);
-    }
-    hpBar.fillStyle(0xe11d48, 1);
-    if (ratio > 0) {
-      hpBar.fillRect(-barW / 2, barY, Math.max(2, barW * ratio), barH);
-    }
+    this.syncCoordinator.clearAll();
   }
 
   private spawnCampGarrison(camp: MonsterCampState): void {
-    const tpl = CAMP_RING_TEMPLATES[camp.ring];
-    const origin = getIslandOrigin(camp.gridX, camp.gridY);
-    const cx = origin.x + TERRITORY_CENTER_X;
-    const cy = origin.y + TERRITORY_CENTER_Y;
-    const monsters = this.ctx.getMonsters();
-    const { hpMult, atkMult, countMult, eliteChance } = this.getDifficultyMultipliers();
-    const clearScale = 1 + camp.clearCount * 0.25;
-    const totalSpecsCount = tpl.garrisonSpecs.reduce(
-      (sum, s) => sum + Math.max(1, Math.round(s.count * countMult)),
-      0
-    );
-
-    const minGuaranteedElites = camp.ring >= 3 ? 2 : 1;
-    let elitesSpawnedInCamp = 0;
-
-    let idx = 0;
-    for (const spec of tpl.garrisonSpecs) {
-      const spawnCount = Math.max(1, Math.round(spec.count * countMult));
-      for (let i = 0; i < spawnCount; i++) {
-        const angle = (Math.PI * 2 * idx) / Math.max(1, totalSpecsCount) + (Math.random() - 0.5) * 0.3;
-        const dist = 125 + (idx % 3) * 42;
-        const mx = cx + Math.cos(angle) * dist;
-        const my = cy + Math.sin(angle) * dist;
-
-        const remainingSlots = totalSpecsCount - idx;
-        const neededElites = minGuaranteedElites - elitesSpawnedInCamp;
-        const forceElite = neededElites > 0 && remainingSlots <= neededElites;
-        const isElite = forceElite || Math.random() < eliteChance;
-        const affix = isElite ? pickRandomEliteAffix() : null;
-        if (isElite) elitesSpawnedInCamp++;
-
-        const hp = Math.round(spec.hp * clearScale * hpMult * (affix?.hpMultiplier ?? 1));
-        const attack = Math.round(spec.attack * clearScale * atkMult * (affix?.attackMultiplier ?? 1));
-        const speed = Math.round(spec.speed * (affix?.speedMultiplier ?? 1));
-
-        const monster: Monster = {
-          id: `camp_${camp.territoryId}_${Date.now()}_${idx}`,
-          type: spec.type,
-          name: affix
-            ? `★ Lv.${camp.level} ${affix.label} ${spec.name}`
-            : `Lv.${camp.level} ${spec.name}`,
-          isBoss: false,
-          isElite,
-          eliteAffix: affix?.id,
-          x: mx,
-          y: my,
-          hp,
-          maxHp: hp,
-          attack,
-          speed,
-          targetTerritoryId: 0,
-          spawnTerritoryId: camp.territoryId,
-          direction: idx % 2 === 0 ? 'left' : 'right',
-          role: spec.role,
-          isCampMonster: true,
-          campTerritoryId: camp.territoryId,
-          campRing: camp.ring,
-          homeX: mx,
-          homeY: my,
-          expReward: Math.round(spec.expReward * clearScale * (affix?.expMultiplier ?? 1)),
-        };
-        monsters.set(monster.id, MonsterVisualManager.create(this.ctx.scene, monster));
-        idx++;
-      }
-    }
-
-    // 방어벽 외곽 순찰 몬스터 배치
-    const patrolCount = Math.max(2, Math.round(tpl.fortification.outerPatrolCount * countMult));
-    const patrolSpec = tpl.garrisonSpecs[0];
-    for (let p = 0; p < patrolCount; p++) {
-      const angle = (Math.PI * 2 * p) / patrolCount;
-      const dist = 285 + (p % 2) * 55;
-      const mx = cx + Math.cos(angle) * dist;
-      const my = cy + Math.sin(angle) * dist;
-      const isElite = Math.random() < eliteChance;
-      const affix = isElite ? pickRandomEliteAffix() : null;
-
-      const hp = Math.round(patrolSpec.hp * clearScale * hpMult * (affix?.hpMultiplier ?? 1));
-      const attack = Math.round(patrolSpec.attack * clearScale * atkMult * (affix?.attackMultiplier ?? 1));
-      const speed = Math.round(patrolSpec.speed * (affix?.speedMultiplier ?? 1));
-
-      const patrolMonster: Monster = {
-        id: `camppatrol_${camp.territoryId}_${Date.now()}_${p}`,
-        type: patrolSpec.type,
-        name: affix
-          ? `★ Lv.${camp.level} ${affix.label} 외곽 순찰병`
-          : `Lv.${camp.level} 부락 외곽 순찰병`,
-        isBoss: false,
-        isElite,
-        eliteAffix: affix?.id,
-        x: mx,
-        y: my,
-        hp,
-        maxHp: hp,
-        attack,
-        speed,
-        targetTerritoryId: 0,
-        spawnTerritoryId: camp.territoryId,
-        direction: p % 2 === 0 ? 'left' : 'right',
-        role: patrolSpec.role,
-        isCampMonster: true,
-        campTerritoryId: camp.territoryId,
-        campRing: camp.ring,
-        homeX: mx,
-        homeY: my,
-        patrolRadiusPx: 115,
-        expReward: Math.round(patrolSpec.expReward * clearScale * (affix?.expMultiplier ?? 1)),
-      };
-      monsters.set(patrolMonster.id, MonsterVisualManager.create(this.ctx.scene, patrolMonster));
-    }
+    spawnCampGarrisonMonsters({
+      scene: this.ctx.scene,
+      camp,
+      monsters: this.ctx.getMonsters(),
+      scaling: this.getDifficultyMultipliers(),
+    });
   }
 
   public tryAttackNearestCampCore(px: number, py: number, rangePx: number, damage: number): boolean {
     if (!this.ctx.isHuntingMode()) return false;
-
     if (this.ctx.fortification?.tryAttackNearest(px, py, rangePx, damage)) {
       return true;
     }
 
     for (const node of this.campNodes.values()) {
       if (node.camp.destroyed) continue;
-      const d = Math.hypot(px - node.container.x, py - node.container.y);
-      if (d <= rangePx + 55) {
-        this.damageCampCore(node, damage, false);
+      if (Math.hypot(px - node.container.x, py - node.container.y) <= rangePx + 55) {
+        this.applyLocalCampCoreAttack(node, damage, false);
         return true;
       }
     }
@@ -457,83 +157,157 @@ export class MonsterCampSystem {
     let hitAny = this.ctx.fortification?.damageInRadius(x, y, radiusPx, damage) ?? false;
     for (const node of this.campNodes.values()) {
       if (node.camp.destroyed) continue;
-      const d = Math.hypot(x - node.container.x, y - node.container.y);
-      if (d <= radiusPx + 45) {
-        this.damageCampCore(node, damage, isSkill);
+      if (Math.hypot(x - node.container.x, y - node.container.y) <= radiusPx + 45) {
+        this.applyLocalCampCoreAttack(node, damage, isSkill);
         hitAny = true;
       }
     }
     return hitAny;
   }
 
-  private damageCampCore(node: CampVisualNode, damage: number, isSkill = false): void {
-    const { camp, container } = node;
-    camp.coreHp = Math.max(0, camp.coreHp - damage);
-    this.ctx.shakeObject(container);
-    this.ctx.onCampCoreHitFeedback?.(container.x, container.y, isSkill);
-    this.ctx.showFloatingText(container.x, container.y - 60, `💥 -${damage}`, '#fbbf24');
-    this.updateCampHpVisual(node, true);
-    this.ctx.onCampCoreDamaged?.(camp.territoryId);
-
-    if (camp.coreHp <= 0) {
-      this.handleCampDestroyed(node);
+  private applyLocalCampCoreAttack(node: CampVisualNode, damage: number, isSkill: boolean): void {
+    const localPlayerId = this.ctx.getLocalPlayerId?.() ?? 'local';
+    if (this.isHost()) {
+      this.damageCampCore(node, damage, isSkill, localPlayerId, true);
+      return;
     }
+
+    // 게스트 낙관적 선타격: 호스트 승인 전 0으로 로컬 토벌 처리하지 않고 HP >= 1로 유지
+    const { camp, container } = node;
+    camp.coreHp = Math.max(1, camp.coreHp - damage);
+    this.syncCoordinator.markLocalHit(camp.territoryId);
+    this.ctx.shakeObject(container);
+    this.ctx.onCampCoreHitFeedback?.(container.x, container.y, isSkill, true);
+    this.ctx.showFloatingText(container.x, container.y - 60, `💥 -${damage}`, '#fbbf24');
+    updateCampHpVisualNode(node, true);
+    this.ctx.broadcastCampCoreHit?.({
+      territoryId: camp.territoryId,
+      damage,
+      attackerId: localPlayerId,
+      isSkill,
+    });
   }
 
-  private handleCampDestroyed(node: CampVisualNode): void {
+  public applyRemoteCampCoreHit(payload: CampCoreHitPayload): void {
+    if (!this.isHost() || !this.ctx.isHuntingMode()) return;
+    const node = this.campNodes.get(payload.territoryId);
+    if (!node || node.camp.destroyed) return;
+    this.damageCampCore(
+      node,
+      Math.max(1, Math.round(payload.damage)),
+      Boolean(payload.isSkill),
+      payload.attackerId,
+      false
+    );
+  }
+
+  private damageCampCore(
+    node: CampVisualNode,
+    damage: number,
+    isSkill: boolean,
+    attackerId: string,
+    isLocalAttack: boolean
+  ): void {
     const { camp, container } = node;
+    const prevHp = camp.coreHp;
+    camp.coreHp = Math.max(0, camp.coreHp - damage);
+    const damageDelta = Math.max(0, prevHp - camp.coreHp);
+    const isl = this.ctx.getIslands().find((i) => i.id === camp.territoryId);
+    if (isl) isl.coreHp = camp.coreHp;
+
+    this.ctx.shakeObject(container);
+    this.ctx.onCampCoreHitFeedback?.(container.x, container.y, isSkill, isLocalAttack);
+    this.ctx.showFloatingText(container.x, container.y - 60, `💥 -${damage}`, '#fbbf24');
+    updateCampHpVisualNode(node, true);
+    this.ctx.onCampCoreDamaged?.(camp.territoryId, attackerId);
+
+    if (camp.coreHp <= 0) {
+      this.handleCampDestroyed(node, attackerId, damageDelta);
+      return;
+    }
+
+    this.ctx.broadcastCampCoreSync?.(
+      this.syncCoordinator.toCoreSyncPayload(camp, { damageDelta, attackerId })
+    );
+  }
+
+  private handleCampDestroyed(node: CampVisualNode, attackerId: string, damageDelta: number): void {
+    const { camp } = node;
     const tpl = CAMP_RING_TEMPLATES[camp.ring];
 
     camp.destroyed = true;
     camp.clearCount += 1;
     camp.firstCleared = true;
     camp.respawnRemainingSec = tpl.respawnSec;
-    this.ctx.fortification?.clearForCamp(camp.territoryId);
 
-    const isl = this.ctx.getIslands().find((i) => i.id === camp.territoryId);
-    if (isl) {
-      isl.campDestroyed = true;
-      isl.campRespawnSec = tpl.respawnSec;
-    }
-
-    this.ctx.playExplosionAt(container.x, container.y);
-    sound.playBreak();
-    this.updateCampHpVisual(node);
-
-    // 1. 자원 + 개인 경험치 + 위협도 상승
-    const { wood, stone, gold } = tpl.clearResourceReward;
-    this.ctx.addResources(wood, stone, gold);
-    this.ctx.gainExp(tpl.clearBonusExp);
     this.ctx.addThreat(tpl.threatGainOnClear);
-
-    // 2. 개인별 특별 장비 보상 상자 드랍 연출 (~1초 후 자동 개봉 및 지급)
-    const rewardItem = rollCampRewardItem(camp.ring, camp.clearCount);
-    if (this.ctx.playChestDropAt) {
-      this.ctx.playChestDropAt(container.x, container.y, rewardItem, (openedItem) => {
-        this.ctx.grantRewardItem(openedItem);
-        GameEvents.emit(
-          'game-alert',
-          `🎁 [${camp.name}] 보물 상자 오픈! [${openedItem.icon}${openedItem.name}] 획득!`
-        );
-      });
-    } else {
-      this.ctx.grantRewardItem(rewardItem);
-    }
-
-    const firstClearedTotal = Array.from(this.campNodes.values()).filter(
-      (n) => n.camp.firstCleared
-    ).length;
-
-    GameEvents.emit('camp-conquered', {
-      territoryId: camp.territoryId,
-      campName: camp.name,
-      firstClearedCount: firstClearedTotal,
-    });
-    GameEvents.emit(
-      'game-alert',
-      `🏆 [${camp.name}] 본진 파괴! +${tpl.clearBonusExp} EXP! 보물 상자가 드랍되었습니다!`
+    this.runCampClearedPresentation(node);
+    this.ctx.broadcastCampCoreSync?.(
+      this.syncCoordinator.toCoreSyncPayload(camp, { damageDelta, attackerId })
     );
-    this.ctx.emitTerritoriesUpdated();
+  }
+
+  private runCampClearedPresentation(node: CampVisualNode): void {
+    this.syncCoordinator.clearCamp(node.camp.territoryId);
+    this.ctx.fortification?.clearForCamp(node.camp.territoryId);
+    executeCampClearedPresentationAndRewards(node, {
+      islands: this.ctx.getIslands(),
+      campNodes: this.campNodes,
+      playExplosionAt: this.ctx.playExplosionAt,
+      addResources: this.ctx.addResources,
+      gainExp: this.ctx.gainExp,
+      grantRewardItem: this.ctx.grantRewardItem,
+      playChestDropAt: this.ctx.playChestDropAt,
+      emitTerritoriesUpdated: this.ctx.emitTerritoriesUpdated,
+    });
+  }
+
+  public applyRemoteCampCoreSync(payload: CampCoreSyncPayload): void {
+    if (this.isHost() || !this.ctx.isHuntingMode()) return;
+    const node = this.campNodes.get(payload.territoryId);
+    if (!node) return;
+    const { hpMult, atkMult } = this.getDifficultyMultipliers();
+
+    this.syncCoordinator.applyRemoteCoreSync({
+      payload,
+      node,
+      islands: this.ctx.getIslands(),
+      localPlayerId: this.ctx.getLocalPlayerId?.() ?? '',
+      fortification: this.ctx.fortification,
+      hpMult,
+      atkMult,
+      onClearFirstTime: () => this.runCampClearedPresentation(node),
+      onShakeAndText: (x, y, delta) => {
+        this.ctx.shakeObject(node.container);
+        this.ctx.showFloatingText(x, y - 60, `💥 -${delta}`, '#fbbf24');
+      },
+      onTerritoriesUpdated: this.ctx.emitTerritoriesUpdated,
+    });
+  }
+
+  public broadcastFullCampSync(force = false): void {
+    if (!this.isHost() || !this.ctx.isHuntingMode() || this.campNodes.size === 0) return;
+    const structures = this.ctx.fortification?.exportSnapshots() ?? [];
+    const payload = this.syncCoordinator.buildFullSyncPayload(this.campNodes, structures, force);
+    if (payload) {
+      this.ctx.broadcastCampFullSync?.(payload);
+    }
+  }
+
+  public applyRemoteCampFullSync(payload: CampFullSyncPayload): void {
+    if (this.isHost() || !this.ctx.isHuntingMode()) return;
+    const { hpMult, atkMult } = this.getDifficultyMultipliers();
+    const applied = this.syncCoordinator.applyRemoteFullSync({
+      payload,
+      campNodes: this.campNodes,
+      islands: this.ctx.getIslands(),
+      fortification: this.ctx.fortification,
+      hpMult,
+      atkMult,
+    });
+    if (applied) {
+      this.ctx.emitTerritoriesUpdated();
+    }
   }
 
   public getFirstClearedCampCount(): number {
@@ -548,22 +322,23 @@ export class MonsterCampSystem {
     const targets: Array<{ id: number; x: number; y: number; ring: 1 | 2 | 3 | 4 }> = [];
     for (const node of this.campNodes.values()) {
       if (node.camp.destroyed) continue;
-      targets.push({
-        id: node.camp.territoryId,
-        x: node.container.x,
-        y: node.container.y,
-        ring: node.camp.ring,
-      });
+      targets.push({ id: node.camp.territoryId, x: node.container.x, y: node.container.y, ring: node.camp.ring });
     }
     return targets;
   }
 
   public healCampCore(territoryId: number, amount: number): void {
+    if (!this.isHost()) return;
     const node = this.campNodes.get(territoryId);
     if (!node || node.camp.destroyed) return;
     if (node.camp.coreHp < node.camp.coreMaxHp) {
       node.camp.coreHp = Math.min(node.camp.coreMaxHp, node.camp.coreHp + amount);
-      this.updateCampHpVisual(node);
+      const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
+      if (isl) isl.coreHp = node.camp.coreHp;
+      updateCampHpVisualNode(node);
+      this.ctx.broadcastCampCoreSync?.(
+        this.syncCoordinator.toCoreSyncPayload(node.camp, { healed: true })
+      );
     }
   }
 
@@ -571,64 +346,28 @@ export class MonsterCampSystem {
     if (!this.ctx.isHuntingMode() || this.campNodes.size === 0) return;
 
     this.ctx.fortification?.update(this.ctx.scene.time.now);
-
-    const now = performance.now();
-    const drainStep = (1.35 * deltaMs) / 1000;
-    for (const node of this.campNodes.values()) {
-      if (node.camp.destroyed) continue;
-      const ratio = Math.max(0, Math.min(1, node.camp.coreHp / Math.max(1, node.camp.coreMaxHp)));
-      const wasFlashing = node.hpFlashUntil > 0 && now >= node.hpFlashUntil;
-      if (node.hpTrailRatio > ratio + 0.002 || now < node.hpFlashUntil || wasFlashing) {
-        if (node.hpTrailRatio > ratio + 0.002) {
-          node.hpTrailRatio = Math.max(ratio, node.hpTrailRatio - drainStep);
-        }
-        if (wasFlashing) node.hpFlashUntil = 0;
-        this.updateCampHpVisual(node, false);
-      }
-    }
+    this.syncCoordinator.flushDeferredCoreHps(this.campNodes, this.ctx.getIslands());
+    drainCampHpTrails(this.campNodes, deltaMs);
 
     this.respawnAccumMs += deltaMs;
     if (this.respawnAccumMs < 1000) return;
     this.respawnAccumMs -= 1000;
 
-    let anyChanged = false;
-    for (const node of this.campNodes.values()) {
-      const { camp } = node;
-      if (!camp.destroyed || camp.respawnRemainingSec === null) continue;
-
-      camp.respawnRemainingSec = Math.max(0, camp.respawnRemainingSec - 1);
-      if (camp.respawnRemainingSec <= 0) {
-        const tpl = CAMP_RING_TEMPLATES[camp.ring];
-        const { hpMult, atkMult } = this.getDifficultyMultipliers();
-        camp.destroyed = false;
-        camp.respawnRemainingSec = null;
-        camp.level += 2;
-        camp.coreMaxHp = Math.round(tpl.coreMaxHp * (1 + camp.clearCount * 0.25) * hpMult);
-        camp.coreHp = camp.coreMaxHp;
-        node.hpTrailRatio = 1;
-        node.hpFlashUntil = 0;
-
-        const isl = this.ctx.getIslands().find((i) => i.id === camp.territoryId);
-        if (isl) {
-          isl.campDestroyed = false;
-          isl.campRespawnSec = null;
-          isl.campLevel = camp.level;
-          isl.coreHp = camp.coreHp;
-          isl.coreMaxHp = camp.coreMaxHp;
-        }
-
+    const anyChanged = tickDestroyedCampRespawns({
+      campNodes: this.campNodes,
+      islands: this.ctx.getIslands(),
+      hostAuthoritative: this.isHost(),
+      getScaling: () => this.getDifficultyMultipliers(),
+      onRebuildCamp: (camp, hpMult, atkMult) => {
         this.ctx.fortification?.spawnForCamp(camp, hpMult, atkMult);
-        if (this.isHost()) {
-          this.spawnCampGarrison(camp);
-        }
-        anyChanged = true;
-        GameEvents.emit(
-          'game-alert',
-          `🔥 [${camp.name}] 부락이 Lv.${camp.level}로 재건되어 더욱 강력한 보상을 품고 부활했습니다!`
+        this.spawnCampGarrison(camp);
+      },
+      onCampRespawned: (camp) => {
+        this.ctx.broadcastCampCoreSync?.(
+          this.syncCoordinator.toCoreSyncPayload(camp, { respawned: true })
         );
-      }
-      this.updateCampHpVisual(node);
-    }
+      },
+    });
 
     if (anyChanged) {
       this.ctx.emitTerritoriesUpdated();
@@ -636,6 +375,7 @@ export class MonsterCampSystem {
   }
 
   public destroy(): void {
+    this.syncCoordinator.clearAll();
     this.ctx.fortification?.destroy();
     for (const node of this.campNodes.values()) {
       if (node.container.scene) node.container.destroy();

@@ -1,6 +1,4 @@
 import Phaser from 'phaser';
-import { SKILL_FX_STYLE_CONFIG } from '../../../data/combatFeedbackConfig';
-import { sound } from '../../../lib/sound';
 import {
   ConstructedBuilding,
   Inventory,
@@ -10,7 +8,6 @@ import {
   PlayerColor,
 } from '../../../types/game';
 import { MissionDifficultyConfig, RoomMode } from '../../../types/room';
-import { GameEvents } from '../../events/gameEvents';
 import { CampFortificationSystem } from '../../systems/CampFortificationSystem';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { FieldMonsterSystem } from '../../systems/FieldMonsterSystem';
@@ -26,8 +23,6 @@ import { PlayerProgressionSystem } from '../../systems/PlayerProgressionSystem';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TowerDefenseSystem } from '../../systems/TowerDefenseSystem';
 import { WaveSystem } from '../../systems/WaveSystem';
-import { checkJobHallProximity } from '../../utils/jobHallUtils';
-import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import { WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { MultiplayerSyncController } from '../controllers/MultiplayerSyncController';
 import { CombatFeedbackRenderer } from '../renderers/CombatFeedbackRenderer';
@@ -38,6 +33,8 @@ import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { SkillEffectsRenderer } from '../renderers/SkillEffectsRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
 import { WorldEffectsRenderer } from '../renderers/WorldEffectsRenderer';
+import { createWorldMultiplayerSync } from './WorldMultiplayerBindings';
+import { createWorldPlayerSystems } from './WorldPlayerBindings';
 
 export interface IWorldSystemsHost {
   scene: Phaser.Scene;
@@ -123,43 +120,18 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
   let multiplayerSync!: MultiplayerSyncController;
   let monsterCampSystem!: MonsterCampSystem;
   let fieldMonsterSystem!: FieldMonsterSystem;
-  let playerProgressionSystem!: PlayerProgressionSystem;
-
-  const projectileSystem = new ProjectileSystem(host.scene);
-
   let waveSystem!: WaveSystem;
 
-  const playerHealthSystem = new PlayerHealthSystem({
-    scene: host.scene,
-    isSceneAlive: host.isSceneAlive,
-    getPlayerPosition: host.getPlayerPosition,
-    respawnPlayerAt: host.respawnPlayerAt,
-    onPlayerFaintedVisual: host.onPlayerFaintedVisual,
-    onPlayerHitVisual: host.onPlayerHitVisual,
-    onPlayerDamagedShake: () => host.combatFeedbackRenderer.triggerPlayerDamagedShake(),
-    onPlayerHealed: (px, py) => host.effectsRenderer.playHealEffectAt(px, py),
-    getDamageReductionPercent: () => playerProgressionSystem?.getDamageReductionPercent() ?? 0,
-    onThornsReflect: (px, py) => {
-      const thorns = playerProgressionSystem?.getThornsDamage() ?? 0;
-      if (thorns <= 0 || !waveSystem) return;
-      const mv = waveSystem.getSpatialGrid().findNearestInRadius(px, py, 115);
-      if (!mv) return;
-      waveSystem.damageMonster(
-        mv.monster.id,
-        thorns,
-        `${host.getPlayerName()} (가시반사)`,
-        false,
-        host.getPlayerId()
-      );
-      host.effectsRenderer.showFloatingText(
-        mv.monster.x,
-        mv.monster.y - 30,
-        `🛡️ 반사 -${thorns}`,
-        '#34d399'
-      );
-    },
-    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
-  });
+  const projectileSystem = new ProjectileSystem(host.scene);
+  const { playerHealthSystem, playerProgressionSystem } = createWorldPlayerSystems(
+    host,
+    projectileSystem,
+    {
+      getWaveSystem: () => waveSystem,
+      tryDamageCampCoreInRadius: (x, y, r, dmg) =>
+        monsterCampSystem?.damageCampCoresInRadius(x, y, r, dmg, true) ?? false,
+    }
+  );
 
   const coreGemSystem = new CoreGemSystem({
     getIslands: host.getIslands,
@@ -265,8 +237,8 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       broadcastMonsterPlayerAttack: (payload) =>
         multiplayerSync?.broadcastMonsterPlayerAttack(payload),
       broadcastThreatAdded: (amount) => multiplayerSync?.broadcastThreatAdded(amount),
-      broadcastThreatSync: (threatPercent, waveCount, bossWaveCount) =>
-        multiplayerSync?.broadcastThreatSync(threatPercent, waveCount, bossWaveCount),
+      broadcastThreatSync: (payload) => multiplayerSync?.broadcastThreatSync(payload),
+      broadcastDungeonPortalSync: (portal) => multiplayerSync?.broadcastDungeonPortalSync(portal),
       emitThreatOrb: (worldX, worldY, amount) =>
         host.effectsRenderer.emitThreatOrbFromWorld(worldX, worldY, amount),
       onMonstersChanged: host.onMonstersChanged,
@@ -274,70 +246,27 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     coreGemSystem
   );
 
-  playerProgressionSystem = new PlayerProgressionSystem({
-    scene: host.scene,
-    getPlayerId: host.getPlayerId,
-    getPlayerName: host.getPlayerName,
-    getPlayerPosition: host.getPlayerPosition,
-    getPlayerDirection: host.getPlayerDirection,
-    isPlayerFainted: () => playerHealthSystem.isFainted(),
-    getGold: () => host.getInventory().gold,
-    spendGold: (amount) => host.spendResources(0, 0, amount),
-    addGold: (amount) => host.addResources(0, 0, amount),
-    onMaxHpChanged: (newMaxHp, healDelta) => playerHealthSystem.setMaxHp(newMaxHp, healDelta),
-    healPlayer: (amount) => playerHealthSystem.healPlayer(amount),
-    onClassChangedVisual: (classId) => host.onPlayerClassVisualChanged?.(classId),
-    getMonsterVisuals: () => waveSystem.getMonsterVisuals(),
-    queryMonstersInRadius: (x, y, r) => waveSystem.getSpatialGrid().queryRadius(x, y, r),
-    damageMonster: (id, dmg, attacker, attackerId, hitMeta) =>
-      waveSystem.damageMonster(id, dmg, attacker, false, attackerId, hitMeta),
-    tryDamageCampCoreInRadius: (x, y, r, dmg) =>
-      monsterCampSystem?.damageCampCoresInRadius(x, y, r, dmg, true) ?? false,
-    projectileSystem,
-    showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
-    playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
-    playSkillEffect: (fxCtx) => {
-      const chargeMs = SKILL_FX_STYLE_CONFIG[fxCtx.classId].chargeDurationMs;
-      if (chargeMs > 0) {
-        host.onPlayerCastVisual?.(chargeMs);
-      }
-      host.skillEffectsRenderer.playClassSkill(fxCtx);
-    },
-    triggerSkillSurge: host.triggerSkillSurge,
-    getJobHallStatus: () => {
-      const pos = host.getPlayerPosition();
-      const status = checkJobHallProximity(pos.x, pos.y, host.getConstructedBuildings());
-      return { hasBuilt: status.hasBuilt, isNear: status.isNear };
-    },
-    getToolShopStatus: () => {
-      const pos = host.getPlayerPosition();
-      const status = checkToolShopProximity(pos.x, pos.y, host.getConstructedBuildings());
-      return { hasBuilt: status.hasBuilt, isNear: status.isNear };
-    },
-    getPlayerHpState: () => playerHealthSystem.getState(),
-    playLevelUpEffect: (x, y, level, delayMs) =>
-      host.celebrationEffects.playLevelUpEffect(x, y, level, delayMs),
-    playClassAdvancementEffect: (x, y, classId) =>
-      host.celebrationEffects.playClassAdvancementEffect(x, y, classId),
-  });
-
   const campFortification = new CampFortificationSystem({
     scene: host.scene,
     wallColliders: host.wallColliders,
     projectileSystem,
+    isHost: () => waveSystem.getIsHost(),
+    getLocalPlayerId: host.getPlayerId,
     getLocalPlayerPosition: host.getPlayerPosition,
     isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
     damageLocalPlayer: (dmg, attacker) => playerHealthSystem.damagePlayer(dmg, attacker),
-    onStructureDamaged: (territoryId) =>
-      waveSystem.aggroCampMonsters(territoryId, host.getPlayerId()),
-    onStructureHitFeedback: (x, y, isSkill) =>
+    onStructureDamaged: (territoryId, attackerId) =>
+      waveSystem.aggroCampMonsters(territoryId, attackerId ?? host.getPlayerId()),
+    onStructureHitFeedback: (x, y, isSkill, isLocalAttack = true) =>
       host.combatFeedbackRenderer.playHitImpact({
         x,
         y,
         damage: 0,
         isSkill,
-        isLocalPlayerAttack: true,
+        isLocalPlayerAttack: isLocalAttack,
       }),
+    onStructureSyncBroadcast: (payload) => multiplayerSync?.broadcastCampStructureHpSync(payload),
+    onRemoteStructureHit: (payload) => multiplayerSync?.broadcastCampStructureHit(payload),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     shakeObject: (target) => host.effectsRenderer.shakeObject(target),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
@@ -347,6 +276,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     scene: host.scene,
     isHuntingMode: host.isHuntingMode,
     isHost: () => waveSystem.getIsHost(),
+    getLocalPlayerId: host.getPlayerId,
     getDifficultyConfig: host.getDifficultyConfig,
     getIslands: host.getIslands,
     getMonsters: () => waveSystem.getMonsterVisuals(),
@@ -357,16 +287,19 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     grantRewardItem: (item) => playerProgressionSystem.grantRewardItem(item),
     playChestDropAt: (x, y, item, onOpened) =>
       host.lootChestRenderer.playDropAnimation({ x, y, item, onOpened }),
-    onCampCoreDamaged: (territoryId) =>
-      waveSystem.aggroCampMonsters(territoryId, host.getPlayerId()),
-    onCampCoreHitFeedback: (x, y, isSkill) =>
+    onCampCoreDamaged: (territoryId, attackerId) =>
+      waveSystem.aggroCampMonsters(territoryId, attackerId ?? host.getPlayerId()),
+    onCampCoreHitFeedback: (x, y, isSkill, isLocalAttack = true) =>
       host.combatFeedbackRenderer.playHitImpact({
         x,
         y,
         damage: 0,
         isSkill,
-        isLocalPlayerAttack: true,
+        isLocalPlayerAttack: isLocalAttack,
       }),
+    broadcastCampCoreHit: (payload) => multiplayerSync?.broadcastCampCoreHit(payload),
+    broadcastCampCoreSync: (payload) => multiplayerSync?.broadcastCampCoreSync(payload),
+    broadcastCampFullSync: (payload) => multiplayerSync?.broadcastCampFullSync(payload),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
     shakeObject: (target) => host.effectsRenderer.shakeObject(target),
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
@@ -403,92 +336,13 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     waveSystem
   );
 
-  multiplayerSync = new MultiplayerSyncController({
-    scene: host.scene,
-    getPlayerId: host.getPlayerId,
-    getPlayerName: host.getPlayerName,
-    getPlayerColor: host.getPlayerColor,
-    getRoomId: host.getRoomId,
-    getRoomMode: host.getRoomMode,
-    isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
-    getLocalPlayerState: host.getLocalPlayerState,
-    onOnlineCountChanged: (count, hasNewPeer) => {
-      waveSystem.setOnlineCount(count);
-      monsterCampSystem.setOnlineCount(count);
-      fieldMonsterSystem.setOnlineCount(count);
-      if (waveSystem.getIsHost() && hasNewPeer) {
-        const ws = waveSystem.getWaveState();
-        multiplayerSync?.broadcastThreatSync(ws.threatPercent, ws.waveCount, ws.bossWaveCount);
-        if (count > 1) {
-          waveSystem.broadcastFullMonstersSync(true);
-        }
-      }
-    },
-    onHostStatusChanged: (isHost) => {
-      waveSystem.setHostMode(isHost);
-      if (isHost) {
-        monsterCampSystem.ensureHostGarrisonsSpawned();
-        fieldMonsterSystem.ensureHostInitialized();
-        waveSystem.broadcastFullMonstersSync(true);
-      } else {
-        fieldMonsterSystem.resetForGuest();
-        monsterCampSystem.resetGuestGarrisonState();
-      }
-    },
-    onRemoteEntityHit: (entityId, damage) =>
-      host.resourceEntityRenderer.handleRemoteHit(entityId, damage),
-    onRemoteEntityRespawned: (entity) =>
-      host.resourceEntityRenderer.applyRemoteEntityRespawn(entity),
-    onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) =>
-      host.unlockIslandLocally(islandId, unlockedBy, false, ownerId),
-    onRemoteVillageUpgraded: (territoryId) => host.upgradeVillageRemotely(territoryId),
-    onRemoteBuildingConstructed: host.onRemoteBuildingConstructed,
-    onRemoteWaveSpawned: (isBossWave) => {
-      sound.playBreak();
-      GameEvents.emit(
-        'game-alert',
-        isBossWave
-          ? '👹 외곽 영지에서 보스 군단 침공이 시작되었습니다!'
-          : '🧟 외곽 영지 경계에서 마물 웨이브가 진입했습니다!'
-      );
-    },
-    onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
-      waveSystem.handleRemoteWaveSummonRequest(isBossWave, isEarlySummon),
-    onRemoteMonstersSync: (payload) => waveSystem.applyRemoteMonstersSync(payload),
-    onRemoteMonstersDeltaSync: (payload) => waveSystem.applyRemoteMonstersDeltaSync(payload),
-    onRemoteMonstersSyncRequest: () => waveSystem.handleRemoteMonstersSyncRequest(),
-    onRemoteMonsterHit: (payload) => {
-      if (waveSystem.getIsHost()) {
-        waveSystem.damageMonster(
-          payload.monsterId,
-          payload.damage,
-          payload.attackerName,
-          true,
-          payload.attackerId,
-          { isCrit: payload.isCrit, isSkill: payload.isSkill }
-        );
-      }
-    },
-    onRemoteMonsterPlayerAttack: (payload) => waveSystem.handleRemoteMonsterPlayerAttack(payload),
-    onRemoteThreatAdded: (amount) => {
-      if (waveSystem.getIsHost()) {
-        waveSystem.addThreat(amount, false);
-      }
-    },
-    onRemoteThreatSync: (threatPercent, waveCount, bossWaveCount) =>
-      waveSystem.applyRemoteThreatSync(threatPercent, waveCount, bossWaveCount),
-    onRemoteTerritoryLost: (territoryId, reason) =>
-      coreGemSystem.loseTerritory(territoryId, reason, false),
-    onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
-      host.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta),
-    onRemoteBuildingDestroyed: (buildingId) => host.onRemoteBuildingDestroyed?.(buildingId),
-    onRemoteCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) =>
-      coreGemSystem.applyRemoteCoreHpSync(territoryId, coreHp, coreMaxHp, damageDelta),
-    onRemoteRepairTerritoryRequest: (territoryId) =>
-      host.onRemoteRepairTerritoryRequest?.(territoryId),
-    onRemoteWorldDefenseFailed: () => {
-      host.onCoreDestroyed?.();
-    },
+  multiplayerSync = createWorldMultiplayerSync(host, {
+    coreGemSystem,
+    playerHealthSystem,
+    campFortification,
+    monsterCampSystem,
+    fieldMonsterSystem,
+    waveSystem,
   });
   multiplayerSync.setup();
 

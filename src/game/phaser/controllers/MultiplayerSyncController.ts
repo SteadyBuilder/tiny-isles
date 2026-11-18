@@ -1,7 +1,15 @@
 import Phaser from 'phaser';
 import { PLAYER_SYNC_CONFIG } from '../../../data/worldRules';
 import {
+  CampCoreHitPayload,
+  CampCoreSyncPayload,
+  CampFullSyncPayload,
+  CampStructureHitPayload,
+  CampStructureHpSyncPayload,
+} from '../../../types/campSync';
+import {
   ConstructedBuilding,
+  DungeonPortalState,
   Entity,
   Player,
   PlayerAction,
@@ -14,6 +22,7 @@ import {
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
   MonstersFullSyncPayload,
+  ThreatSyncPayload,
 } from '../../../types/monsterSync';
 import { RoomMode } from '../../../types/room';
 import { RemotePlayerRenderer } from '../renderers/RemotePlayerRenderer';
@@ -48,7 +57,13 @@ export interface IMultiplayerSyncContext {
   onRemoteMonsterHit: (payload: MonsterHitPayload) => void;
   onRemoteMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   onRemoteThreatAdded?: (amount: number) => void;
-  onRemoteThreatSync?: (threatPercent: number, waveCount: number, bossWaveCount: number) => void;
+  onRemoteThreatSync?: (payload: ThreatSyncPayload) => void;
+  onRemoteDungeonPortalSync?: (portal: DungeonPortalState | null) => void;
+  onRemoteCampStructureHit?: (payload: CampStructureHitPayload) => void;
+  onRemoteCampCoreHit?: (payload: CampCoreHitPayload) => void;
+  onRemoteCampStructureHpSync?: (payload: CampStructureHpSyncPayload) => void;
+  onRemoteCampCoreSync?: (payload: CampCoreSyncPayload) => void;
+  onRemoteCampFullSync?: (payload: CampFullSyncPayload) => void;
   onRemoteTerritoryLost: (territoryId: number, reason: string) => void;
   onRemoteBuildingHpSync?: (
     buildingId: string,
@@ -120,8 +135,13 @@ export class MultiplayerSyncController {
       onRemoteMonsterHit: (payload) => this.ctx.onRemoteMonsterHit(payload),
       onRemoteMonsterPlayerAttack: (payload) => this.ctx.onRemoteMonsterPlayerAttack?.(payload),
       onRemoteThreatAdded: (amount) => this.ctx.onRemoteThreatAdded?.(amount),
-      onRemoteThreatSync: (threatPercent, waveCount, bossWaveCount) =>
-        this.ctx.onRemoteThreatSync?.(threatPercent, waveCount, bossWaveCount),
+      onRemoteThreatSync: (payload) => this.ctx.onRemoteThreatSync?.(payload),
+      onRemoteDungeonPortalSync: (portal) => this.ctx.onRemoteDungeonPortalSync?.(portal),
+      onRemoteCampStructureHit: (payload) => this.ctx.onRemoteCampStructureHit?.(payload),
+      onRemoteCampCoreHit: (payload) => this.ctx.onRemoteCampCoreHit?.(payload),
+      onRemoteCampStructureHpSync: (payload) => this.ctx.onRemoteCampStructureHpSync?.(payload),
+      onRemoteCampCoreSync: (payload) => this.ctx.onRemoteCampCoreSync?.(payload),
+      onRemoteCampFullSync: (payload) => this.ctx.onRemoteCampFullSync?.(payload),
       onRemoteTerritoryLost: (territoryId, reason) =>
         this.ctx.onRemoteTerritoryLost(territoryId, reason),
       onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
@@ -267,12 +287,32 @@ export class MultiplayerSyncController {
     this.router.emit('threat_added', 'threat_added', { amount });
   }
 
-  public broadcastThreatSync(
-    threatPercent: number,
-    waveCount: number,
-    bossWaveCount: number
-  ): void {
-    this.router.emit('threat_sync', 'threat_sync', { threatPercent, waveCount, bossWaveCount });
+  public broadcastThreatSync(payload: ThreatSyncPayload): void {
+    this.router.emit('threat_sync', 'threat_sync', payload);
+  }
+
+  public broadcastDungeonPortalSync(portal: DungeonPortalState | null): void {
+    this.router.emit('dungeon_portal_sync', 'dungeon_portal_sync', { portal });
+  }
+
+  public broadcastCampStructureHit(payload: CampStructureHitPayload): void {
+    this.router.emit('camp_structure_hit', 'camp_structure_hit', payload);
+  }
+
+  public broadcastCampCoreHit(payload: CampCoreHitPayload): void {
+    this.router.emit('camp_core_hit', 'camp_core_hit', payload);
+  }
+
+  public broadcastCampStructureHpSync(payload: CampStructureHpSyncPayload): void {
+    this.router.emit('camp_structure_hp_sync', 'camp_structure_hp_sync', payload);
+  }
+
+  public broadcastCampCoreSync(payload: CampCoreSyncPayload): void {
+    this.router.emit('camp_core_sync', 'camp_core_sync', payload);
+  }
+
+  public broadcastCampFullSync(payload: CampFullSyncPayload): void {
+    this.router.emit('camp_full_sync', 'camp_full_sync', payload);
   }
 
   public broadcastTerritoryLost(territoryId: number): void {
