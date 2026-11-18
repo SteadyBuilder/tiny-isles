@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { PLAYER_CLASS_DEFINITIONS } from '../../data/classes';
+import { HUD_ACTION_SPRITES } from '../../data/hudIcons';
 import { GameEvents } from '../../game/events/gameEvents';
 import { sound } from '../../lib/sound';
 import { GESTURE_BLOCK_PROPS, attachGestureBlock } from '../../lib/touchGestureGuard';
 import { DashCooldownState, PlayerProgressionState } from '../../types/game';
+import { CooldownActionButton } from '../hud/CooldownActionButton';
 
 export interface PixelActionButtonsProps {
   onAction: () => void;
@@ -29,13 +31,12 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
   const actionZoneRef = useRef<HTMLDivElement | null>(null);
 
   const classDef = progression ? PLAYER_CLASS_DEFINITIONS[progression.classId] : null;
-  const skillCooldownSec = progression
-    ? Math.max(0, Math.ceil(progression.skillCooldownRemainingMs / 1000))
-    : 0;
-  const isSkillOnCooldown = skillCooldownSec > 0;
+  const skillCooldownMs = progression?.skillCooldownRemainingMs ?? 0;
+  const skillCooldownMaxMs = progression?.skillCooldownMaxMs ?? classDef?.skillCooldownMs ?? 7000;
+  const isSkillOnCooldown = skillCooldownMs > 0;
 
   const dashCooldownMs = dashState?.cooldownRemainingMs ?? 0;
-  const dashCooldownSec = dashCooldownMs > 0 ? (dashCooldownMs / 1000).toFixed(1) : null;
+  const dashCooldownMaxMs = dashState?.cooldownMaxMs ?? 1200;
   const isDashDisabled = dashCooldownMs > 0 || Boolean(dashState?.isDashing);
 
   useEffect(() => {
@@ -204,11 +205,20 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
           </button>
         )}
 
-        {classDef && (
-          <button
+        {classDef && progression && (
+          <CooldownActionButton
             id="mobile-skill-btn"
-            type="button"
-            disabled={isSkillOnCooldown}
+            cooldownRemainingMs={skillCooldownMs}
+            cooldownMaxMs={skillCooldownMaxMs}
+            spritePath={classDef.skillSpritePath}
+            alt={classDef.skillName}
+            ariaLabel={`${classDef.skillName} 스킬 버튼`}
+            title={`${classDef.skillName}: ${classDef.skillDescription}`}
+            accentTheme="blue"
+            shape="round"
+            sizeClass="w-10 h-10 shadow-[0_4px_6px_rgba(0,0,0,0.75)]"
+            iconSizeClass="w-6 h-6"
+            isPressed={isSkillPressed}
             onTouchStart={(e) => {
               e.stopPropagation();
               triggerSkillPress();
@@ -224,93 +234,43 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
             onPointerUp={() => setIsSkillPressed(false)}
             onPointerLeave={() => setIsSkillPressed(false)}
             onPointerCancel={() => setIsSkillPressed(false)}
-            className={`relative w-10 h-10 rounded-full flex items-center justify-center select-none touch-none transition-[filter] ${
-              isSkillOnCooldown
-                ? 'cursor-not-allowed grayscale opacity-75'
-                : 'hover:brightness-110'
-            }`}
-            aria-label={`${classDef.skillName} 스킬 버튼`}
-            title={`${classDef.skillName}: ${classDef.skillDescription}`}
-          >
-            <img
-              src={
-                isSkillPressed && !isSkillOnCooldown
-                  ? '/assets/ui/round_blue_pressed.png'
-                  : '/assets/ui/round_blue.png'
-              }
-              alt=""
-              className="w-full h-full object-contain pixel-art drop-shadow-[0_4px_6px_rgba(0,0,0,0.75)]"
-            />
-            <span
-              className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-75 ${
-                isSkillPressed && !isSkillOnCooldown ? 'translate-y-[2px]' : '-translate-y-[1px]'
-              }`}
-            >
-              <span className="text-base leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
-                {classDef.skillIcon}
-              </span>
-            </span>
-            {isSkillOnCooldown && (
-              <span className="absolute inset-1 rounded-full bg-black/60 flex items-center justify-center text-[10px] font-black text-[#fca5a5] pixel-btn-shadow pointer-events-none">
-                {skillCooldownSec}s
-              </span>
-            )}
-          </button>
+          />
         )}
       </div>
 
       <div className="flex items-end gap-2">
-        <button
-          id="mobile-dash-btn"
-          type="button"
-          disabled={isDashDisabled}
-          onTouchStart={(e) => {
-            e.stopPropagation();
-            triggerDashPress();
-          }}
-          onTouchEnd={() => setIsDashPressed(false)}
-          onTouchCancel={() => setIsDashPressed(false)}
-          onPointerDown={(e) => {
-            if (e.pointerType === 'touch') return;
-            e.preventDefault();
-            e.stopPropagation();
-            triggerDashPress();
-          }}
-          onPointerUp={() => setIsDashPressed(false)}
-          onPointerLeave={() => setIsDashPressed(false)}
-          onPointerCancel={() => setIsDashPressed(false)}
-          className={`relative w-11 h-11 rounded-full flex items-center justify-center select-none touch-none transition-[filter] mb-1 ${
-            isDashDisabled
-              ? 'cursor-not-allowed grayscale opacity-75'
-              : 'hover:brightness-110'
-          }`}
-          aria-label="순간 대시 버튼"
-          title="순간 대시 회피기 (무적 판정)"
-        >
-          <img
-            src={
-              isDashPressed && !isDashDisabled
-                ? '/assets/ui/round_blue_pressed.png'
-                : '/assets/ui/round_blue.png'
-            }
-            alt=""
-            className="w-full h-full object-contain pixel-art drop-shadow-[0_4px_6px_rgba(0,0,0,0.75)]"
+        <div className="mb-1">
+          <CooldownActionButton
+            id="mobile-dash-btn"
+            disabled={Boolean(dashState?.isDashing)}
+            cooldownRemainingMs={dashCooldownMs}
+            cooldownMaxMs={dashCooldownMaxMs}
+            spritePath={HUD_ACTION_SPRITES.dash}
+            alt="순간 대시"
+            ariaLabel="순간 대시 버튼"
+            title="순간 대시 회피기 (무적 판정)"
+            accentTheme="cyan"
+            shape="round"
+            sizeClass="w-11 h-11 shadow-[0_4px_6px_rgba(0,0,0,0.75)]"
+            iconSizeClass="w-6 h-6"
+            isPressed={isDashPressed}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              triggerDashPress();
+            }}
+            onTouchEnd={() => setIsDashPressed(false)}
+            onTouchCancel={() => setIsDashPressed(false)}
+            onPointerDown={(e) => {
+              if (e.pointerType === 'touch') return;
+              e.preventDefault();
+              e.stopPropagation();
+              triggerDashPress();
+            }}
+            onPointerUp={() => setIsDashPressed(false)}
+            onPointerLeave={() => setIsDashPressed(false)}
+            onPointerCancel={() => setIsDashPressed(false)}
           />
-          <span
-            className={`absolute inset-0 flex flex-col items-center justify-center pointer-events-none transition-transform duration-75 ${
-              isDashPressed && !isDashDisabled ? 'translate-y-[2px]' : '-translate-y-[1px]'
-            }`}
-          >
-            <span className="text-base leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
-              💨
-            </span>
-          </span>
-          {dashCooldownSec && (
-            <span className="absolute inset-1 rounded-full bg-black/65 flex items-center justify-center text-[10px] font-black text-[#67e8f9] pixel-btn-shadow pointer-events-none tabular-nums">
-              {dashCooldownSec}
-            </span>
-          )}
-        </button>
+        </div>
 
         <button
           type="button"

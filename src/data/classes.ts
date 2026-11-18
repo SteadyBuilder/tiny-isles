@@ -52,6 +52,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     isPiercing: false,
     skillName: '전력의 일격',
     skillIcon: '💥',
+    skillSpritePath: '/assets/ui/skills/skill_pawn.png',
     skillDescription: '주변 마물에게 기본 공격력의 200% 물리 피해를 입힙니다.',
     skillCooldownMs: 7000,
     skillDamageMultiplier: 2.0,
@@ -75,6 +76,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     isPiercing: false,
     skillName: '대지 분쇄 회전참',
     skillIcon: '🌪️',
+    skillSpritePath: '/assets/ui/skills/skill_guardian.png',
     skillDescription:
       '반경 220px 내의 모든 마물을 동시에 베어 넘기고 내 체력을 25 회복합니다.',
     skillCooldownMs: 6500,
@@ -99,6 +101,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     isPiercing: true,
     skillName: '초음속 관통 돌격',
     skillIcon: '⚡',
+    skillSpritePath: '/assets/ui/skills/skill_lancer.png',
     skillDescription:
       '전방으로 돌진하며 반경 240px 내 마물과 부락 본진에 320% 관통 피해를 입힙니다.',
     skillCooldownMs: 5500,
@@ -124,6 +127,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     isPiercing: false,
     skillName: '천공의 멀티샷 (화살비)',
     skillIcon: '🌧️',
+    skillSpritePath: '/assets/ui/skills/skill_ranger.png',
     skillDescription:
       '사거리 내 최대 10마리의 마물에게 동시에 강화 화살을 발사하여 260% 피해를 입힙니다.',
     skillCooldownMs: 6000,
@@ -149,6 +153,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     isPiercing: false,
     skillName: '메테오 노바 & 성광 치유',
     skillIcon: '☄️',
+    skillSpritePath: '/assets/ui/skills/skill_archmage.png',
     skillDescription:
       '반경 280px 내의 마물 대군에게 340% 화염 폭발 피해를 입히고 내 체력을 40 회복합니다.',
     skillCooldownMs: 7500,

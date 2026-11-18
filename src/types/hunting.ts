@@ -97,6 +97,7 @@ export interface PlayerClassDefinition {
   isPiercing: boolean;
   skillName: string;
   skillIcon: string;
+  skillSpritePath: string;
   skillDescription: string;
   skillCooldownMs: number;
   skillDamageMultiplier: number;

@@ -2,53 +2,40 @@ import React from 'react';
 import { POTION_LIST } from '../../data/potions';
 import { GameEvents } from '../../game/events/gameEvents';
 import { PotionInventory } from '../../types/hunting';
+import { CooldownActionButton } from './CooldownActionButton';
 
 interface PotionQuickSlotProps {
   potions: PotionInventory;
   cooldownRemainingMs: number;
+  compact?: boolean;
 }
 
 export const PotionQuickSlot: React.FC<PotionQuickSlotProps> = ({
   potions,
   cooldownRemainingMs,
+  compact = false,
 }) => {
-  const isCoolingDown = cooldownRemainingMs > 0;
-  const cdSec = isCoolingDown ? (cooldownRemainingMs / 1000).toFixed(1) : null;
-
   return (
-    <div className="flex items-center gap-1">
+    <div className={`flex items-center ${compact ? 'gap-1' : 'gap-1.5'}`}>
       {POTION_LIST.map((potion) => {
         const count = potions?.[potion.id] ?? 0;
-        const disabled = count <= 0 || isCoolingDown;
 
         return (
-          <button
+          <CooldownActionButton
             key={potion.id}
-            type="button"
-            disabled={disabled}
             onClick={() => GameEvents.emit('use-potion', potion.id)}
+            isOutOfStock={count <= 0}
+            cooldownRemainingMs={count > 0 ? cooldownRemainingMs : 0}
+            cooldownMaxMs={potion.cooldownMs}
+            spritePath={potion.spritePath}
+            alt={potion.name}
+            hotkey={compact ? undefined : potion.hotkey}
+            badgeText={`×${count}`}
             title={`${potion.name} (+${potion.healAmount} HP) · 단축키 [${potion.hotkey}]`}
-            className={`relative px-1.5 py-0.5 md:px-2 md:py-1 rounded-md border text-[10px] md:text-[11px] font-black flex items-center gap-1 transition-transform active:scale-95 ${
-              count <= 0
-                ? 'bg-[#1c130d]/80 border-[#4a3525] text-[#78716c] cursor-not-allowed'
-                : isCoolingDown
-                  ? 'bg-[#291d14] border-[#785e42] text-[#cbd5e1] cursor-not-allowed'
-                  : 'bg-[#14532d]/90 border-[#4ade80] text-[#dcfce7] hover:brightness-110'
-            }`}
-          >
-            <span className="hidden md:inline px-1 rounded bg-black/45 text-[9px] text-[#86efac]">
-              {potion.hotkey}
-            </span>
-            <img
-              src={potion.spritePath}
-              alt={potion.name}
-              className="w-4 h-4 object-contain shrink-0 [image-rendering:pixelated]"
-            />
-            <span className="tabular-nums">×{count}</span>
-            {cdSec && count > 0 && (
-              <span className="text-[9px] text-[#fca5a5] tabular-nums">{cdSec}s</span>
-            )}
-          </button>
+            accentTheme="emerald"
+            sizeClass={compact ? 'w-9 h-9' : 'w-12 h-12'}
+            iconSizeClass={compact ? 'w-5 h-5' : 'w-7 h-7'}
+          />
         );
       })}
     </div>
