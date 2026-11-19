@@ -169,6 +169,41 @@ export function nearestPointOnCollisionBox(
 }
 
 /**
+ * Computes a single solid perimeter wall collision box (`slotIndex` 0..3, gate closed).
+ * Shared by both player perimeter walls (against monsters) and monster camp perimeter walls
+ * (against players) so both sides enclose the exact same territory perimeter.
+ */
+export function getSolidPerimeterWallCollisionBox(
+  x: number,
+  y: number,
+  slotIndex: number
+): CollisionBox | null {
+  const thickness = WALL_COLLIDER_THICKNESS;
+  const halfThick = thickness / 2;
+  const span = getPerimeterWallSpan(slotIndex);
+
+  if (span && (slotIndex === 0 || slotIndex === 1)) {
+    return {
+      x: x + span.minEdge,
+      y: y + 4 - halfThick,
+      w: span.maxEdge - span.minEdge,
+      h: thickness,
+    };
+  }
+
+  if (span && (slotIndex === 2 || slotIndex === 3)) {
+    return {
+      x: x - halfThick,
+      y: y + span.minEdge,
+      w: thickness,
+      h: span.maxEdge - span.minEdge,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Computes a single solid collision box for monsters (`wood_wall` or `stone_wall`).
  * Unlike player colliders, the central gate is treated as closed for monsters,
  * forcing them to break through the wall/gate before entering.
@@ -178,26 +213,9 @@ export function getMonsterWallCollisionBox(cb: ConstructedBuilding): CollisionBo
     return null;
   }
 
-  const thickness = WALL_COLLIDER_THICKNESS;
-  const halfThick = thickness / 2;
-  const span = getPerimeterWallSpan(cb.slotIndex);
-
-  if (span && (cb.slotIndex === 0 || cb.slotIndex === 1)) {
-    return {
-      x: cb.x + span.minEdge,
-      y: cb.y + 4 - halfThick,
-      w: span.maxEdge - span.minEdge,
-      h: thickness,
-    };
-  }
-
-  if (span && (cb.slotIndex === 2 || cb.slotIndex === 3)) {
-    return {
-      x: cb.x - halfThick,
-      y: cb.y + span.minEdge,
-      w: thickness,
-      h: span.maxEdge - span.minEdge,
-    };
+  const perimeterBox = getSolidPerimeterWallCollisionBox(cb.x, cb.y, cb.slotIndex);
+  if (perimeterBox) {
+    return perimeterBox;
   }
 
   const innerW = 88;

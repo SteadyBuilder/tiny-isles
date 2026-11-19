@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { MonsterCampState } from '../../../types/game';
-import { ySortDepth } from '../../depthLayers';
+import { CollisionBox } from '../../constants';
+import { CONSTRUCTED_DEPTH_BIAS, ySortDepth } from '../../depthLayers';
+import { PerimeterWallStyle, renderPerimeterWallSprites } from './PerimeterWallRenderer';
 
 export interface CampVisualNode {
   camp: MonsterCampState;
@@ -17,6 +19,7 @@ export interface CampStructureVisualResult {
   container: Phaser.GameObjects.Container;
   hpBar: Phaser.GameObjects.Graphics;
   collider?: Phaser.Physics.Arcade.Sprite;
+  extraVisuals?: Phaser.GameObjects.Image[];
 }
 
 /**
@@ -133,46 +136,61 @@ export function createCampStructureVisual(params: {
   scene: Phaser.Scene;
   wallColliders?: Phaser.Physics.Arcade.StaticGroup;
   kind: 'wall' | 'tower';
+  slotIndex?: number;
   x: number;
   y: number;
   spriteKey: string;
   isHoriz: boolean;
   ring: 1 | 2 | 3 | 4;
+  collisionBox: CollisionBox;
   refreshCollider?: boolean;
 }): CampStructureVisualResult {
   const { scene } = params;
   const container = scene.add.container(params.x, params.y);
-  container.setDepth(ySortDepth(params.y, params.kind === 'tower' ? 140 : 60));
+  const depthBias = params.kind === 'tower' ? 140 : CONSTRUCTED_DEPTH_BIAS.WALL;
+  container.setDepth(ySortDepth(params.y, depthBias));
 
-  const directionalKey =
-    params.kind === 'wall'
-      ? `${params.spriteKey}${params.isHoriz ? 'H' : 'V'}`
-      : params.spriteKey;
-  const resolvedKey = scene.textures.exists(directionalKey) ? directionalKey : params.spriteKey;
-  const tex = scene.textures.exists(resolvedKey) ? resolvedKey : 'tower';
-  const sprite = scene.add.image(0, params.kind === 'tower' ? -18 : -8, tex);
+  const tint = params.ring >= 3 ? 0xc084fc : 0xfca5a5;
+  const extraVisuals: Phaser.GameObjects.Image[] = [];
 
   if (params.kind === 'tower') {
+    const tex = scene.textures.exists(params.spriteKey) ? params.spriteKey : 'tower';
+    const sprite = scene.add.image(0, -18, tex);
     sprite.setDisplaySize(96, 136);
-    sprite.setTint(params.ring >= 3 ? 0xc084fc : 0xfca5a5);
+    sprite.setTint(tint);
+    container.add(sprite);
+  } else if (params.slotIndex !== undefined) {
+    const style: PerimeterWallStyle =
+      params.spriteKey === 'woodPalisade' ? 'woodPalisade' : 'stoneWall';
+    renderPerimeterWallSprites({
+      scene,
+      container,
+      slotIndex: params.slotIndex,
+      style,
+      extraVisuals,
+      tint,
+    });
   } else {
+    const directionalKey = `${params.spriteKey}${params.isHoriz ? 'H' : 'V'}`;
+    const resolvedKey = scene.textures.exists(directionalKey) ? directionalKey : params.spriteKey;
+    const tex = scene.textures.exists(resolvedKey) ? resolvedKey : 'tower';
+    const sprite = scene.add.image(0, -8, tex);
     const w = params.isHoriz ? 165 : 52;
     const h = params.isHoriz ? 58 : 145;
     sprite.setDisplaySize(w, h);
-    sprite.setTint(params.ring >= 3 ? 0xc084fc : 0xfca5a5);
+    sprite.setTint(tint);
+    container.add(sprite);
   }
-  container.add(sprite);
 
   const hpBar = scene.add.graphics();
   container.add(hpBar);
 
   let collider: Phaser.Physics.Arcade.Sprite | undefined;
   if (params.wallColliders) {
-    const colW = params.kind === 'tower' ? 68 : params.isHoriz ? 155 : 46;
-    const colH = params.kind === 'tower' ? 64 : params.isHoriz ? 44 : 135;
-    collider = scene.physics.add.staticSprite(params.x, params.y, '');
+    const box = params.collisionBox;
+    collider = scene.physics.add.staticSprite(box.x + box.w / 2, box.y + box.h / 2, '');
     collider.setVisible(false);
-    collider.setDisplaySize(colW, colH);
+    collider.setDisplaySize(box.w, box.h);
     collider.refreshBody();
     params.wallColliders.add(collider);
     if (params.refreshCollider) {
@@ -180,7 +198,12 @@ export function createCampStructureVisual(params: {
     }
   }
 
-  return { container, hpBar, collider };
+  return {
+    container,
+    hpBar,
+    collider,
+    extraVisuals: extraVisuals.length > 0 ? extraVisuals : undefined,
+  };
 }
 
 export function updateCampStructureHpBar(

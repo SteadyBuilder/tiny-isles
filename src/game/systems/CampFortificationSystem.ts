@@ -6,11 +6,13 @@ import {
 } from '../../types/campSync';
 import { MonsterCampState } from '../../types/game';
 import { sound } from '../../lib/sound';
+import { CollisionBox } from '../constants';
 import {
   createCampStructureVisual,
   updateCampStructureHpBar,
 } from '../phaser/renderers/CampVisualHelper';
 import { CampFortificationSyncPlan } from '../utils/campSyncUtils';
+import { nearestPointOnCollisionBox } from '../wallCollisionGeometry';
 import { CampStructureSpec, buildCampFortificationSpecs } from './CampFortificationLayout';
 import { CampStructureSyncCallbacks, CampStructureSyncHelper } from './CampStructureSyncHelper';
 import { ProjectileSystem } from './ProjectileSystem';
@@ -19,6 +21,7 @@ export interface CampStructure {
   id: string;
   territoryId: number;
   kind: 'wall' | 'tower';
+  slotIndex?: number;
   x: number;
   y: number;
   hp: number;
@@ -27,9 +30,11 @@ export interface CampStructure {
   rangePx: number;
   fireRateMs: number;
   lastFireTime: number;
+  collisionBox: CollisionBox;
   container: Phaser.GameObjects.Container;
   hpBar: Phaser.GameObjects.Graphics;
   collider?: Phaser.Physics.Arcade.Sprite;
+  extraVisuals?: Phaser.GameObjects.Image[];
 }
 
 export interface ICampFortificationContext {
@@ -120,11 +125,13 @@ export class CampFortificationSystem {
       scene: this.ctx.scene,
       wallColliders: this.ctx.wallColliders,
       kind: params.kind,
+      slotIndex: params.slotIndex,
       x: params.x,
       y: params.y,
       spriteKey: params.spriteKey,
       isHoriz: params.isHoriz,
       ring: params.ring,
+      collisionBox: params.collisionBox,
       refreshCollider: false,
     });
 
@@ -132,6 +139,7 @@ export class CampFortificationSystem {
       id: params.id,
       territoryId: params.territoryId,
       kind: params.kind,
+      slotIndex: params.slotIndex,
       x: params.x,
       y: params.y,
       hp: params.hp,
@@ -140,9 +148,11 @@ export class CampFortificationSystem {
       rangePx: params.rangePx,
       fireRateMs: params.fireRateMs,
       lastFireTime: 0,
+      collisionBox: params.collisionBox,
       container: visual.container,
       hpBar: visual.hpBar,
       collider: visual.collider,
+      extraVisuals: visual.extraVisuals,
     };
     this.structures.set(params.id, st);
     updateCampStructureHpBar(st.hpBar, st.kind, st.hp, st.maxHp);
@@ -184,45 +194,57 @@ export class CampFortificationSystem {
   }
 
   public findNearestTargetPos(px: number, py: number, rangePx: number): { x: number; y: number } | null {
+    let best: { x: number; y: number; dist: number } | null = null;
     for (const st of this.structures.values()) {
       if (st.hp <= 0) continue;
-      const hitPad = st.kind === 'wall' ? 70 : 45;
-      if (Math.hypot(px - st.x, py - st.y) <= rangePx + hitPad) {
-        return { x: st.x, y: st.y };
+      const hitPad = st.kind === 'wall' ? 24 : 18;
+      const nearest = nearestPointOnCollisionBox(px, py, st.collisionBox);
+      if (nearest.dist <= rangePx + hitPad && (!best || nearest.dist < best.dist)) {
+        best = nearest;
       }
     }
-    return null;
+    return best ? { x: best.x, y: best.y } : null;
   }
 
   public tryAttackNearest(px: number, py: number, rangePx: number, damage: number): boolean {
+    let bestTarget: { st: CampStructure; x: number; y: number; dist: number } | null = null;
     for (const st of this.structures.values()) {
       if (st.hp <= 0) continue;
-      const hitPad = st.kind === 'wall' ? 70 : 45;
-      if (Math.hypot(px - st.x, py - st.y) <= rangePx + hitPad) {
-        this.applyLocalAttack(st, damage, false);
-        return true;
+      const hitPad = st.kind === 'wall' ? 24 : 18;
+      const nearest = nearestPointOnCollisionBox(px, py, st.collisionBox);
+      if (nearest.dist <= rangePx + hitPad && (!bestTarget || nearest.dist < bestTarget.dist)) {
+        bestTarget = { st, x: nearest.x, y: nearest.y, dist: nearest.dist };
       }
     }
-    return false;
+    if (!bestTarget) return false;
+    this.applyLocalAttack(bestTarget.st, damage, false, bestTarget.x, bestTarget.y);
+    return true;
   }
 
   public damageInRadius(x: number, y: number, radiusPx: number, damage: number): boolean {
     let hitAny = false;
     for (const st of Array.from(this.structures.values())) {
       if (st.hp <= 0) continue;
-      const hitPad = st.kind === 'wall' ? 60 : 40;
-      if (Math.hypot(x - st.x, y - st.y) <= radiusPx + hitPad) {
-        this.applyLocalAttack(st, damage, true);
+      const hitPad = st.kind === 'wall' ? 20 : 16;
+      const nearest = nearestPointOnCollisionBox(x, y, st.collisionBox);
+      if (nearest.dist <= radiusPx + hitPad) {
+        this.applyLocalAttack(st, damage, true, nearest.x, nearest.y);
         hitAny = true;
       }
     }
     return hitAny;
   }
 
-  private applyLocalAttack(st: CampStructure, damage: number, isSkill: boolean): void {
+  private applyLocalAttack(
+    st: CampStructure,
+    damage: number,
+    isSkill: boolean,
+    hitX = st.x,
+    hitY = st.y
+  ): void {
     const localPlayerId = this.ctx.getLocalPlayerId?.() ?? 'local';
     if (this.isHost()) {
-      this.applyAuthoritativeDamage(st, damage, isSkill, localPlayerId, true);
+      this.applyAuthoritativeDamage(st, damage, isSkill, localPlayerId, true, hitX, hitY);
       return;
     }
 
@@ -230,8 +252,8 @@ export class CampFortificationSystem {
     st.hp = Math.max(1, st.hp - damage);
     this.syncHelper.markLocalHit(st.id);
     this.ctx.shakeObject(st.container);
-    this.ctx.onStructureHitFeedback?.(st.x, st.y, isSkill, true);
-    this.ctx.showFloatingText(st.x, st.y - 36, `💥 -${damage}`, '#fb923c');
+    this.ctx.onStructureHitFeedback?.(hitX, hitY, isSkill, true);
+    this.ctx.showFloatingText(hitX, hitY - 36, `💥 -${damage}`, '#fb923c');
     updateCampStructureHpBar(st.hpBar, st.kind, st.hp, st.maxHp);
     this.ctx.onRemoteStructureHit?.({
       structureId: st.id,
@@ -262,7 +284,9 @@ export class CampFortificationSystem {
     damage: number,
     isSkill: boolean,
     attackerId: string,
-    isLocalAttack: boolean
+    isLocalAttack: boolean,
+    hitX = st.x,
+    hitY = st.y
   ): void {
     const prevHp = st.hp;
     st.hp = Math.max(0, st.hp - damage);
@@ -270,8 +294,8 @@ export class CampFortificationSystem {
     const destroyed = st.hp <= 0;
 
     this.ctx.shakeObject(st.container);
-    this.ctx.onStructureHitFeedback?.(st.x, st.y, isSkill, isLocalAttack);
-    this.ctx.showFloatingText(st.x, st.y - 36, `💥 -${damage}`, '#fb923c');
+    this.ctx.onStructureHitFeedback?.(hitX, hitY, isSkill, isLocalAttack);
+    this.ctx.showFloatingText(hitX, hitY - 36, `💥 -${damage}`, '#fb923c');
     this.ctx.onStructureDamaged?.(st.territoryId, attackerId);
     updateCampStructureHpBar(st.hpBar, st.kind, st.hp, st.maxHp);
 
@@ -286,7 +310,7 @@ export class CampFortificationSystem {
     });
 
     if (destroyed) {
-      this.ctx.playExplosionAt(st.x, st.y);
+      this.ctx.playExplosionAt(hitX, hitY);
       sound.playBreak();
       this.removeStructure(st.id);
     }
@@ -331,6 +355,9 @@ export class CampFortificationSystem {
         this.ctx.wallColliders.refresh();
       }
     }
+    st.extraVisuals?.forEach((ev) => {
+      if (ev.scene) ev.destroy();
+    });
     st.container.destroy();
     this.structures.delete(id);
     return removedCollider;

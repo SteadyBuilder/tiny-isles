@@ -18,7 +18,14 @@ export interface IViewportCullingContext {
   getAltarCardContainers: () => Phaser.GameObjects.Container[];
   getMonsterVisuals?: () => ReadonlyMap<string, MonsterVisual>;
   getCampVisuals?: () => ReadonlyMap<number, { container: Phaser.GameObjects.Container }>;
-  getCampStructures?: () => ReadonlyMap<string, { container: Phaser.GameObjects.Container }>;
+  getCampStructures?: () => ReadonlyMap<
+    string,
+    {
+      kind?: 'wall' | 'tower';
+      container: Phaser.GameObjects.Container;
+      extraVisuals?: Phaser.GameObjects.Image[];
+    }
+  >;
 }
 
 /**
@@ -107,7 +114,7 @@ export class ViewportCullingController {
     this.cullResourceEntities(viewport);
     this.cullMonsters(viewport);
     this.cullContainerMap(this.ctx.getCampVisuals?.(), viewport, 240);
-    this.cullContainerMap(this.ctx.getCampStructures?.(), viewport, 180);
+    this.cullCampStructures(viewport);
     this.cullContainers(this.ctx.getTerritoryBuildingVisuals(), viewport, 260);
     this.cullConstructedBuildings(viewport);
     this.cullContainers(this.ctx.getAltarCardContainers(), viewport, 120);
@@ -159,6 +166,24 @@ export class ViewportCullingController {
         cv.container.setVisible(inView);
         if (cv.extraVisuals) {
           for (const ev of cv.extraVisuals) {
+            if (ev.scene) ev.setVisible(inView);
+          }
+        }
+      }
+    }
+  }
+
+  private cullCampStructures(viewport: ViewportRect): void {
+    const structures = this.ctx.getCampStructures?.();
+    if (!structures || structures.size === 0) return;
+    for (const st of structures.values()) {
+      if (!st.container.scene) continue;
+      const padding = st.kind === 'wall' ? 680 : 180;
+      const inView = isPointInViewport(st.container.x, st.container.y, viewport, padding);
+      if (st.container.visible !== inView) {
+        st.container.setVisible(inView);
+        if (st.extraVisuals) {
+          for (const ev of st.extraVisuals) {
             if (ev.scene) ev.setVisible(inView);
           }
         }
