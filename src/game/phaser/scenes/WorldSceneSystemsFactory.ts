@@ -50,6 +50,10 @@ export interface IWorldSystemsHost {
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
   getPreferredHostId?: () => string | undefined;
+  isDropInJoin?: () => boolean;
+  onApplyDropInCatchUp?: (elapsedSec: number) => void;
+  onRecordDamageContribution?: (damage: number) => void;
+  onRecordKillContribution?: (isObjective: boolean) => void;
   onCoreDestroyed?: () => void;
   getPlayerPosition: () => { x: number; y: number };
   getPlayerDirection?: () => 'left' | 'right';
@@ -189,9 +193,16 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       getDifficultyConfig: host.getDifficultyConfig,
       projectileSystem,
       healCampCore: (territoryId, amount) => monsterCampSystem?.healCampCore(territoryId, amount),
-      onMonsterHitImpact: (opts, restoreTint) =>
-        host.combatFeedbackRenderer.playHitImpact(opts, restoreTint),
-      onMonsterKilledReward: (x, y, isBoss, expReward, isCampMonster, meta) =>
+      onMonsterHitImpact: (opts, restoreTint) => {
+        if (opts.isLocalPlayerAttack && opts.damage > 0) {
+          host.onRecordDamageContribution?.(opts.damage);
+        }
+        host.combatFeedbackRenderer.playHitImpact(opts, restoreTint);
+      },
+      onMonsterKilledReward: (x, y, isBoss, expReward, isCampMonster, meta) => {
+        if (meta?.isParticipant !== false) {
+          host.onRecordKillContribution?.(Boolean(isBoss));
+        }
         distributeHostMonsterKillReward(
           rewardContext,
           x,
@@ -200,9 +211,14 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
           expReward,
           isCampMonster,
           meta
-        ),
-      onRemoteMonsterKilledReward: (kill) =>
-        distributeRemoteMonsterKillReward(rewardContext, kill),
+        );
+      },
+      onRemoteMonsterKilledReward: (kill) => {
+        if (kill.killerId === host.getPlayerId() || kill.isBoss) {
+          host.onRecordKillContribution?.(Boolean(kill.isBoss));
+        }
+        distributeRemoteMonsterKillReward(rewardContext, kill);
+      },
       getIslands: host.getIslands,
       getConstructedBuildings: host.getConstructedBuildings,
       destroyConstructedBuilding: host.destroyConstructedBuilding,
@@ -266,14 +282,18 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     damageLocalPlayer: (dmg, attacker) => playerHealthSystem.damagePlayer(dmg, attacker),
     onStructureDamaged: (territoryId, attackerId) =>
       waveSystem.aggroCampMonsters(territoryId, attackerId ?? host.getPlayerId()),
-    onStructureHitFeedback: (x, y, isSkill, isLocalAttack = true) =>
+    onStructureHitFeedback: (x, y, isSkill, isLocalAttack = true) => {
+      if (isLocalAttack) {
+        host.onRecordDamageContribution?.(40);
+      }
       host.combatFeedbackRenderer.playHitImpact({
         x,
         y,
         damage: 0,
         isSkill,
         isLocalPlayerAttack: isLocalAttack,
-      }),
+      });
+    },
     onStructureSyncBroadcast: (payload) => multiplayerSync?.broadcastCampStructureHpSync(payload),
     onRemoteStructureHit: (payload) => multiplayerSync?.broadcastCampStructureHit(payload),
     playExplosionAt: (x, y) => host.effectsRenderer.playExplosionAt(x, y),
@@ -298,14 +318,18 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       host.lootChestRenderer.playDropAnimation({ x, y, item, onOpened }),
     onCampCoreDamaged: (territoryId, attackerId) =>
       waveSystem.aggroCampMonsters(territoryId, attackerId ?? host.getPlayerId()),
-    onCampCoreHitFeedback: (x, y, isSkill, isLocalAttack = true) =>
+    onCampCoreHitFeedback: (x, y, isSkill, isLocalAttack = true) => {
+      if (isLocalAttack) {
+        host.onRecordDamageContribution?.(50);
+      }
       host.combatFeedbackRenderer.playHitImpact({
         x,
         y,
         damage: 0,
         isSkill,
         isLocalPlayerAttack: isLocalAttack,
-      }),
+      });
+    },
     broadcastCampCoreHit: (payload) => multiplayerSync?.broadcastCampCoreHit(payload),
     broadcastCampCoreSync: (payload) => multiplayerSync?.broadcastCampCoreSync(payload),
     broadcastCampFullSync: (payload) => multiplayerSync?.broadcastCampFullSync(payload),

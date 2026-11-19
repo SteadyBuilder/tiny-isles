@@ -60,6 +60,10 @@ export class MultiplayerChannelRouter {
     return Math.max(1, this.lastOnlineCount);
   }
 
+  public getKnownMemberIds(): ReadonlySet<string> {
+    return this.knownMemberIds;
+  }
+
   public claimHostAuthority(nextEpoch: number): void {
     this.transport?.claimHostAuthority?.(nextEpoch);
   }

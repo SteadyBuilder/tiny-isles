@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PublicRoomListing } from '../data/dropInConfig';
 import {
   AURA_DEFINITIONS,
   COSMETIC_TITLES,
@@ -9,15 +10,13 @@ import {
   computeMetaBonuses,
   getTraitUpgradeCost,
 } from '../data/metaProgression';
-import { INSTANCE_ROOM_DEFAULTS } from '../data/missions';
+import { INSTANCE_ROOM_DEFAULTS, getMissionById } from '../data/missions';
 import { GameEvents } from '../game/events/gameEvents';
+import { getDropInLockReasonLabel } from '../game/utils/dropInPolicyUtils';
+import { publicRoomDirectory } from '../lib/publicRoomDirectory';
 import { saveRepository } from '../lib/repositories/LocalStorageSaveRepository';
 import { SupabaseRoomTransport } from '../lib/transports/SupabaseRoomTransport';
-import {
-  getCurrentBuildId,
-  isVersionMismatch,
-  triggerCacheBustingReload,
-} from '../lib/versionGuard';
+import { getCurrentBuildId } from '../lib/versionGuard';
 import { shouldTriggerSoloPauseOnEscape } from './useEscapeToClose';
 import { PlayerColor } from '../types/game';
 import {
@@ -55,10 +54,13 @@ export function useRoomLobbyState(
     difficulty: INSTANCE_ROOM_DEFAULTS.defaultDifficulty,
     maxPlayers: INSTANCE_ROOM_DEFAULTS.maxPlayers,
     hostPlayerId: playerId,
+    allowDropIn: true,
   });
   const [waitingMembers, setWaitingMembers] = useState<RoomMember[]>([]);
   const [isLobbyHost, setIsLobbyHost] = useState<boolean>(true);
   const [showMetaModal, setShowMetaModal] = useState<boolean>(false);
+  const [publicRooms, setPublicRooms] = useState<PublicRoomListing[]>([]);
+  const [joinErrorMessage, setJoinErrorMessage] = useState<string | null>(null);
 
   const [meta, setMeta] = useState<MetaProgressionState>(() =>
     saveRepository.loadMetaProgression()
@@ -69,6 +71,45 @@ export function useRoomLobbyState(
   const [missionResult, setMissionResult] = useState<MissionResultPayload | null>(null);
 
   const lobbyTransportRef = useRef<SupabaseRoomTransport | null>(null);
+
+  // 로비 또는 대기실에 있을 때 공용 방 목록 구독
+  useEffect(() => {
+    if (sessionStatus !== 'lobby' && sessionStatus !== 'waiting') return;
+    return publicRoomDirectory.subscribeListings((rooms) => {
+      setPublicRooms(rooms);
+    });
+  }, [sessionStatus]);
+
+  // 대기실 방장인 경우 공용 방 디렉토리에 대기실 상태 브로드캐스트
+  useEffect(() => {
+    if (sessionStatus !== 'waiting' || !isLobbyHost || roomConfig.mode !== 'coop') {
+      return;
+    }
+    const mission = getMissionById(roomConfig.missionId);
+    const publish = () => {
+      void publicRoomDirectory.publishHostRoom({
+        roomId: roomConfig.roomId,
+        inviteCode: roomConfig.inviteCode ?? roomConfig.roomId,
+        hostPlayerId: playerId,
+        hostName: playerName,
+        missionId: roomConfig.missionId,
+        missionTitle: mission.title,
+        difficulty: roomConfig.difficulty,
+        status: 'waiting',
+        currentPlayers: Math.max(1, waitingMembers.length),
+        maxPlayers: roomConfig.maxPlayers,
+        currentCount: 0,
+        targetCount: mission.goal.targetCount,
+        elapsedSec: 0,
+        timeLimitSec: mission.timeLimitSec,
+        allowDropIn: roomConfig.allowDropIn !== false,
+        hostAppVersion: getCurrentBuildId(),
+      });
+    };
+    publish();
+    const timer = setInterval(publish, 4000);
+    return () => clearInterval(timer);
+  }, [isLobbyHost, playerId, playerName, roomConfig, sessionStatus, waitingMembers.length]);
 
   const disconnectLobbyTransport = useCallback(() => {
     if (lobbyTransportRef.current) {
@@ -98,7 +139,7 @@ export function useRoomLobbyState(
 
       transport.on<{ roomConfig: RoomConfig }>('room_start', (payload) => {
         if (payload?.roomConfig) {
-          setRoomConfig(payload.roomConfig);
+          setRoomConfig({ ...payload.roomConfig, isDropInJoin: false });
         }
         disconnectLobbyTransport();
         setMissionProgress(null);
@@ -115,11 +156,70 @@ export function useRoomLobbyState(
     [disconnectLobbyTransport, playerColor, playerId, playerName]
   );
 
+  const handleJoinPublicRoomListing = useCallback(
+    (listing: PublicRoomListing): boolean => {
+      setJoinErrorMessage(null);
+      if (listing.lockReason !== 'open') {
+        setJoinErrorMessage(
+          `입장할 수 없는 방입니다: ${getDropInLockReasonLabel(listing.lockReason)}`
+        );
+        return false;
+      }
+
+      if (listing.status === 'playing') {
+        disconnectLobbyTransport();
+        const dropInCfg: RoomConfig = {
+          roomId: listing.roomId,
+          inviteCode: listing.inviteCode,
+          mode: 'coop',
+          missionId: listing.missionId,
+          difficulty: listing.difficulty,
+          maxPlayers: listing.maxPlayers,
+          hostPlayerId: listing.hostPlayerId,
+          hostAppVersion: listing.hostAppVersion,
+          isDropInJoin: true,
+          allowDropIn: listing.allowDropIn,
+        };
+        setRoomConfig(dropInCfg);
+        setIsLobbyHost(false);
+        setMissionProgress(null);
+        setMissionResult(null);
+        setSessionStatus('playing');
+        return true;
+      }
+
+      const waitingCfg: RoomConfig = {
+        roomId: listing.roomId,
+        inviteCode: listing.inviteCode,
+        mode: 'coop',
+        missionId: listing.missionId,
+        difficulty: listing.difficulty,
+        maxPlayers: listing.maxPlayers,
+        hostPlayerId: listing.hostPlayerId,
+        hostAppVersion: listing.hostAppVersion,
+        isDropInJoin: false,
+        allowDropIn: listing.allowDropIn,
+      };
+      setRoomConfig(waitingCfg);
+      setIsLobbyHost(false);
+      setSessionStatus('waiting');
+      connectLobbyTransport(waitingCfg);
+      return true;
+    },
+    [connectLobbyTransport, disconnectLobbyTransport]
+  );
+
   // URL 초대 링크(?room=XXXXXX) 자동 입장 감지
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get('room')?.trim().toUpperCase();
     if (!roomParam) return;
+
+    const existingListing = publicRoomDirectory.findRoomByCode(roomParam);
+    if (existingListing) {
+      handleJoinPublicRoomListing(existingListing);
+      return;
+    }
 
     const missionParam = params.get('mission') || INSTANCE_ROOM_DEFAULTS.defaultMissionId;
     const diffParam = (params.get('diff') as RoomDifficultyId) || 'normal';
@@ -131,12 +231,13 @@ export function useRoomLobbyState(
       difficulty: diffParam,
       maxPlayers: INSTANCE_ROOM_DEFAULTS.maxPlayers,
       hostPlayerId: '',
+      allowDropIn: true,
     };
     setRoomConfig(nextCfg);
     setIsLobbyHost(false);
     setSessionStatus('waiting');
     connectLobbyTransport(nextCfg);
-  }, [connectLobbyTransport]);
+  }, [connectLobbyTransport, handleJoinPublicRoomListing]);
 
   useEffect(() => {
     return () => disconnectLobbyTransport();
@@ -150,19 +251,25 @@ export function useRoomLobbyState(
     const onEnded = (result: MissionResultPayload) => {
       setMissionResult(result);
       setSessionStatus('ended');
+      void publicRoomDirectory.unpublishHostRoom();
       setMeta((prev) => {
         const nextTitles =
           result.unlockedTitleId && !prev.unlockedTitleIds.includes(result.unlockedTitleId)
             ? [...prev.unlockedTitleIds, result.unlockedTitleId]
             : prev.unlockedTitleIds;
         const nextCleared =
-          result.victory && !prev.clearedMissionIds.includes(result.missionId)
+          result.victory &&
+          (result.contribution?.isQualified ?? true) &&
+          !prev.clearedMissionIds.includes(result.missionId)
             ? [...prev.clearedMissionIds, result.missionId]
             : prev.clearedMissionIds;
         const next: MetaProgressionState = {
           ...prev,
           points: prev.points + result.earnedPoints,
-          totalClears: result.victory ? prev.totalClears + 1 : prev.totalClears,
+          totalClears:
+            result.victory && (result.contribution?.isQualified ?? true)
+              ? prev.totalClears + 1
+              : prev.totalClears,
           unlockedTitleIds: nextTitles,
           clearedMissionIds: nextCleared,
         };
@@ -209,6 +316,7 @@ export function useRoomLobbyState(
   const handleStartSolo = useCallback(
     (missionId: string, difficulty: RoomDifficultyId) => {
       disconnectLobbyTransport();
+      void publicRoomDirectory.unpublishHostRoom();
       const soloId = `solo_${Date.now()}`;
       setRoomConfig({
         roomId: soloId,
@@ -217,6 +325,7 @@ export function useRoomLobbyState(
         difficulty,
         maxPlayers: 1,
         hostPlayerId: playerId,
+        isDropInJoin: false,
       });
       setMissionProgress(null);
       setMissionResult(null);
@@ -227,6 +336,7 @@ export function useRoomLobbyState(
 
   const handleCreateCoopRoom = useCallback(
     (missionId: string, difficulty: RoomDifficultyId) => {
+      setJoinErrorMessage(null);
       const code = generateInviteCode(INSTANCE_ROOM_DEFAULTS.inviteCodeLength);
       const cfg: RoomConfig = {
         roomId: code,
@@ -236,6 +346,8 @@ export function useRoomLobbyState(
         difficulty,
         maxPlayers: INSTANCE_ROOM_DEFAULTS.maxPlayers,
         hostPlayerId: playerId,
+        isDropInJoin: false,
+        allowDropIn: true,
       };
       setRoomConfig(cfg);
       setIsLobbyHost(true);
@@ -245,10 +357,26 @@ export function useRoomLobbyState(
     [connectLobbyTransport, playerId]
   );
 
+  const handleToggleAllowDropIn = useCallback(() => {
+    setRoomConfig((prev) => ({
+      ...prev,
+      allowDropIn: prev.allowDropIn === false,
+    }));
+  }, []);
+
   const handleJoinCoopRoom = useCallback(
-    (inviteCode: string) => {
+    (inviteCode: string): boolean => {
       const code = inviteCode.trim().toUpperCase();
-      if (!code) return;
+      if (!code) return false;
+      setJoinErrorMessage(null);
+
+      // 1) 먼저 실시간 공용 디렉토리에서 해당 코드의 방 상태를 확인 (진행 중인 방 및 종반부 잠금 판별)
+      const matched = publicRoomDirectory.findRoomByCode(code);
+      if (matched) {
+        return handleJoinPublicRoomListing(matched);
+      }
+
+      // 2) 디렉토리에 아직 없거나 비공개 코드인 경우 대기실 채널로 연결
       const cfg: RoomConfig = {
         roomId: code,
         inviteCode: code,
@@ -257,13 +385,16 @@ export function useRoomLobbyState(
         difficulty: INSTANCE_ROOM_DEFAULTS.defaultDifficulty,
         maxPlayers: INSTANCE_ROOM_DEFAULTS.maxPlayers,
         hostPlayerId: '',
+        isDropInJoin: false,
+        allowDropIn: true,
       };
       setRoomConfig(cfg);
       setIsLobbyHost(false);
       setSessionStatus('waiting');
       connectLobbyTransport(cfg);
+      return true;
     },
-    [connectLobbyTransport]
+    [connectLobbyTransport, handleJoinPublicRoomListing]
   );
 
   const handleStartCoopMatch = useCallback(() => {
@@ -274,6 +405,7 @@ export function useRoomLobbyState(
       ...roomConfig,
       hostPlayerId: playerId,
       hostAppVersion: getCurrentBuildId(),
+      isDropInJoin: false,
     };
     setRoomConfig(startedRoomConfig);
     if (transport) {
@@ -296,8 +428,10 @@ export function useRoomLobbyState(
 
   const handleLeaveToLobby = useCallback(() => {
     disconnectLobbyTransport();
+    void publicRoomDirectory.unpublishHostRoom();
     setMissionProgress(null);
     setMissionResult(null);
+    setJoinErrorMessage(null);
     setSessionStatus('lobby');
     if (window.location.search.includes('room=')) {
       window.history.replaceState({}, '', window.location.pathname);
@@ -411,6 +545,9 @@ export function useRoomLobbyState(
     isLobbyHost,
     showMetaModal,
     setShowMetaModal,
+    publicRooms,
+    joinErrorMessage,
+    clearJoinError: () => setJoinErrorMessage(null),
     meta,
     metaBonuses,
     missionProgress,
@@ -418,7 +555,9 @@ export function useRoomLobbyState(
     toggleSoloPause,
     handleStartSolo,
     handleCreateCoopRoom,
+    handleToggleAllowDropIn,
     handleJoinCoopRoom,
+    handleJoinPublicRoomListing,
     handleStartCoopMatch,
     handleLeaveToLobby,
     handleUpgradeTrait,
@@ -429,3 +568,4 @@ export function useRoomLobbyState(
     handleApplyMetaProgression,
   };
 }
+

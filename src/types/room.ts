@@ -55,6 +55,10 @@ export interface RoomConfig {
   hostPlayerId: string;
   inviteCode?: string;
   hostAppVersion?: string;
+  /** 중도 참여(Drop-in)로 이미 진행 중인 방에 입장했는지 여부 */
+  isDropInJoin?: boolean;
+  /** 호스트가 중도 난입을 허용하는지 여부 (기본 true) */
+  allowDropIn?: boolean;
 }
 
 export interface RoomMember {
@@ -82,6 +86,25 @@ export interface MissionProgressState {
   failed: boolean;
 }
 
+export interface MissionContributionSummary {
+  /** 로컬 플레이어가 실제 방에 머무른 시간 (초) */
+  participatedSec: number;
+  /** 방 전체 경과 시간 대비 참여 시간 비율 (0~1) */
+  participationRatio: number;
+  /** 전투/채집/건설 누적 기여도 점수 */
+  contributionScore: number;
+  /** 최소 활동 자격(잠수 방지) 통과 여부 */
+  isQualified: boolean;
+  /** 기본 만점 보상 (100% 기준) */
+  baseFullPoints: number;
+  /** 최종 지급 배율 (0 ~ 1.15) */
+  appliedMultiplier: number;
+  /** 선구자 완주 보너스 적용 여부 */
+  hasPioneerBonus: boolean;
+  /** 중도 참여자 여부 */
+  isDropIn: boolean;
+}
+
 export interface MissionResultPayload {
   victory: boolean;
   missionId: string;
@@ -91,7 +114,13 @@ export interface MissionResultPayload {
   earnedPoints: number;
   unlockedTitleId?: string;
   reason?: string;
+  contribution?: MissionContributionSummary;
 }
+
+export type {
+  DropInLockReason,
+  PublicRoomListing,
+} from '../data/dropInConfig';
 
 export type {
   AuraDefinition,
@@ -107,3 +136,4 @@ export type {
   TraitId,
   UpgradeCategory,
 } from './metaProgression';
+

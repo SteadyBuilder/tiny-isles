@@ -29,6 +29,8 @@ export interface IWorldMultiplayerHost {
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
   getPreferredHostId?: () => string | undefined;
+  isDropInJoin?: () => boolean;
+  onApplyDropInCatchUp?: (elapsedSec: number) => void;
   getIslands?: () => Island[];
   getConstructedBuildings?: () => ConstructedBuilding[];
   getMissionSyncSnapshot?: () => Omit<MissionProgressSyncPayload, 'hostEpoch'>;
@@ -88,10 +90,83 @@ export function createWorldMultiplayerSync(
   let hasResolvedHostOnce = false;
   let lastKnownHostState = false;
   let hasCompletedInitialGuestSync = false;
+  let hasAppliedDropInCatchUp = false;
   let initialSyncBannerTimer: ReturnType<typeof setTimeout> | null = null;
   let sync!: MultiplayerSyncController;
 
   let lastWorldSnapshotBroadcastAt = 0;
+  const sessionStartedAtMs = Date.now();
+  const peerJoinTimes = new Map<string, number>();
+  const peerLastCombatActivity = new Map<string, number>();
+  let scalingRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+  const markPeerCombatActive = (peerId?: string) => {
+    if (!peerId) return;
+    const now = Date.now();
+    if (!peerJoinTimes.has(peerId)) {
+      peerJoinTimes.set(peerId, now);
+    }
+    peerLastCombatActivity.set(peerId, now);
+  };
+
+  const applyEffectiveScalingCount = (rawOnlineCount: number) => {
+    if (host.getRoomMode?.() !== 'coop' || !waveSystem.getIsHost()) {
+      waveSystem.setOnlineCount(rawOnlineCount);
+      monsterCampSystem.setOnlineCount(rawOnlineCount);
+      fieldMonsterSystem.setOnlineCount(rawOnlineCount);
+      return;
+    }
+
+    const now = Date.now();
+    const localId = host.getPlayerId();
+    const memberIds = Array.from(sync?.getKnownMemberIds() ?? [localId]);
+    if (!memberIds.includes(localId)) {
+      memberIds.push(localId);
+    }
+
+    let effectiveCount = 0;
+    for (const id of memberIds) {
+      if (id === localId) {
+        effectiveCount += 1;
+        continue;
+      }
+      const joinedAt = peerJoinTimes.get(id) ?? now;
+      const lastActiveAt = peerLastCombatActivity.get(id) ?? joinedAt;
+      const sinceJoin = now - joinedAt;
+      const sinceActive = now - lastActiveAt;
+
+      // 게임 시작 25초 이후에 새로 들어온 중도 난입자는 45초 유예 시간 동안 난이도 상승에서 제외
+      const isMidGameDropIn = joinedAt - sessionStartedAtMs > 25_000;
+      if (isMidGameDropIn && sinceJoin < 45_000) {
+        continue;
+      }
+      // 75초 이상 아무 활동(이동/전투/채집)이 없는 잠수 유저는 난이도 스케일링에서 제외
+      if (sinceActive > 75_000) {
+        continue;
+      }
+      effectiveCount += 1;
+    }
+
+    const safeEffective = Math.max(1, Math.min(rawOnlineCount, effectiveCount));
+    waveSystem.setOnlineCount(safeEffective);
+    monsterCampSystem.setOnlineCount(safeEffective);
+    fieldMonsterSystem.setOnlineCount(safeEffective);
+  };
+
+  if (host.getRoomMode?.() === 'coop') {
+    scalingRefreshTimer = setInterval(() => {
+      if (!host.scene || !host.scene.sys?.isActive()) {
+        if (scalingRefreshTimer) {
+          clearInterval(scalingRefreshTimer);
+          scalingRefreshTimer = null;
+        }
+        return;
+      }
+      if (waveSystem.getIsHost() && sync) {
+        applyEffectiveScalingCount(sync.getOnlineCount());
+      }
+    }, 5000);
+  }
 
   const clearInitialSyncBanner = () => {
     if (initialSyncBannerTimer) {
@@ -106,8 +181,9 @@ export function createWorldMultiplayerSync(
 
   const isCoopLobbyGuest =
     host.getRoomMode?.() === 'coop' &&
-    Boolean(host.getPreferredHostId?.()) &&
-    host.getPreferredHostId?.() !== host.getPlayerId();
+    (Boolean(host.isDropInJoin?.()) ||
+      (Boolean(host.getPreferredHostId?.()) &&
+        host.getPreferredHostId?.() !== host.getPlayerId()));
 
   if (isCoopLobbyGuest) {
     GameEvents.emit('coop-initial-sync-state', {
@@ -171,9 +247,14 @@ export function createWorldMultiplayerSync(
     getLiveMonsterDigest: () => waveSystem.getLiveMonsterDigest(),
     getLocalPlayerState: host.getLocalPlayerState,
     onOnlineCountChanged: (count, hasNewPeer) => {
-      waveSystem.setOnlineCount(count);
-      monsterCampSystem.setOnlineCount(count);
-      fieldMonsterSystem.setOnlineCount(count);
+      const now = Date.now();
+      for (const id of sync.getKnownMemberIds()) {
+        if (!peerJoinTimes.has(id)) {
+          peerJoinTimes.set(id, now);
+          peerLastCombatActivity.set(id, now);
+        }
+      }
+      applyEffectiveScalingCount(count);
       if (waveSystem.getIsHost() && hasNewPeer && count > 1) {
         broadcastFullRoomState(true);
       }
@@ -213,6 +294,7 @@ export function createWorldMultiplayerSync(
     },
     onRemoteJoinHello: (payload) => {
       // 게스트가 입장 즉시 보낸 출석(join_hello)을 호스트가 수신하면 Presence 완료 전이라도 즉시 환영 + 전체 상태 송출
+      markPeerCombatActive(payload.playerId);
       if (!waveSystem.getIsHost()) return;
       broadcastFullRoomState(false, payload.playerId);
     },
@@ -235,9 +317,16 @@ export function createWorldMultiplayerSync(
     onRemoteMissionProgressSync: (payload) => {
       if (waveSystem.getIsHost()) return;
       host.applyRemoteMissionProgressSync?.(payload);
+      if (!hasAppliedDropInCatchUp && typeof payload.elapsedSec === 'number') {
+        hasAppliedDropInCatchUp = true;
+        if (payload.elapsedSec >= 60) {
+          host.onApplyDropInCatchUp?.(payload.elapsedSec);
+        }
+      }
     },
     onRemotePlayerSkillCast: (payload) => {
       if (!payload || payload.casterId === host.getPlayerId()) return;
+      markPeerCombatActive(payload.casterId);
       host.skillEffectsRenderer.playClassSkill({
         classId: payload.classId,
         casterX: payload.casterX,
@@ -262,8 +351,10 @@ export function createWorldMultiplayerSync(
       host.resourceEntityRenderer.handleRemoteHit(entityId, damage),
     onRemoteEntityRespawned: (entity) =>
       host.resourceEntityRenderer.applyRemoteEntityRespawn(entity),
-    onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) =>
-      host.unlockIslandLocally(islandId, unlockedBy, false, ownerId),
+    onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) => {
+      markPeerCombatActive(ownerId);
+      host.unlockIslandLocally(islandId, unlockedBy, false, ownerId);
+    },
     onRemoteVillageUpgraded: (territoryId) => host.upgradeVillageRemotely(territoryId),
     onRemoteBuildingConstructed: host.onRemoteBuildingConstructed,
     onRemoteWaveSpawned: (isBossWave) => {
@@ -304,6 +395,7 @@ export function createWorldMultiplayerSync(
     },
     onRemoteMonstersRepairRequest: (payload) => waveSystem.handleRemoteMonstersRepairRequest(payload),
     onRemoteMonsterHit: (payload) => {
+      markPeerCombatActive(payload.attackerId);
       if (waveSystem.getIsHost()) {
         waveSystem.damageMonster(
           payload.monsterId,
@@ -323,8 +415,14 @@ export function createWorldMultiplayerSync(
     },
     onRemoteThreatSync: (payload) => waveSystem.applyRemoteThreatSync(payload),
     onRemoteDungeonPortalSync: (portal) => waveSystem.applyRemoteDungeonPortalSync(portal),
-    onRemoteCampStructureHit: (payload) => campFortification.applyRemoteStructureHit(payload),
-    onRemoteCampCoreHit: (payload) => monsterCampSystem.applyRemoteCampCoreHit(payload),
+    onRemoteCampStructureHit: (payload) => {
+      markPeerCombatActive(payload.attackerId);
+      campFortification.applyRemoteStructureHit(payload);
+    },
+    onRemoteCampCoreHit: (payload) => {
+      markPeerCombatActive(payload.attackerId);
+      monsterCampSystem.applyRemoteCampCoreHit(payload);
+    },
     onRemoteCampStructureHpSync: (payload) => campFortification.applyRemoteStructureHpSync(payload),
     onRemoteCampCoreSync: (payload) => monsterCampSystem.applyRemoteCampCoreSync(payload),
     onRemoteCampFullSync: (payload) => monsterCampSystem.applyRemoteCampFullSync(payload),
@@ -344,3 +442,4 @@ export function createWorldMultiplayerSync(
 
   return sync;
 }
+

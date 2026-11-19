@@ -11,6 +11,7 @@ interface RoomWaitingModalProps {
   members: RoomMember[];
   isHost: boolean;
   versionCompatibility: RoomVersionCompatibility;
+  onToggleAllowDropIn?: () => void;
   onForceUpdate: () => void;
   onStartMatch: () => void;
   onLeaveRoom: () => void;
@@ -21,6 +22,7 @@ export const RoomWaitingModal: React.FC<RoomWaitingModalProps> = ({
   members,
   isHost,
   versionCompatibility,
+  onToggleAllowDropIn,
   onForceUpdate,
   onStartMatch,
   onLeaveRoom,
@@ -29,6 +31,7 @@ export const RoomWaitingModal: React.FC<RoomWaitingModalProps> = ({
   const mission = getMissionById(roomConfig.missionId);
   const difficulty = getDifficultyConfig(roomConfig.difficulty);
   const inviteCode = roomConfig.inviteCode ?? roomConfig.roomId;
+  const allowDropIn = roomConfig.allowDropIn !== false;
 
   const handleCopyInvite = () => {
     const url = new URL(window.location.href);
@@ -81,20 +84,43 @@ export const RoomWaitingModal: React.FC<RoomWaitingModalProps> = ({
       )}
 
       {/* 미션 요약 & 초대 코드 양피지 */}
-      <div className="ts-paper-sheet p-2.5 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-black text-[#3a200f]">{mission.title}</div>
-          <div className="text-[11px] font-bold text-[#6e4625] mt-0.5">
-            난이도: {difficulty.label} · 예상 시간: {mission.estimatedMinutes}
+      <div className="ts-paper-sheet p-2.5 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-black text-[#3a200f]">{mission.title}</div>
+            <div className="text-[11px] font-bold text-[#6e4625] mt-0.5">
+              난이도: {difficulty.label} · 예상 시간: {mission.estimatedMinutes}
+            </div>
           </div>
+          <PixelGameButton
+            label={copied ? '초대 링크 복사됨!' : `코드: ${inviteCode}`}
+            iconSrc="/assets/ui/Icons/Icon_08.png"
+            variant="red"
+            size="sm"
+            onClick={handleCopyInvite}
+          />
         </div>
-        <PixelGameButton
-          label={copied ? '초대 링크 복사됨!' : `코드: ${inviteCode}`}
-          iconSrc="/assets/ui/Icons/Icon_08.png"
-          variant="red"
-          size="sm"
-          onClick={handleCopyInvite}
-        />
+
+        <div className="pt-1.5 border-t border-[#c4a274] flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <span className="font-bold text-[#4a301e]">
+            {allowDropIn
+              ? '🟢 중도 합류 허용: 원정 시작 후에도 진행도 65% 전까지 다른 수호자가 합류할 수 있습니다.'
+              : '🔒 중도 합류 잠금: 원정이 시작되면 외부 수호자의 중간 난입을 차단합니다.'}
+          </span>
+          {isHost && onToggleAllowDropIn && (
+            <button
+              type="button"
+              onClick={onToggleAllowDropIn}
+              className={`px-2 py-1 rounded border font-black text-[10px] cursor-pointer transition ${
+                allowDropIn
+                  ? 'bg-[#166534] text-[#dcfce7] border-[#14532d]'
+                  : 'bg-[#7f1d1d] text-[#fee2e2] border-[#450a0a]'
+              }`}
+            >
+              {allowDropIn ? '중도 합류: 허용됨' : '중도 합류: 잠금'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 참여 수호자 목록 */}
@@ -167,3 +193,4 @@ export const RoomWaitingModal: React.FC<RoomWaitingModalProps> = ({
     </WoodModalFrame>
   );
 };
+

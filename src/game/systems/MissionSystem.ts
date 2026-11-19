@@ -1,3 +1,4 @@
+import { DROP_IN_POLICY_CONFIG } from '../../data/dropInConfig';
 import { getDifficultyConfig, getMissionById } from '../../data/missions';
 import { Island, WaveState } from '../../types/game';
 import { MissionProgressSyncPayload } from '../../types/monsterSync';
@@ -9,15 +10,18 @@ import {
   RoomConfig,
 } from '../../types/room';
 import { GameEvents } from '../events/gameEvents';
+import { calculateContributionScaledReward } from '../utils/dropInPolicyUtils';
 
 export interface MissionSystemOptions {
   isHost?: () => boolean;
+  getOnlineCount?: () => number;
   onBroadcastProgress?: (payload: Omit<MissionProgressSyncPayload, 'hostEpoch'>) => void;
 }
 
 /**
- * 인스턴스 룸 미션 목표 진행도 추적 및 승리/패배 판정 시스템
+ * 인스턴스 룸 미션 목표 진행도 추적, 기여도 점수 누적 및 승리/패배 보상 정산 시스템
  * - 협동 모드에서는 방장(Host)이 타이머(elapsedSec), 목표 달성 수(currentCount), 승패 판정을 권위 있게 동기화합니다.
+ * - 로컬 클라이언트는 실제 참여 시간(participatedMs)과 전투/채집/건설 기여 점수를 추적하여 무임승차를 방지합니다.
  */
 export class MissionSystem {
   private roomConfig: RoomConfig;
@@ -25,6 +29,11 @@ export class MissionSystem {
   private difficulty: MissionDifficultyConfig;
   private opts?: MissionSystemOptions;
   private elapsedMs = 0;
+  private participatedMs = 0;
+  private contributionScore = 0;
+  private isDropInSession = false;
+  private hadCoopPeers = false;
+  private hasSyncedInitialElapsed = false;
   private lastEmittedSec = -1;
   private lastBroadcastSec = -1;
   private lastBroadcastCount = -1;
@@ -37,6 +46,7 @@ export class MissionSystem {
     this.mission = getMissionById(roomConfig.missionId);
     this.difficulty = getDifficultyConfig(roomConfig.difficulty);
     this.opts = opts;
+    this.isDropInSession = Boolean(roomConfig.isDropInJoin);
   }
 
   public setOptions(opts: MissionSystemOptions): void {
@@ -54,6 +64,44 @@ export class MissionSystem {
 
   public setCampConqueredCount(count: number): void {
     this.campConqueredCount = count;
+  }
+
+  public recordDamageContribution(damage: number): void {
+    if (this.ended || damage <= 0) return;
+    const gain = Math.max(
+      1,
+      Math.round(damage / DROP_IN_POLICY_CONFIG.scoreWeights.damageDivisor)
+    );
+    this.contributionScore += gain;
+  }
+
+  public recordMonsterKillContribution(isBossOrObjective = false): void {
+    if (this.ended) return;
+    this.contributionScore += isBossOrObjective
+      ? DROP_IN_POLICY_CONFIG.scoreWeights.objectiveBonusPoints
+      : DROP_IN_POLICY_CONFIG.scoreWeights.monsterKillPoints;
+  }
+
+  public recordGatherContribution(): void {
+    if (this.ended) return;
+    this.contributionScore += DROP_IN_POLICY_CONFIG.scoreWeights.gatherActionPoints;
+  }
+
+  public recordBuildOrUnlockContribution(): void {
+    if (this.ended) return;
+    this.contributionScore += DROP_IN_POLICY_CONFIG.scoreWeights.buildOrUnlockPoints;
+  }
+
+  public getContributionScore(): number {
+    return this.contributionScore;
+  }
+
+  public getParticipatedSec(): number {
+    return Math.floor(this.participatedMs / 1000);
+  }
+
+  public isDropIn(): boolean {
+    return this.isDropInSession;
   }
 
   public getMission(): MissionDefinition {
@@ -97,6 +145,15 @@ export class MissionSystem {
 
     const remoteElapsedSec = Math.max(0, Math.floor(payload.elapsedSec ?? 0));
     const localElapsedSec = Math.floor(this.elapsedMs / 1000);
+
+    // 게스트 첫 동기화 시점에 방 경과 시간이 이미 30초 이상이면 중도 참여(Drop-in)로 자동 감지
+    if (!this.hasSyncedInitialElapsed) {
+      this.hasSyncedInitialElapsed = true;
+      if (remoteElapsedSec >= 30 && this.participatedMs < 15_000) {
+        this.isDropInSession = true;
+      }
+    }
+
     // 방장 타이머와 1초 이상 벌어졌거나 역행했을 때 즉시 방장 시각으로 보정
     if (Math.abs(remoteElapsedSec - localElapsedSec) >= 1) {
       this.elapsedMs = remoteElapsedSec * 1000;
@@ -131,6 +188,11 @@ export class MissionSystem {
     if (this.ended) return;
 
     this.elapsedMs += deltaMs;
+    this.participatedMs += deltaMs;
+    if ((this.opts?.getOnlineCount?.() ?? 1) > 1) {
+      this.hadCoopPeers = true;
+    }
+
     const elapsedSec = Math.floor(this.elapsedMs / 1000);
     const isHost = this.getIsHost();
 
@@ -215,9 +277,12 @@ export class MissionSystem {
     if (this.ended) return;
     this.ended = true;
 
+    const totalElapsedSec = Math.floor(this.elapsedMs / 1000);
+    const participatedSec = Math.floor(this.participatedMs / 1000);
+
     if (broadcastIfCoop && this.roomConfig.mode === 'coop') {
       this.opts?.onBroadcastProgress?.({
-        elapsedSec: Math.floor(this.elapsedMs / 1000),
+        elapsedSec: totalElapsedSec,
         currentCount: this.currentCount,
         targetCount: this.mission.goal.targetCount,
         completed: victory,
@@ -228,22 +293,32 @@ export class MissionSystem {
 
     GameEvents.emit('mission-progress-updated', this.getProgressState());
 
-    const earnedPoints = victory
-      ? Math.round(this.mission.baseRewardPoints * this.difficulty.rewardMultiplier)
-      : Math.round(this.mission.baseRewardPoints * 0.2);
+    const rewardCalc = calculateContributionScaledReward({
+      mode: this.roomConfig.mode,
+      victory,
+      baseRewardPoints: this.mission.baseRewardPoints,
+      difficultyRewardMultiplier: this.difficulty.rewardMultiplier,
+      totalElapsedSec,
+      participatedSec,
+      contributionScore: this.contributionScore,
+      isDropIn: this.isDropInSession,
+      hadCoopPeers: this.hadCoopPeers,
+    });
 
     const payload: MissionResultPayload = {
       victory,
       missionId: this.mission.id,
       missionTitle: this.mission.title,
       difficulty: this.roomConfig.difficulty,
-      elapsedSec: Math.floor(this.elapsedMs / 1000),
-      earnedPoints,
-      unlockedTitleId: victory ? this.mission.rewardTitleId : undefined,
+      elapsedSec: totalElapsedSec,
+      earnedPoints: rewardCalc.earnedPoints,
+      unlockedTitleId: rewardCalc.canUnlockTitle ? this.mission.rewardTitleId : undefined,
       reason,
+      contribution: rewardCalc.summary,
     };
 
     GameEvents.emit('mission-ended', payload);
   }
 }
+
 

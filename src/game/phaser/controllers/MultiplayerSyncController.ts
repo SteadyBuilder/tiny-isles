@@ -338,6 +338,14 @@ export class MultiplayerSyncController {
     return this.router.getHostEpoch();
   }
 
+  public getOnlineCount(): number {
+    return this.router.getOnlineCount();
+  }
+
+  public getKnownMemberIds(): ReadonlySet<string> {
+    return this.router.getKnownMemberIds();
+  }
+
   public getActivePlayers(
     localPos: { x: number; y: number },
     localFainted: boolean

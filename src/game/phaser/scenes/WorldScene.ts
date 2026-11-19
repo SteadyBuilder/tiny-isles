@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { INSTANCE_ROOM_DEFAULTS, getDifficultyConfig } from '../../../data/missions';
 import { computeMetaBonuses } from '../../../data/metaProgression';
 import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
+import { publicRoomDirectory } from '../../../lib/publicRoomDirectory';
 import { saveRepository } from '../../../lib/repositories/LocalStorageSaveRepository';
 import { storage } from '../../../lib/storage';
 import {
@@ -14,6 +15,7 @@ import { MetaBonusSummary, RoomConfig } from '../../../types/room';
 import { getTerritoryCorePos } from '../../constants';
 import { GameEvents } from '../../events/gameEvents';
 import { MissionSystem } from '../../systems/MissionSystem';
+import { calculateDropInCatchUpSupport } from '../../utils/dropInPolicyUtils';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { WorldPersistenceController } from '../controllers/WorldPersistenceController';
@@ -128,6 +130,7 @@ export class WorldScene extends Phaser.Scene {
     this.input.addPointer(2);
     this.missionSystem = new MissionSystem(this.roomConfig, {
       isHost: () => this.systems?.waveSystem.getIsHost() ?? true,
+      getOnlineCount: () => this.systems?.multiplayerSync?.getOnlineCount() ?? 1,
       onBroadcastProgress: (payload) =>
         this.systems?.multiplayerSync?.broadcastMissionProgressSync(payload),
     });
@@ -227,6 +230,10 @@ export class WorldScene extends Phaser.Scene {
       getRoomId: () => this.roomConfig.roomId,
       getRoomMode: () => this.roomConfig.mode,
       getPreferredHostId: () => this.roomConfig.hostPlayerId,
+      isDropInJoin: () => Boolean(this.roomConfig.isDropInJoin),
+      onApplyDropInCatchUp: (elapsedSec) => this.applyDropInCatchUpPackage(elapsedSec),
+      onRecordDamageContribution: (dmg) => this.missionSystem.recordDamageContribution(dmg),
+      onRecordKillContribution: (isObj) => this.missionSystem.recordMonsterKillContribution(isObj),
       onCoreDestroyed: () => this.missionSystem?.failByCoreDestroyed(),
       getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
       getPlayerDirection: () => this.controllers?.playerMovement.getDirection() ?? 'right',
@@ -339,6 +346,7 @@ export class WorldScene extends Phaser.Scene {
       spendResources: (wood, stone, gold) => this.spendResources(wood, stone, gold),
       spendMeatAndGold: (meat, gold) => this.spendMeatAndGold(meat, gold),
       addHarvestedResource: (resKey, amount) => {
+        this.missionSystem.recordGatherContribution();
         this.inventory = { ...this.inventory, [resKey]: this.inventory[resKey] + amount };
         GameEvents.emit('inventory-updated', this.inventory);
         this.refreshTerritoryDecorations();
@@ -408,6 +416,54 @@ export class WorldScene extends Phaser.Scene {
     this.minimapEmitter.update(this.time.now, true);
   }
 
+  private lastDirectoryPublishAt = 0;
+
+  private applyDropInCatchUpPackage(elapsedSec: number): void {
+    if (!this.isSceneAlive()) return;
+    const pkg = calculateDropInCatchUpSupport(elapsedSec, this.missionSystem.isHuntingMode());
+    if (!pkg.shouldApply) return;
+
+    this.addResources(pkg.bonusWood, pkg.bonusStone, pkg.bonusGold);
+    if (pkg.bonusExp > 0) {
+      this.systems.playerProgressionSystem.gainExp(pkg.bonusExp);
+    }
+
+    const expMsg = pkg.bonusExp > 0 ? ` · 경험치 +${pkg.bonusExp}EXP` : '';
+    GameEvents.emit(
+      'game-alert',
+      `🪂 [중도 합류 지원 보급] 경과 ${pkg.elapsedMinutes}분 비례 초기 보급품(🪵+${pkg.bonusWood} 🪨+${pkg.bonusStone} 🪙+${pkg.bonusGold}${expMsg})이 지급되었습니다! (45초간 난이도 상승 유예)`
+    );
+  }
+
+  private maybePublishPublicRoomDirectory(time: number): void {
+    if (this.roomConfig.mode !== 'coop') return;
+    if (!this.systems?.waveSystem.getIsHost()) return;
+    if (time - this.lastDirectoryPublishAt < 3500) return;
+    this.lastDirectoryPublishAt = time;
+
+    const progress = this.missionSystem.getProgressState();
+    const onlineCount = this.systems.multiplayerSync?.getOnlineCount() ?? 1;
+    void publicRoomDirectory.publishHostRoom({
+      roomId: this.roomConfig.roomId,
+      inviteCode: this.roomConfig.inviteCode ?? this.roomConfig.roomId,
+      hostPlayerId: this.playerId,
+      hostName: this.playerName,
+      missionId: this.roomConfig.missionId,
+      missionTitle: progress.title,
+      difficulty: this.roomConfig.difficulty,
+      status: 'playing',
+      currentPlayers: onlineCount,
+      maxPlayers: this.roomConfig.maxPlayers,
+      currentCount: progress.currentCount,
+      targetCount: progress.targetCount,
+      elapsedSec: progress.elapsedSec,
+      timeLimitSec: progress.timeLimitSec,
+      allowDropIn: this.roomConfig.allowDropIn !== false,
+      hostAppVersion: this.roomConfig.hostAppVersion,
+      ended: this.missionSystem.isEnded(),
+    });
+  }
+
   public update(time: number, delta: number): void {
     if (this.isPaused) return;
     const clampedDelta = Math.min(Math.max(0, delta), HOST_SYNC_CONFIG.maxFrameDeltaMs);
@@ -444,6 +500,7 @@ export class WorldScene extends Phaser.Scene {
     });
     this.systems.multiplayerSync?.update();
     this.systems.multiplayerSync?.maybeBroadcastPlayerMove(time);
+    this.maybePublishPublicRoomDirectory(time);
     this.minimapEmitter?.update(time);
   }
 
@@ -459,6 +516,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spendResources(wood: number, stone: number, gold: number): void {
+    if (wood > 0 || stone > 0) {
+      this.missionSystem?.recordBuildOrUnlockContribution();
+    }
     this.inventory = {
       wood: this.inventory.wood - wood,
       stone: this.inventory.stone - stone,
@@ -470,6 +530,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private spendMeatAndGold(meat: number, gold: number): void {
+    this.missionSystem?.recordBuildOrUnlockContribution();
     this.inventory = {
       ...this.inventory,
       meat: Math.max(0, this.inventory.meat - meat),
@@ -501,6 +562,9 @@ export class WorldScene extends Phaser.Scene {
 
   private cleanupScene(): void {
     if (this.isCleanedUp) return;
+    if (this.roomConfig.mode === 'coop' && this.systems?.waveSystem.getIsHost()) {
+      void publicRoomDirectory.unpublishHostRoom();
+    }
     GameEvents.off('game-pause-toggled', this.onPauseToggled);
     this.persistence?.flushAndDestroy();
     this.isCleanedUp = true;
@@ -534,3 +598,4 @@ export class WorldScene extends Phaser.Scene {
     this.systems?.multiplayerSync?.destroy();
   }
 }
+

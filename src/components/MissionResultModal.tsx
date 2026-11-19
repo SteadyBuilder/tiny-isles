@@ -22,6 +22,10 @@ export const MissionResultModal: React.FC<MissionResultModalProps> = ({
     : undefined;
   const mins = Math.floor(result.elapsedSec / 60);
   const secs = result.elapsedSec % 60;
+  const contrib = result.contribution;
+  const pMins = contrib ? Math.floor(contrib.participatedSec / 60) : mins;
+  const pSecs = contrib ? contrib.participatedSec % 60 : secs;
+  const pRatioPct = contrib ? Math.round(contrib.participationRatio * 100) : 100;
 
   return (
     <WoodModalFrame
@@ -48,15 +52,43 @@ export const MissionResultModal: React.FC<MissionResultModalProps> = ({
 
       <div className="ts-paper-sheet p-3 space-y-2 text-xs font-bold text-[#3a200f]">
         <div className="flex justify-between">
-          <span>소요 시간</span>
+          <span>원정 총 소요 시간</span>
           <span className="font-black">
             {mins}분 {secs}초
           </span>
         </div>
-        <div className="flex justify-between">
+
+        {contrib && (
+          <>
+            <div className="flex justify-between">
+              <span>내 참여 시간 (비율)</span>
+              <span className="font-black">
+                {pMins}분 {pSecs}초 ({pRatioPct}%)
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>전투·개척 기여도 점수</span>
+              <span className={`font-black ${contrib.isQualified ? 'text-[#1d4ed8]' : 'text-[#dc2626]'}`}>
+                {contrib.contributionScore}점 ({contrib.isQualified ? '자격 충족' : '활동 미달'})
+              </span>
+            </div>
+          </>
+        )}
+
+        <div className="flex justify-between pt-1 border-t border-[#c4a274]">
           <span>획득 별의 파편</span>
-          <span className="font-black text-[#166534]">+{result.earnedPoints}P</span>
+          <span className="font-black text-[#166534]">
+            +{result.earnedPoints}P
+            {contrib?.hasPioneerBonus && ' (🌟선구자 완주 +15%)'}
+          </span>
         </div>
+
+        {contrib && !contrib.isQualified && (
+          <div className="p-2 rounded bg-[#fef2f2] border border-[#dc2626] text-[11px] font-bold text-[#991b1b]">
+            ⚠️ 최소 활동 기여도 기준에 미달(잠수/무기여)하여 클리어 보상 및 칭호가 지급되지 않았습니다.
+          </div>
+        )}
+
         {unlockedTitle && (
           <div className="flex justify-between">
             <span>칭호 해금</span>
@@ -76,3 +108,4 @@ export const MissionResultModal: React.FC<MissionResultModalProps> = ({
     </WoodModalFrame>
   );
 };
+

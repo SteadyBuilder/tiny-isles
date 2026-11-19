@@ -101,6 +101,9 @@ export function App() {
     isLobbyHost,
     showMetaModal,
     setShowMetaModal,
+    publicRooms,
+    joinErrorMessage,
+    clearJoinError,
     meta,
     metaBonuses,
     missionProgress,
@@ -108,7 +111,9 @@ export function App() {
     toggleSoloPause,
     handleStartSolo,
     handleCreateCoopRoom,
+    handleToggleAllowDropIn,
     handleJoinCoopRoom,
+    handleJoinPublicRoomListing,
     handleStartCoopMatch,
     handleLeaveToLobby: leaveRoomToLobby,
     handleUpgradeTrait,
@@ -184,9 +189,13 @@ export function App() {
           playerColor={profile.color}
           meta={meta}
           authUser={accountSync.user}
+          publicRooms={publicRooms}
+          joinErrorMessage={joinErrorMessage}
+          onClearJoinError={clearJoinError}
           onStartSolo={handleStartSolo}
           onCreateCoopRoom={handleCreateCoopRoom}
           onJoinCoopRoom={handleJoinCoopRoom}
+          onJoinPublicRoomListing={handleJoinPublicRoomListing}
           onOpenMetaModal={() => setShowMetaModal(true)}
           onOpenAccountModal={() => {
             accountSync.clearMessages();
@@ -202,6 +211,7 @@ export function App() {
             members={waitingMembers}
             isHost={isLobbyHost}
             versionCompatibility={roomVersionCompatibility}
+            onToggleAllowDropIn={handleToggleAllowDropIn}
             onForceUpdate={versionGuard.applyUpdateNow}
             onStartMatch={handleStartCoopMatch}
             onLeaveRoom={handleLeaveToLobby}

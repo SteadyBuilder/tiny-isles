@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AUTH_PROVIDER_MAP } from '../../data/authProviders';
+import { PublicRoomListing } from '../../data/dropInConfig';
 import { COSMETIC_TITLES, COSTUME_DEFINITIONS } from '../../data/metaProgression';
 import { sound, SoundSettings } from '../../lib/sound';
 import { AuthUserSummary } from '../../types/auth';
@@ -17,9 +18,13 @@ interface LobbyScreenProps {
   playerColor: PlayerColor;
   meta: MetaProgressionState;
   authUser: AuthUserSummary | null;
+  publicRooms: PublicRoomListing[];
+  joinErrorMessage: string | null;
+  onClearJoinError: () => void;
   onStartSolo: (missionId: string, difficulty: RoomDifficultyId) => void;
   onCreateCoopRoom: (missionId: string, difficulty: RoomDifficultyId) => void;
-  onJoinCoopRoom: (inviteCode: string) => void;
+  onJoinCoopRoom: (inviteCode: string) => boolean;
+  onJoinPublicRoomListing: (listing: PublicRoomListing) => boolean;
   onOpenMetaModal: () => void;
   onOpenAccountModal: () => void;
   onOpenSettingsModal: () => void;
@@ -31,9 +36,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   playerColor,
   meta,
   authUser,
+  publicRooms,
+  joinErrorMessage,
+  onClearJoinError,
   onStartSolo,
   onCreateCoopRoom,
   onJoinCoopRoom,
+  onJoinPublicRoomListing,
   onOpenMetaModal,
   onOpenAccountModal,
   onOpenSettingsModal,
@@ -56,6 +65,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     (playerColor === 'red'
       ? '/assets/ui/Human Avatars/Avatars_06.png'
       : '/assets/ui/Human Avatars/Avatars_01.png');
+
+  const openRoomCount = publicRooms.filter((r) => r.lockReason === 'open').length;
 
   const handleConfirmMission = (missionId: string, difficulty: RoomDifficultyId) => {
     if (missionModalMode === 'solo') {
@@ -97,12 +108,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               onClick={() => setMissionModalMode('coop')}
             />
             <PixelGameButton
-              label="초대 코드 참가"
+              label="협동 방 탐색 · 참가"
+              subtitle={
+                openRoomCount > 0
+                  ? `합류 가능한 공개 방 ${openRoomCount}개 · 초대 코드`
+                  : '공개 방 목록 탐색 및 초대 코드 합류'
+              }
               iconSrc="/assets/ui/Icons/Icon_08.png"
               variant="blue"
               size="md"
               fullWidth
-              onClick={() => setShowJoinModal(true)}
+              onClick={() => {
+                onClearJoinError();
+                setShowJoinModal(true);
+              }}
             />
             <PixelGameButton
               label="별의 파편 성장소"
@@ -204,9 +223,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
       <JoinRoomModal
         isOpen={showJoinModal}
+        publicRooms={publicRooms}
+        joinErrorMessage={joinErrorMessage}
+        onClearError={onClearJoinError}
         onClose={() => setShowJoinModal(false)}
-        onJoin={onJoinCoopRoom}
+        onJoinByCode={onJoinCoopRoom}
+        onJoinListing={onJoinPublicRoomListing}
       />
     </div>
   );
 };
+
