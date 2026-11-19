@@ -70,7 +70,7 @@ export const MissionHudBanner: React.FC<MissionHudBannerProps> = ({
   }
 
   return (
-    <div className="hidden sm:block fixed top-[7.25rem] left-4 z-30 pointer-events-auto">
+    <div className="hidden sm:block fixed top-[6.25rem] left-3 z-30 pointer-events-auto">
       <div className="ts-wood-bar-tight flex items-center gap-2.5 text-[#fef5df]">
         <img src="/assets/ui/Icons/Icon_05.png" alt="" className="w-5 h-5 pixel-art shrink-0" />
         <div className="text-xs font-bold leading-tight">

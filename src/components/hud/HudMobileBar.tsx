@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Inventory, PlayerHpState, WaveState } from '../../types/game';
 import { MissionProgressState, RoomMode } from '../../types/room';
+import { HUD_STATUS_ICONS } from '../../data/hudIcons';
 import { HUD_RESOURCE_SLOTS } from './hudUtils';
 import { PixelRoundButton } from '../ui/PixelRoundButton';
 import { PixelThreatGauge } from '../ui/PixelThreatGauge';
@@ -93,7 +94,7 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
             className="ts-wood-bar-compact flex items-center gap-1 text-[#fef5df] text-[10px] font-black active:scale-95 tabular-nums hover:brightness-110 transition-[filter]"
             title="5×5 전체 영지 미니맵 열기"
           >
-            <img src="/assets/ui/Icons/Icon_Compass.png" alt="" className="w-3 h-3 pixel-art" />
+            <img src={HUD_STATUS_ICONS.compass} alt="" className="w-3 h-3 pixel-art" />
             <span className="pixel-btn-shadow">
               {unlockedCount}/{totalIslands}
             </span>
@@ -102,7 +103,7 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
           <PixelRoundButton
             size="xs"
             variant="blue"
-            iconSrc="/assets/ui/Icons/Icon_10.png"
+            iconSrc={HUD_STATUS_ICONS.settings}
             alt="설정"
             title="게임 & 사운드 통합 설정"
             onClick={onOpenSettings}
@@ -110,27 +111,27 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
         </div>
       </div>
 
-      {/* Row 2: HP & Pixel Threat Liquid Gauge & Wave Counter */}
+      {/* Row 2: Left-Aligned Compact HP & Threat Gauge & Wave Icons */}
       {waveState && (
         <div
-          className={`ts-wood-bar-compact flex flex-col gap-0.5 pointer-events-auto tabular-nums transition-[filter] ${
+          className={`ts-wood-bar-compact self-start w-fit max-w-full flex flex-col gap-0.5 pointer-events-auto tabular-nums transition-[filter] ${
             isWarning ? 'ring-1 ring-red-400/70' : ''
           }`}
         >
-          <div className="flex items-center justify-between gap-1.5 text-[10px] text-[#fef5df]">
+          <div className="flex items-center gap-2 text-[10px] text-[#fef5df]">
             <span
               className={`flex items-center gap-0.5 font-black shrink-0 pixel-btn-shadow ${
                 isFainted ? 'text-red-300 animate-pulse' : 'text-rose-200'
               }`}
             >
-              <img src="/assets/ui/Icons/Icon_Heart.png" alt="HP" className="w-3 h-3 pixel-art" />
+              <img src={HUD_STATUS_ICONS.heart} alt="HP" className="w-3 h-3 pixel-art" />
               <span>{isFainted ? '기절' : hpValue}</span>
             </span>
 
-            {/* Mobile Pixel Liquid Threat Gauge */}
-            <div id="threat-mobile-badge" className="flex items-center gap-1 flex-1 min-w-[80px]">
+            {/* Mobile Compact Pixel Liquid Threat Gauge */}
+            <div id="threat-mobile-badge" className="flex items-center gap-1">
               <img
-                src="/assets/ui/Icons/Icon_Flame.png"
+                src={HUD_STATUS_ICONS.threat}
                 alt="위협도"
                 className={`w-3 h-3 pixel-art shrink-0 transition-transform ${
                   isSurging ? 'scale-125 brightness-125' : isWarning ? 'animate-pulse' : ''
@@ -142,7 +143,7 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
                 threatPercent={threat}
                 isWarning={isWarning}
                 isSurging={isSurging}
-                className="flex-1 h-2.5"
+                className="w-16 h-2.5"
               />
               {isCountingDown ? (
                 <span className="px-1 py-0 rounded bg-red-700 border border-red-300/70 text-[#fef5df] font-black text-[9px] animate-pulse shrink-0 pixel-btn-shadow">
@@ -164,18 +165,18 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
             </div>
 
             <span className="flex items-center gap-0.5 text-red-200 font-black shrink-0 pixel-btn-shadow">
-              <img src="/assets/ui/Icons/Icon_Boss.png" alt="보스" className="w-3 h-3 pixel-art" />
-              <span>{waveState.wavesUntilBoss <= 1 ? '보스!' : `${waveState.wavesUntilBoss}W`}</span>
+              <img src={HUD_STATUS_ICONS.boss} alt="보스" className="w-3 h-3 pixel-art" />
+              <span>{waveState.wavesUntilBoss <= 1 ? 'BOSS' : `${waveState.wavesUntilBoss}W`}</span>
             </span>
 
             <span className="flex items-center gap-0.5 font-black text-[#fde68a] shrink-0 pixel-btn-shadow">
-              <img src="/assets/ui/Icons/Icon_05.png" alt="마물" className="w-3 h-3 pixel-art" />
+              <img src={HUD_STATUS_ICONS.monsters} alt="마물" className="w-3 h-3 pixel-art" />
               <span>{waveState.activeMonstersCount}</span>
             </span>
           </div>
 
           {showTestMenu && (
-            <div className="flex items-center justify-end gap-1.5 pt-0.5">
+            <div className="flex items-center gap-1.5 pt-0.5">
               <button
                 type="button"
                 onClick={onTriggerRegularWave}
@@ -209,10 +210,11 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
           id="game-alert-banner-mobile"
           className="ts-wood-bar-compact mx-auto max-w-full flex items-center justify-center gap-1.5 text-[#fde68a] text-xs font-black pointer-events-auto text-center pixel-btn-shadow"
         >
-          <img src="/assets/ui/Icons/Icon_07.png" alt="" className="w-3.5 h-3.5 pixel-art shrink-0" />
+          <img src={HUD_STATUS_ICONS.alert} alt="" className="w-3.5 h-3.5 pixel-art shrink-0" />
           <span>{alertMessage}</span>
         </div>
       )}
     </div>
   );
 };
+

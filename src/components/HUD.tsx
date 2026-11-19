@@ -91,7 +91,7 @@ export const HUD: React.FC<HUDProps> = ({
     <>
       <ThreatOrbOverlay />
       {/* 1. DESKTOP HUD (sm: and above) */}
-      <div className="hidden sm:flex absolute top-3 left-4 right-4 z-30 flex-col gap-2 pointer-events-none">
+      <div className="hidden sm:flex absolute top-2.5 left-3 right-3 z-30 flex-col gap-1.5 pointer-events-none">
         <HudDesktopBar
           inventory={inventory}
           onlineCount={onlineCount}
@@ -108,6 +108,7 @@ export const HUD: React.FC<HUDProps> = ({
 
         <HudWaveSection
           waveState={waveState}
+          onlineCount={onlineCount}
           alertMessage={alertMessage}
           onTriggerRegularWave={onTriggerRegularWave}
           onTriggerBossWave={onTriggerBossWave}

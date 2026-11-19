@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Flame, ShieldAlert, Skull } from 'lucide-react';
 import { WaveState } from '../../types/game';
+import { HUD_STATUS_ICONS } from '../../data/hudIcons';
+import { PixelThreatGauge } from '../ui/PixelThreatGauge';
 
 export interface HudWaveSectionProps {
   waveState?: WaveState;
+  onlineCount?: number;
   alertMessage?: string | null;
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
@@ -15,6 +17,7 @@ export interface HudWaveSectionProps {
 
 export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
   waveState,
+  onlineCount = 1,
   alertMessage,
   onTriggerRegularWave,
   onTriggerBossWave,
@@ -43,126 +46,146 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
   const countdown = waveState?.countdownSecondsRemaining ?? null;
   const isCountingDown = countdown !== null;
   const isWarning = isCountingDown || threat >= (waveState?.warningThreshold ?? 80);
+  const activeMonsters = waveState?.activeMonstersCount ?? 0;
+  const garrisonCount = waveState?.activeGarrisonCount ?? 0;
+  const isBossNext = (waveState?.wavesUntilBoss ?? 2) <= 1;
 
   return (
     <>
       {waveState && (
-        <div
-          className={`flex flex-wrap items-center justify-between gap-2 bg-slate-950/88 backdrop-blur-md border px-3 py-1.5 rounded-2xl shadow-xl pointer-events-auto transition-colors ${
-            isWarning ? 'border-red-500/80 shadow-red-950/50' : 'border-red-500/35'
-          }`}
-        >
-          <div className="flex flex-wrap items-center gap-3 text-xs tabular-nums">
-            {/* 활동 기반 마물 위협도 액체 게이지 */}
+        <div className="self-start flex flex-wrap items-center gap-2 pointer-events-none">
+          {/* 좌측 상단 밀착 컴팩트 위협도 & 전황 위젯 */}
+          <div
+            className={`wood-hud-panel px-2.5 py-1.5 rounded-xl flex items-center gap-2 text-xs tabular-nums pointer-events-auto transition-all ${
+              isWarning ? 'ring-1 ring-red-400/80 shadow-red-950/60' : ''
+            }`}
+          >
+            {/* 위협도 액체 게이지 (이미지 아이콘 + 게이지 + 수치/카운트다운) */}
             <div
-              className="flex items-center gap-2 font-bold"
-              title="자원 채집, 마물 사냥, 건물 건설, 새 마을 해금 시 노란 구슬이 모여 위협도가 차오르며 100% 도달 시 웨이브 카운트다운이 시작됩니다."
+              className="flex items-center gap-1.5 font-black"
+              title="위협도: 자원 채집, 마물 사냥, 건설 시 상승하며 100% 도달 시 웨이브 침공이 시작됩니다."
             >
-              <Flame
-                className={`w-3.5 h-3.5 transition-transform ${
-                  isSurging ? 'scale-125 text-yellow-300' : isWarning ? 'text-red-400 animate-pulse' : 'text-amber-400'
+              <img
+                src={HUD_STATUS_ICONS.threat}
+                alt="위협도"
+                className={`w-4 h-4 pixel-art select-none shrink-0 transition-transform ${
+                  isSurging ? 'scale-125 brightness-125' : isWarning ? 'animate-pulse' : ''
                 }`}
               />
-              <span className={isWarning ? 'text-red-300' : 'text-amber-200'}>위협도</span>
-              <div
-                id="threat-gauge-container"
-                className={`w-28 h-3 bg-slate-800/95 rounded-full overflow-hidden border transition-all duration-300 ${
-                  isSurging
-                    ? 'border-yellow-300 threat-liquid-surge scale-y-110'
-                    : isWarning
-                    ? 'border-red-400/70'
-                    : 'border-slate-700'
-                }`}
-              >
-                <div
-                  id="threat-gauge-bar"
-                  className="h-full threat-liquid-fill transition-all duration-700 ease-out rounded-full"
-                  style={{
-                    width: `${Math.min(100, Math.max(0, threat))}%`,
-                    backgroundImage: isWarning
-                      ? 'linear-gradient(90deg, #ea580c 0%, #ef4444 35%, #facc15 50%, #ef4444 65%, #ea580c 100%)'
-                      : 'linear-gradient(90deg, #ca8a04 0%, #facc15 35%, #fef08a 50%, #f59e0b 65%, #ca8a04 100%)',
-                  }}
-                />
-              </div>
-              <span
-                id="threat-percent-text"
-                className={`font-mono font-black px-1.5 py-0.5 rounded transition-transform ${
-                  isSurging ? 'scale-110 text-yellow-200 bg-amber-900/80' : ''
-                } ${
-                  isWarning
-                    ? 'text-red-200 bg-red-950/80 border border-red-500/40 animate-pulse'
-                    : 'text-white bg-slate-800'
-                }`}
-              >
-                {threat}%
-              </span>
+              <PixelThreatGauge
+                containerId="threat-gauge-container"
+                barId="threat-gauge-bar"
+                threatPercent={threat}
+                isWarning={isWarning}
+                isSurging={isSurging}
+                className="w-20 h-3"
+              />
               {isCountingDown ? (
                 <span
                   id="threat-countdown-badge"
-                  className="text-[11px] font-black px-2 py-0.5 rounded-md bg-red-600/90 text-white border border-red-300/70 animate-pulse shadow"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600/95 text-white border border-red-300/70 text-[11px] font-black animate-pulse shadow"
+                  title={`${countdown}초 후 ${waveState.nextWaveIsBoss ? '보스 침공' : '웨이브 침공'}`}
                 >
-                  ⏳ {countdown}초 후 {waveState.nextWaveIsBoss ? '보스 침공!' : '침공!'}
+                  <img
+                    src={waveState.nextWaveIsBoss ? HUD_STATUS_ICONS.boss : HUD_STATUS_ICONS.clock}
+                    alt=""
+                    className="w-3 h-3 pixel-art shrink-0"
+                  />
+                  <span>{countdown}s</span>
                 </span>
               ) : (
-                isWarning && (
-                  <span className="text-[11px] font-black text-red-300 animate-pulse">
-                    곧 침공!
-                  </span>
-                )
+                <span
+                  id="threat-percent-text"
+                  className={`font-mono font-black text-[11px] min-w-[30px] text-right transition-transform pixel-btn-shadow ${
+                    isSurging
+                      ? 'scale-110 text-yellow-200'
+                      : isWarning
+                        ? 'text-red-300 animate-pulse'
+                        : 'text-[#fde68a]'
+                  }`}
+                >
+                  {threat}%
+                </span>
               )}
             </div>
 
+            <div className="h-4 w-px bg-[#85532a]/60 shrink-0" />
+
+            {/* 보스까지 남은 웨이브 */}
             <div
-              className="flex items-center gap-1 text-red-300 font-bold"
-              title="보스 군단 출현까지 남은 웨이브 횟수"
+              className={`wood-hud-slot flex items-center gap-1 px-1.5 py-0.5 rounded-lg font-black ${
+                isBossNext ? 'border-red-400/70 text-red-200 animate-pulse' : 'text-red-200/90'
+              }`}
+              title={isBossNext ? '다음 웨이브에 보스 군단 출현!' : `보스 군단 출현까지 ${waveState.wavesUntilBoss}웨이브`}
             >
-              <Skull className="w-3.5 h-3.5 text-red-400" />
-              <span>👹</span>
-              <span className="font-mono font-black text-red-200 bg-red-950/70 border border-red-500/30 px-1.5 py-0.5 rounded">
-                {waveState.wavesUntilBoss <= 1 ? '다음 보스!' : `보스까지 ${waveState.wavesUntilBoss}웨이브`}
+              <img
+                src={HUD_STATUS_ICONS.boss}
+                alt="보스"
+                className="w-3.5 h-3.5 pixel-art select-none shrink-0"
+              />
+              <span className="font-mono text-[11px] pixel-btn-shadow">
+                {isBossNext ? 'BOSS' : `${waveState.wavesUntilBoss}W`}
               </span>
             </div>
 
+            {/* 현재 침공 마물 수 */}
             <div
-              className="flex items-center gap-1 text-slate-200 font-bold"
-              title="현재 침공 중인 마물 수"
+              className={`wood-hud-slot flex items-center gap-1 px-1.5 py-0.5 rounded-lg font-black ${
+                activeMonsters > 0 ? 'text-amber-300' : 'text-slate-300/75'
+              }`}
+              title={`현재 침공 중인 마물: ${activeMonsters}마리`}
             >
-              <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
-              <span>⚔️</span>
-              <span id="active-monsters-count" className="font-black text-amber-300">
-                {waveState.activeMonstersCount}
+              <img
+                src={HUD_STATUS_ICONS.monsters}
+                alt="침공 마물"
+                className={`w-3.5 h-3.5 pixel-art select-none shrink-0 ${
+                  activeMonsters === 0 ? 'opacity-65' : ''
+                }`}
+              />
+              <span id="active-monsters-count" className="font-mono text-[11px] pixel-btn-shadow">
+                {activeMonsters}
               </span>
             </div>
 
-            {waveState.onlineScaleLabel && (
+            {/* 수비대 수 */}
+            <div
+              className={`wood-hud-slot flex items-center gap-1 px-1.5 py-0.5 rounded-lg font-black ${
+                garrisonCount > 0 ? 'text-cyan-200' : 'text-slate-300/70'
+              }`}
+              title={`함께 마을을 지키는 수비대: ${garrisonCount}명`}
+            >
+              <img
+                src={HUD_STATUS_ICONS.garrison}
+                alt="수비대"
+                className={`w-3.5 h-3.5 pixel-art select-none shrink-0 ${
+                  garrisonCount === 0 ? 'opacity-65' : ''
+                }`}
+              />
+              <span className="font-mono text-[11px] pixel-btn-shadow">{garrisonCount}</span>
+            </div>
+
+            {/* 협동(2인 이상) 시에만 간략 난이도 스케일 표시 */}
+            {onlineCount > 1 && waveState.onlineScaleLabel && (
               <span
-                className="px-2 py-0.5 rounded-md bg-indigo-950/80 border border-indigo-400/40 text-indigo-200 text-[11px] font-bold"
-                title="접속 인원 기반 실시간 웨이브 난이도 스케일링"
+                className="px-1.5 py-0.5 rounded-lg bg-indigo-950/85 border border-indigo-400/40 text-indigo-200 text-[10px] font-black"
+                title={`접속 인원 기반 웨이브 난이도 스케일링 (${waveState.onlineScaleLabel})`}
               >
-                🌐 {waveState.onlineScaleLabel}
+                {waveState.onlineScaleLabel}
               </span>
             )}
-
-            <span
-              className="px-2 py-0.5 rounded-md bg-cyan-950/80 border border-cyan-400/40 text-cyan-200 text-[11px] font-bold"
-              title="함께 마을을 지키는 수비대"
-            >
-              🛡️ 수비대 {waveState.activeGarrisonCount ?? 0}
-            </span>
           </div>
 
           {/* Compact Wave Trigger & Test Badges (Easter Egg) */}
           {showTestMenu && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 pointer-events-auto">
               {onSummonEarlyWave && (
                 <button
                   id="summon-early-wave-btn"
                   onClick={onSummonEarlyWave}
-                  className="px-2.5 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
+                  className="px-2 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
                   title="준비 완료 시 웨이브 즉시 소환 (처치 보상 +35% 보너스)"
                 >
-                  ⚔️ 조기 소환 (+35%)
+                  조기소환
                 </button>
               )}
 
@@ -173,7 +196,7 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
                   className="px-2 py-1 rounded-lg bg-orange-700/85 hover:bg-orange-600 text-white text-[11px] font-black border border-orange-400/50 transition active:scale-95"
                   title="마물 위협도 +25% 증가 테스트"
                 >
-                  🔥 +25%
+                  +25%
                 </button>
               )}
 
@@ -183,7 +206,7 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
                 className="px-2 py-1 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-black border border-emerald-400/50 transition active:scale-95"
                 title="마물 웨이브 즉시 출현"
               >
-                🧟 +Wave
+                +Wave
               </button>
 
               <button
@@ -192,7 +215,7 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
                 className="px-2 py-1 rounded-lg bg-red-700/85 hover:bg-red-600 text-white text-[11px] font-black border border-red-400/50 transition active:scale-95"
                 title="보스몬스터 즉시 출현"
               >
-                👹 +Boss
+                +Boss
               </button>
 
               {onAddTestResources && (
@@ -202,7 +225,7 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
                   className="px-2 py-1 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-black text-[11px] font-black border border-amber-300 transition active:scale-95"
                   title="테스트 자원 +500 지급"
                 >
-                  🎁 +500
+                  +500
                 </button>
               )}
             </div>
@@ -210,14 +233,17 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
         </div>
       )}
 
-      {/* Active Boss HP Bar Banner */}
+      {/* Active Boss HP Bar Banner (보스 출현 시에만 상단 중앙 표시) */}
       {waveState?.activeBoss && (
         <div
           id="active-boss-banner"
-          className="w-full max-w-xl mx-auto bg-red-950/90 border-2 border-red-500 rounded-2xl px-3.5 py-1.5 shadow-2xl pointer-events-auto animate-fadeIn"
+          className="self-center w-full max-w-md bg-red-950/90 border-2 border-red-500 rounded-2xl px-3.5 py-1.5 shadow-2xl pointer-events-auto animate-fadeIn"
         >
           <div className="flex items-center justify-between text-xs font-black text-red-200 mb-1 tabular-nums">
-            <span>👹 {waveState.activeBoss.targetTerritoryName}</span>
+            <span className="flex items-center gap-1.5">
+              <img src={HUD_STATUS_ICONS.boss} alt="" className="w-4 h-4 pixel-art shrink-0" />
+              <span>{waveState.activeBoss.targetTerritoryName}</span>
+            </span>
             <span>
               {waveState.activeBoss.hp} / {waveState.activeBoss.maxHp}
             </span>
@@ -239,11 +265,13 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
       {alertMessage && (
         <div
           id="game-alert-banner"
-          className="mx-auto px-4 py-2 rounded-2xl bg-slate-900/95 border border-amber-400/70 text-amber-200 text-xs font-bold shadow-2xl pointer-events-auto"
+          className="self-center flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900/95 border border-amber-400/70 text-amber-200 text-xs font-bold shadow-2xl pointer-events-auto"
         >
-          {alertMessage}
+          <img src={HUD_STATUS_ICONS.alert} alt="" className="w-4 h-4 pixel-art shrink-0" />
+          <span>{alertMessage}</span>
         </div>
       )}
     </>
   );
 };
+
