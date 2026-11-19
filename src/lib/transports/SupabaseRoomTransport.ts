@@ -243,7 +243,11 @@ export class SupabaseRoomTransport implements INetworkTransport {
           this.highestObservedEpoch = maxPresentEpoch;
         }
 
-        const { isHost, hostId, onlineCount } = electHostFromPresence(rawState, playerId);
+        const { isHost, hostId, onlineCount } = electHostFromPresence(
+          rawState,
+          playerId,
+          this.preferredHostId || undefined
+        );
 
         // 상위 에폭 방장이 이탈해 새 방장으로 승계된 경우 에폭이 역행(1->0)하지 않도록 단조 승격
         if (

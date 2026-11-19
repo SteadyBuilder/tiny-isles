@@ -280,3 +280,32 @@ test('Root Cause #5: buildRepairDeltaPayload materializes missing live mobs and 
   assert.equal(guestMonsters.has('m_near_base'), true);
   assert.equal(guestMonsters.has('m_ghost_id'), false);
 });
+
+test('Stage 2: electHostFromPresence prioritizes preferredHostId in foreground regardless of join timestamp skew', async () => {
+  const { electHostFromPresence } = await import('../../phaser/controllers/HostAuthorityHelper');
+
+  // Guest phone has skewed earlier joinedAt (1000) and claimedEpoch 0, while designated lobby host entered later (5000)
+  const presenceState = {
+    guest_fast_phone: [{ joinedAt: 1000, isBackground: false, claimedEpoch: 0 }],
+    lobby_host_phone: [{ joinedAt: 5000, isBackground: false, claimedEpoch: 0 }],
+  };
+
+  const guestElection = electHostFromPresence(presenceState, 'guest_fast_phone', 'lobby_host_phone');
+  assert.equal(guestElection.isHost, false);
+  assert.equal(guestElection.hostId, 'lobby_host_phone');
+  assert.equal(guestElection.onlineCount, 2);
+
+  const hostElection = electHostFromPresence(presenceState, 'lobby_host_phone', 'lobby_host_phone');
+  assert.equal(hostElection.isHost, true);
+  assert.equal(hostElection.hostId, 'lobby_host_phone');
+
+  // If lobby host goes to background, foreground guest takes over
+  const bgHostPresence = {
+    guest_fast_phone: [{ joinedAt: 1000, isBackground: false, claimedEpoch: 0 }],
+    lobby_host_phone: [{ joinedAt: 5000, isBackground: true, claimedEpoch: 1 }],
+  };
+  const failoverElection = electHostFromPresence(bgHostPresence, 'guest_fast_phone', 'lobby_host_phone');
+  assert.equal(failoverElection.isHost, true);
+  assert.equal(failoverElection.hostId, 'guest_fast_phone');
+});
+

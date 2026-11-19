@@ -32,12 +32,14 @@ function normalizeClaimedEpoch(meta: PresenceEntryMeta | undefined): number {
  * 우선순위:
  * 1) 포그라운드 활성 유저(isBackground !== true) 최우선
  * 2) 더 높은 장애복구 승계 에폭(claimedEpoch) 우선
- * 3) 먼저 접속한 유저(joinedAt 오름차순)
- * 4) playerId 사전순 타이브레이크
+ * 3) 로비에서 확정된 방장(preferredHostId) 우선 (동일 에폭일 때 시계 오차/입장 순서 무관)
+ * 4) 먼저 접속한 유저(joinedAt 오름차순)
+ * 5) playerId 사전순 타이브레이크
  */
 export function electHostFromPresence(
   presenceState: Record<string, PresenceEntryMeta[]>,
-  localPlayerId: string
+  localPlayerId: string,
+  preferredHostId?: string
 ): { isHost: boolean; hostId: string; onlineCount: number } {
   const keys = Object.keys(presenceState);
   if (keys.length === 0) {
@@ -46,10 +48,14 @@ export function electHostFromPresence(
 
   const candidates = keys.map((id) => {
     const latest = extractLatestPresenceMeta(presenceState[id]);
+    const rawEpoch = normalizeClaimedEpoch(latest);
+    const isPreferredLobbyHost = Boolean(preferredHostId) && id === preferredHostId;
     return {
       id,
       isBackground: latest?.isBackground === true ? 1 : 0,
-      claimedEpoch: normalizeClaimedEpoch(latest),
+      // 로비 지정 방장이 포그라운드에 존재할 때는 최소 에폭 1을 보장해 게스트 시계 오차나 초기 지연에도 권한을 유지
+      claimedEpoch: isPreferredLobbyHost && latest?.isBackground !== true ? Math.max(1, rawEpoch) : rawEpoch,
+      isPreferred: isPreferredLobbyHost ? 1 : 0,
       joinedAt: normalizeJoinedAt(latest),
     };
   });
@@ -58,6 +64,7 @@ export function electHostFromPresence(
     (a, b) =>
       a.isBackground - b.isBackground ||
       b.claimedEpoch - a.claimedEpoch ||
+      b.isPreferred - a.isPreferred ||
       a.joinedAt - b.joinedAt ||
       a.id.localeCompare(b.id)
   );

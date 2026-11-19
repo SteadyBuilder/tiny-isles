@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYER_COMBAT_CONFIG, PLAYER_SYNC_CONFIG } from '../../../data/worldRules';
+import { HOST_SYNC_CONFIG, PLAYER_COMBAT_CONFIG, PLAYER_SYNC_CONFIG } from '../../../data/worldRules';
 import {
   CampCoreHitPayload,
   CampCoreSyncPayload,
@@ -21,6 +21,8 @@ import {
   ActivePlayerTarget,
   HostHandoverPayload,
   HostHeartbeatPayload,
+  HostWelcomePayload,
+  JoinHelloPayload,
   MonsterHitPayload,
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
@@ -56,6 +58,8 @@ export interface IMultiplayerSyncContext {
   onHostIdentityChanged?: (hostId: string, isHost: boolean, hostEpoch: number) => void;
   onConnectionResumed?: () => void;
   onSyncResyncRequested?: () => void;
+  onRemoteJoinHello?: (payload: JoinHelloPayload) => void;
+  onRemoteHostWelcome?: (payload: HostWelcomePayload) => void;
   onRemoteWorldStateSync?: (payload: WorldStateSyncPayload) => void;
   onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
@@ -120,6 +124,8 @@ export class MultiplayerSyncController {
   private lastBroadcastTime = 0;
   private lastHeartbeatTime = 0;
   private lastSentState: LastSentMoveSnapshot | null = null;
+  private hasConfirmedHostSession = false;
+  private joinHelloTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(ctx: IMultiplayerSyncContext) {
     this.ctx = ctx;
@@ -150,7 +156,12 @@ export class MultiplayerSyncController {
       getRoomMode: () => this.ctx.getRoomMode?.() || 'solo',
       getPreferredHostId: () => this.ctx.getPreferredHostId?.(),
       onOnlineCountChanged: (count, hasNewPeer) => this.ctx.onOnlineCountChanged(count, hasNewPeer),
-      onHostStatusChanged: (isHost, hostEpoch) => this.ctx.onHostStatusChanged?.(isHost, hostEpoch),
+      onHostStatusChanged: (isHost, hostEpoch) => {
+        if (isHost) {
+          this.stopJoinHelloLoop();
+        }
+        this.ctx.onHostStatusChanged?.(isHost, hostEpoch);
+      },
       onHostIdentityChanged: (hostId, isHost, hostEpoch) =>
         this.ctx.onHostIdentityChanged?.(hostId, isHost, hostEpoch),
       onPresenceSnapshot: (snapshot) => this.watchdog.updatePresenceSnapshot(snapshot),
@@ -158,9 +169,23 @@ export class MultiplayerSyncController {
         this.ctx.onConnectionResumed?.();
         this.ctx.onSyncResyncRequested?.();
       },
-      onRemoteHostHeartbeat: (payload) => this.watchdog.handleHostHeartbeat(payload),
+      onRemoteJoinHello: (payload) => {
+        if (!payload || payload.playerId === this.ctx.getPlayerId()) return;
+        this.watchdog.recordPeerActivity(payload.playerId);
+        this.ctx.onRemoteJoinHello?.(payload);
+      },
+      onRemoteHostWelcome: (payload) => {
+        if (!payload || payload.hostId === this.ctx.getPlayerId()) return;
+        this.markHostConfirmed(payload.hostId, payload.hostEpoch);
+        this.ctx.onRemoteHostWelcome?.(payload);
+      },
+      onRemoteHostHeartbeat: (payload) => {
+        this.markHostConfirmed(payload.hostId, payload.hostEpoch);
+        this.watchdog.handleHostHeartbeat(payload);
+      },
       onRemoteHostHandover: (payload) => this.watchdog.handleHostHandover(payload),
       onRemoteWorldStateSync: (payload) => {
+        this.markHostConfirmed(undefined, payload.hostEpoch);
         this.watchdog.recordHostActivity(payload.hostEpoch);
         this.ctx.onRemoteWorldStateSync?.(payload);
       },
@@ -183,10 +208,12 @@ export class MultiplayerSyncController {
       onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
         this.ctx.onRemoteWaveSummonRequest?.(isBossWave, isEarlySummon),
       onRemoteMonstersSync: (payload) => {
+        this.markHostConfirmed(undefined, payload.hostEpoch);
         this.watchdog.recordHostActivity(payload.hostEpoch);
         this.ctx.onRemoteMonstersSync(payload);
       },
       onRemoteMonstersDeltaSync: (payload) => {
+        this.markHostConfirmed(undefined, payload.hostEpoch);
         this.watchdog.recordHostActivity(payload.hostEpoch);
         this.ctx.onRemoteMonstersDeltaSync?.(payload);
       },
@@ -240,6 +267,62 @@ export class MultiplayerSyncController {
     });
   }
 
+  private markHostConfirmed(hostId?: string, hostEpoch?: number): void {
+    this.hasConfirmedHostSession = true;
+    this.stopJoinHelloLoop();
+    this.router.confirmRemoteHostSeen(hostId, hostEpoch);
+  }
+
+  private startJoinHelloLoop(): void {
+    this.stopJoinHelloLoop();
+    if (this.ctx.getRoomMode?.() !== 'coop') return;
+    const preferredHostId = this.ctx.getPreferredHostId?.();
+    const localPlayerId = this.ctx.getPlayerId();
+    // 로비 방장 자신은 join_hello를 보낼 필요가 없음
+    if (preferredHostId && preferredHostId === localPlayerId) return;
+
+    this.hasConfirmedHostSession = false;
+    const sendHello = () => {
+      if (this.hasConfirmedHostSession || this.router.getIsHost()) {
+        this.stopJoinHelloLoop();
+        return;
+      }
+      this.broadcastJoinHello();
+    };
+    setTimeout(sendHello, 220);
+    this.joinHelloTimer = setInterval(sendHello, HOST_SYNC_CONFIG.joinHelloRetryIntervalMs);
+  }
+
+  private stopJoinHelloLoop(): void {
+    if (this.joinHelloTimer) {
+      clearInterval(this.joinHelloTimer);
+      this.joinHelloTimer = null;
+    }
+  }
+
+  public broadcastJoinHello(): void {
+    if (this.ctx.getRoomMode?.() !== 'coop') return;
+    const payload: JoinHelloPayload = {
+      playerId: this.ctx.getPlayerId(),
+      playerName: this.ctx.getPlayerName(),
+      playerColor: this.ctx.getPlayerColor(),
+      preferredHostId: this.ctx.getPreferredHostId?.(),
+      sentAt: Date.now(),
+    };
+    this.router.emit('join_hello', 'join_hello', payload);
+  }
+
+  public broadcastHostWelcome(targetPlayerId?: string): void {
+    if (this.ctx.getRoomMode?.() !== 'coop') return;
+    const payload: HostWelcomePayload = {
+      hostId: this.ctx.getPlayerId(),
+      hostEpoch: this.router.getHostEpoch(),
+      targetPlayerId,
+      sentAt: Date.now(),
+    };
+    this.router.emit('host_welcome', 'host_welcome', payload);
+  }
+
   public getIsHost(): boolean {
     return this.router.getIsHost();
   }
@@ -275,6 +358,7 @@ export class MultiplayerSyncController {
   public setup(): void {
     this.watchdog.attachBrowserLifecycle();
     this.router.connect();
+    this.startJoinHelloLoop();
   }
 
   public update(): void {
@@ -282,6 +366,7 @@ export class MultiplayerSyncController {
   }
 
   public destroy(): void {
+    this.stopJoinHelloLoop();
     this.lastSentState = null;
     this.watchdog.destroy();
     this.remoteRenderer.clear();

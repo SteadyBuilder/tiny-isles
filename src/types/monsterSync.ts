@@ -86,6 +86,21 @@ export interface HostHandoverPayload {
   reason: 'background' | 'manual';
 }
 
+export interface JoinHelloPayload {
+  playerId: string;
+  playerName: string;
+  playerColor: 'blue' | 'red';
+  preferredHostId?: string;
+  sentAt: number;
+}
+
+export interface HostWelcomePayload {
+  hostId: string;
+  hostEpoch: number;
+  targetPlayerId?: string;
+  sentAt: number;
+}
+
 export interface WorldIslandSyncEntry {
   id: number;
   unlocked: boolean;

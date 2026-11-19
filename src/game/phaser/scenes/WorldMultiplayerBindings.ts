@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PLAYER_CLASS_DEFINITIONS } from '../../../data/classes';
+import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import { ConstructedBuilding, Island, PlayerAction, PlayerColor } from '../../../types/game';
 import { RoomMode } from '../../../types/room';
@@ -83,9 +84,37 @@ export function createWorldMultiplayerSync(
 
   let hasResolvedHostOnce = false;
   let lastKnownHostState = false;
+  let hasCompletedInitialGuestSync = false;
+  let initialSyncBannerTimer: ReturnType<typeof setTimeout> | null = null;
   let sync!: MultiplayerSyncController;
 
   let lastWorldSnapshotBroadcastAt = 0;
+
+  const clearInitialSyncBanner = () => {
+    if (initialSyncBannerTimer) {
+      clearTimeout(initialSyncBannerTimer);
+      initialSyncBannerTimer = null;
+    }
+    if (!hasCompletedInitialGuestSync) {
+      hasCompletedInitialGuestSync = true;
+      GameEvents.emit('coop-initial-sync-state', { syncing: false });
+    }
+  };
+
+  const isCoopLobbyGuest =
+    host.getRoomMode?.() === 'coop' &&
+    Boolean(host.getPreferredHostId?.()) &&
+    host.getPreferredHostId?.() !== host.getPlayerId();
+
+  if (isCoopLobbyGuest) {
+    GameEvents.emit('coop-initial-sync-state', {
+      syncing: true,
+      message: '방장과 월드 및 몬스터 상태를 동기화하는 중...',
+    });
+    initialSyncBannerTimer = setTimeout(() => {
+      clearInitialSyncBanner();
+    }, HOST_SYNC_CONFIG.initialSyncBannerTimeoutMs);
+  }
 
   const broadcastAuthoritativeWorldSnapshot = (force = false) => {
     if (!waveSystem.getIsHost()) return;
@@ -100,8 +129,9 @@ export function createWorldMultiplayerSync(
     );
   };
 
-  const broadcastFullRoomState = (force: boolean) => {
+  const broadcastFullRoomState = (force: boolean, targetPlayerId?: string) => {
     if (!waveSystem.getIsHost()) return;
+    sync.broadcastHostWelcome(targetPlayerId);
     const ws = waveSystem.getWaveState();
     sync.broadcastThreatSync({
       threatPercent: ws.threatPercent,
@@ -112,7 +142,7 @@ export function createWorldMultiplayerSync(
     });
     sync.broadcastDungeonPortalSync(waveSystem.getDungeonPortalState());
     broadcastAuthoritativeWorldSnapshot(force);
-    waveSystem.broadcastFullMonstersSync(force);
+    waveSystem.broadcastFullMonstersSync(force, Boolean(targetPlayerId));
     monsterCampSystem.broadcastFullCampSync(force);
   };
 
@@ -143,6 +173,7 @@ export function createWorldMultiplayerSync(
 
       waveSystem.setHostMode(isHost, hostEpoch);
       if (isHost) {
+        clearInitialSyncBanner();
         monsterCampSystem.ensureHostGarrisonsSpawned();
         fieldMonsterSystem.ensureHostInitialized();
         if (migratedMidGame && host.getRoomMode?.() === 'coop') {
@@ -168,8 +199,19 @@ export function createWorldMultiplayerSync(
         waveSystem.requestMonstersSyncNow();
       }
     },
+    onRemoteJoinHello: (payload) => {
+      // 게스트가 입장 즉시 보낸 출석(join_hello)을 호스트가 수신하면 Presence 완료 전이라도 즉시 환영 + 전체 상태 송출
+      if (!waveSystem.getIsHost()) return;
+      broadcastFullRoomState(false, payload.playerId);
+    },
+    onRemoteHostWelcome: () => {
+      if (waveSystem.getIsHost()) return;
+      fieldMonsterSystem.resetForGuest();
+      monsterCampSystem.resetGuestGarrisonState();
+    },
     onRemoteWorldStateSync: (payload) => {
       if (waveSystem.getIsHost()) return;
+      clearInitialSyncBanner();
       const islands = host.getIslands?.();
       const buildings = host.getConstructedBuildings?.();
       if (!islands || !buildings || !host.applySyncedWorldState) return;
@@ -219,8 +261,14 @@ export function createWorldMultiplayerSync(
     },
     onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
       waveSystem.handleRemoteWaveSummonRequest(isBossWave, isEarlySummon),
-    onRemoteMonstersSync: (payload) => waveSystem.applyRemoteMonstersSync(payload),
-    onRemoteMonstersDeltaSync: (payload) => waveSystem.applyRemoteMonstersDeltaSync(payload),
+    onRemoteMonstersSync: (payload) => {
+      clearInitialSyncBanner();
+      waveSystem.applyRemoteMonstersSync(payload);
+    },
+    onRemoteMonstersDeltaSync: (payload) => {
+      clearInitialSyncBanner();
+      waveSystem.applyRemoteMonstersDeltaSync(payload);
+    },
     onRemoteMonstersSyncRequest: () => {
       waveSystem.handleRemoteMonstersSyncRequest();
       monsterCampSystem.broadcastFullCampSync(false);

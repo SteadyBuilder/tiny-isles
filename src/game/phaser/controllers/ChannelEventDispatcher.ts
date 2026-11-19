@@ -17,6 +17,8 @@ import {
   DungeonPortalSyncPayload,
   HostHandoverPayload,
   HostHeartbeatPayload,
+  HostWelcomePayload,
+  JoinHelloPayload,
   MonsterHitPayload,
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
@@ -40,6 +42,8 @@ export interface IMultiplayerChannelCallbacks {
   onHostIdentityChanged?: (hostId: string, isHost: boolean, hostEpoch: number) => void;
   onPresenceSnapshot?: (snapshot: NetworkPresenceSnapshot) => void;
   onConnectionResume?: () => void;
+  onRemoteJoinHello?: (payload: JoinHelloPayload) => void;
+  onRemoteHostWelcome?: (payload: HostWelcomePayload) => void;
   onRemoteHostHeartbeat?: (payload: HostHeartbeatPayload) => void;
   onRemoteHostHandover?: (payload: HostHandoverPayload) => void;
   onRemoteWorldStateSync?: (payload: WorldStateSyncPayload) => void;
@@ -86,6 +90,8 @@ export interface IMultiplayerChannelCallbacks {
 }
 
 export const SHARED_CHANNEL_EVENTS = [
+  'join_hello',
+  'host_welcome',
   'host_heartbeat',
   'host_handover',
   'world_state_sync',
@@ -125,6 +131,12 @@ export function dispatchSharedChannelEvent(
   callbacks: IMultiplayerChannelCallbacks
 ): void {
   switch (eventName) {
+    case 'join_hello':
+      callbacks.onRemoteJoinHello?.(payload as JoinHelloPayload);
+      break;
+    case 'host_welcome':
+      callbacks.onRemoteHostWelcome?.(payload as HostWelcomePayload);
+      break;
     case 'host_heartbeat':
       callbacks.onRemoteHostHeartbeat?.(payload as HostHeartbeatPayload);
       break;

@@ -154,6 +154,7 @@ export interface GameEventPayloads {
   'player-fainted': void;
   'player-respawned': void;
   'online-count-changed': number;
+  'coop-initial-sync-state': { syncing: boolean; message?: string };
   'game-alert': string;
 
   // 실시간 미니맵 스냅샷

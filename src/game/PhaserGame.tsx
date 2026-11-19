@@ -67,6 +67,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   const lastSceneInventoryRef = useRef<Inventory | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingPercent, setLoadingPercent] = useState(0);
+  const [coopInitialSyncMsg, setCoopInitialSyncMsg] = useState<string | null>(null);
 
   const onUpdateInventoryRef = useRef(onUpdateInventory);
   onUpdateInventoryRef.current = onUpdateInventory;
@@ -179,6 +180,14 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       setOnlineCountRef.current(count);
     };
 
+    const handleCoopInitialSyncState = (state: { syncing: boolean; message?: string }) => {
+      if (state.syncing) {
+        setCoopInitialSyncMsg(state.message || '방장과 월드 상태를 동기화하는 중...');
+      } else {
+        setCoopInitialSyncMsg(null);
+      }
+    };
+
     GameEvents.on('load-progress', handleProgress);
     GameEvents.on('load-complete', handleComplete);
     GameEvents.on('scene-ready', handleSceneReady);
@@ -193,6 +202,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     GameEvents.on('player-grid-pos-changed', handleGridPos);
     GameEvents.on('zoom-changed', handleZoomChanged);
     GameEvents.on('online-count-changed', handleOnlineCount);
+    GameEvents.on('coop-initial-sync-state', handleCoopInitialSyncState);
 
     // Yield 1 animation frame so unmounting LobbyDioramaCanvas releases its WebGL context cleanly
     const rafId = requestAnimationFrame(() => {
@@ -238,6 +248,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       GameEvents.off('player-grid-pos-changed', handleGridPos);
       GameEvents.off('zoom-changed', handleZoomChanged);
       GameEvents.off('online-count-changed', handleOnlineCount);
+      GameEvents.off('coop-initial-sync-state', handleCoopInitialSyncState);
 
       if (game) {
         game.destroy(true);
@@ -301,6 +312,16 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   return (
     <div className="relative w-full h-full">
       {loading && <GameLoadingOverlay percent={loadingPercent} />}
+      {!loading && coopInitialSyncMsg && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute top-16 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-amber-400/60 bg-[#101827]/90 px-4 py-1.5 text-xs sm:text-sm font-bold text-amber-200 shadow-lg backdrop-blur-sm"
+        >
+          <span className="inline-block h-2.5 w-2.5 animate-ping rounded-full bg-amber-400" />
+          <span>{coopInitialSyncMsg}</span>
+        </div>
+      )}
 
       <div
         ref={containerRef}

@@ -79,6 +79,29 @@ export class MultiplayerChannelRouter {
     this.deferredInitialSnapshot = null;
   }
 
+  /**
+   * 호스트로부터 직접 브로드캐스트(host_welcome, host_heartbeat, world_state_sync, monsters_sync 등)를 수신하면
+   * Presence 동기화보다 먼저 도착했더라도 즉시 게스트 모드로 확정하고 임시 방장 승격 타이머를 해제합니다.
+   */
+  public confirmRemoteHostSeen(hostId?: string, hostEpoch?: number): void {
+    const localPlayerId = this.callbacks.getPlayerId();
+    if (hostId && hostId === localPlayerId) return;
+    if (this.lobbyHostGraceTimer) {
+      this.clearLobbyHostGraceTimer();
+    }
+    if (!this.presenceResolved) {
+      this.presenceResolved = true;
+      this.isHost = false;
+      if (typeof hostEpoch === 'number' && hostEpoch > this.hostEpoch) {
+        this.hostEpoch = hostEpoch;
+      }
+      if (hostId) {
+        this.lastHostId = hostId;
+      }
+      this.callbacks.onHostStatusChanged?.(false, this.hostEpoch);
+    }
+  }
+
   public connect(customTransport?: INetworkTransport): void {
     serverSync.clearEventCaches();
     this.clearLobbyHostGraceTimer();
@@ -229,7 +252,7 @@ export class MultiplayerChannelRouter {
           snapshot.isHost &&
           !snapshot.members.some((m) => m.playerId === preferredHostId);
 
-        // 게스트 폰이 로비 방장보다 먼저 WorldScene에 입장한 경우 임시 방장 스폰을 방지하기 위해 짧게 대기
+        // 게스트 폰이 로비 방장보다 먼저 WorldScene에 입장한 경우 임시 방장 스폰을 방지하기 위해 대기
         if (waitingForLobbyHost) {
           this.deferredInitialSnapshot = snapshot;
           if (!this.lobbyHostGraceTimer) {

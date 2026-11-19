@@ -68,7 +68,11 @@ export const HOST_SYNC_CONFIG = {
   /** 동일 게스트의 중복 방장 승계 요청 최소 쿨다운 (ms) */
   failoverClaimCooldownMs: 3000,
   /** 협동 게임 시작 직후 모바일 에셋·지형 로딩 편차를 고려해 로비 방장 입장을 대기하는 게스트 유예 시간 (ms) */
-  initialLobbyHostGraceMs: 8000,
+  initialLobbyHostGraceMs: 12_000,
+  /** 게스트 입장 후 호스트의歡迎(host_welcome/monsters_sync) 응답 전まで join_hello 출석 재송신 주기 (ms) */
+  joinHelloRetryIntervalMs: 1200,
+  /** 게스트 초기 월드 동기화 배너 자동 해제 안전 타임아웃 (ms) */
+  initialSyncBannerTimeoutMs: 6500,
   /** 채널 끊김 시 지수 백오프 기본 재연결 대기 시간 (ms) */
   reconnectBaseDelayMs: 800,
   /** 채널 재연결 백오프 상한 (ms) */
