@@ -1,0 +1,219 @@
+import React, { useEffect, useRef } from 'react';
+import { Maximize2, Minimize2, Radar, Globe, Users } from 'lucide-react';
+import { HUD_STATUS_ICONS } from '../../data/hudIcons';
+import { useMinimapState } from '../../hooks/useMinimapState';
+import { sound } from '../../lib/sound';
+import { GESTURE_BLOCK_PROPS, attachGestureBlock } from '../../lib/touchGestureGuard';
+import { Island } from '../../types/game';
+
+export interface LiveMinimapWidgetProps {
+  territories: Island[];
+  unlockedIslandIds: number[];
+  onOpenFullMap: () => void;
+}
+
+/**
+ * 플레이 화면 우측 상단 상시 노출형 실시간 미니맵 위젯.
+ * - PC(md: 이상): 168×168px, 전체/레이더 전환 + 확대(전략 지도) + 접기 + 팀원 수 배지
+ * - 모바일(< md): 96×96px, HudMobileBar 하단 배치, 터치 제스처 차단, 저높이 가로모드 자동 접힘
+ */
+export const LiveMinimapWidget: React.FC<LiveMinimapWidgetProps> = ({
+  territories,
+  unlockedIslandIds,
+  onOpenFullMap,
+}) => {
+  const {
+    canvasRef,
+    canvasSize,
+    isMobile,
+    isCollapsed,
+    viewMode,
+    teammateCount,
+    toggleCollapsed,
+    toggleViewMode,
+  } = useMinimapState({ territories, unlockedIslandIds });
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    return attachGestureBlock(el);
+  }, [isCollapsed]);
+
+  const handleOpenModal = () => {
+    sound.playClick();
+    onOpenFullMap();
+  };
+
+  const handleToggleCollapse = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    sound.playClick();
+    toggleCollapsed();
+  };
+
+  const handleToggleViewMode = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    sound.playClick();
+    toggleViewMode();
+  };
+
+  const [isBelowSm, setIsBelowSm] = React.useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onResize = () => setIsBelowSm(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // <640px(모바일)은 HudMobileBar 3줄 아래, >=640px(태블릿/PC)은 HudDesktopBar 바로 아래 우측 배치
+  const positionClass = 'fixed right-1.5 sm:right-3 sm:top-[3.75rem] z-30';
+  const mobileTopStyle = isBelowSm
+    ? { top: 'max(6.25rem, calc(env(safe-area-inset-top, 0px) + 5.9rem))' }
+    : undefined;
+
+  if (isCollapsed) {
+    return (
+      <div
+        ref={containerRef}
+        {...GESTURE_BLOCK_PROPS}
+        className={`${positionClass} pointer-events-auto select-none`}
+        style={mobileTopStyle}
+      >
+        <button
+          id="live-minimap-expand-btn"
+          type="button"
+          onClick={handleToggleCollapse}
+          className="wood-hud-panel flex items-center gap-1 px-2 py-1.5 rounded-xl text-[#fef5df] text-[10px] font-black hover:brightness-110 active:scale-95 transition shadow-xl"
+          title="실시간 미니맵 펼치기"
+          aria-label="실시간 미니맵 펼치기"
+        >
+          <img src={HUD_STATUS_ICONS.compass} alt="" className="w-3.5 h-3.5 pixel-art shrink-0" />
+          <span className="pixel-btn-shadow">MAP</span>
+          {teammateCount > 0 && (
+            <span className="inline-flex items-center gap-0.5 px-1 rounded bg-emerald-950/90 border border-emerald-400/50 text-emerald-300 text-[9px] tabular-nums">
+              <Users className="w-2.5 h-2.5" />
+              {teammateCount}
+            </span>
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      {...GESTURE_BLOCK_PROPS}
+      id="live-minimap-widget"
+      className={`${positionClass} pointer-events-auto select-none`}
+      style={mobileTopStyle}
+    >
+      <div className="wood-hud-panel p-1.5 rounded-xl shadow-2xl flex flex-col gap-1">
+        {/* 상단 컨트롤 헤더 */}
+        <div className="flex items-center justify-between gap-1 px-0.5">
+          <div className="flex items-center gap-1 min-w-0">
+            <img
+              src={HUD_STATUS_ICONS.compass}
+              alt=""
+              className="w-3 h-3 pixel-art shrink-0"
+            />
+            {!isMobile && (
+              <span className="text-[10px] font-black text-[#fde68a] pixel-btn-shadow truncate">
+                {viewMode === 'world' ? '전체 지도' : '주변 레이더'}
+              </span>
+            )}
+            {teammateCount > 0 && (
+              <span
+                className="inline-flex items-center gap-0.5 px-1 py-0 rounded bg-emerald-950/85 border border-emerald-400/40 text-[9px] font-black text-emerald-300 tabular-nums shrink-0"
+                title={`미니맵에 표시 중인 협동 팀원 ${teammateCount}명`}
+              >
+                <Users className="w-2.5 h-2.5" />
+                {teammateCount}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-0.5 shrink-0">
+            {!isMobile && (
+              <button
+                id="live-minimap-mode-btn"
+                type="button"
+                onClick={handleToggleViewMode}
+                className="w-5 h-5 rounded bg-[#24160e]/85 border border-[#85532a] text-[#fde68a] hover:brightness-125 active:scale-95 flex items-center justify-center transition"
+                title={viewMode === 'world' ? '주변 레이더 모드로 전환' : '전체 월드 모드로 전환'}
+                aria-label="미니맵 뷰 모드 전환"
+              >
+                {viewMode === 'world' ? (
+                  <Radar className="w-3 h-3" />
+                ) : (
+                  <Globe className="w-3 h-3" />
+                )}
+              </button>
+            )}
+
+            <button
+              id="live-minimap-modal-btn"
+              type="button"
+              onClick={handleOpenModal}
+              className="w-5 h-5 rounded bg-[#24160e]/85 border border-[#85532a] text-[#fef5df] hover:brightness-125 active:scale-95 flex items-center justify-center transition"
+              title="5×5 영지 전략 지도 크게 열기 [M]"
+              aria-label="영지 전략 지도 열기"
+            >
+              <Maximize2 className="w-2.5 h-2.5" />
+            </button>
+
+            <button
+              id="live-minimap-collapse-btn"
+              type="button"
+              onClick={handleToggleCollapse}
+              className="w-5 h-5 rounded bg-[#24160e]/85 border border-[#85532a] text-[#d6b286] hover:brightness-125 active:scale-95 flex items-center justify-center transition"
+              title="미니맵 접기"
+              aria-label="미니맵 접기"
+            >
+              <Minimize2 className="w-2.5 h-2.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 실시간 2D 미니맵 캔버스 (클릭/탭 시 5×5 영지 전략 지도 열기) */}
+        <button
+          type="button"
+          onClick={handleOpenModal}
+          className="relative block rounded-lg overflow-hidden border border-[#85532a] bg-[#162c1c] cursor-pointer hover:brightness-105 active:scale-[0.99] transition focus:outline-none focus:ring-1 focus:ring-[#fde68a]"
+          style={{ width: canvasSize, height: canvasSize }}
+          title="클릭하여 5×5 영지 전략 지도 열기 [M]"
+          aria-label="실시간 미니맵 (클릭 시 영지 전략 지도 열기)"
+        >
+          <canvas
+            ref={canvasRef}
+            style={{ width: canvasSize, height: canvasSize }}
+            className="block"
+          />
+        </button>
+
+        {/* PC 전용 간략 범례 */}
+        {!isMobile && (
+          <div className="flex items-center justify-between px-0.5 text-[9px] font-bold text-[#e7d3b3]">
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#38bdf8] border border-white inline-block" />
+              나
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#22d3ee] border border-[#fef08a] inline-block" />
+              팀원
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#ef4444] border border-[#fde047] inline-block" />
+              적/보스
+            </span>
+            <span className="text-[#a89070] font-mono">[M]</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

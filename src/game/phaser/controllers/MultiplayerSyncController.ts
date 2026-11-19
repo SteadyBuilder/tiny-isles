@@ -180,6 +180,17 @@ export class MultiplayerSyncController {
     return [localPlayer, ...this.remoteRenderer.getActivePlayers()];
   }
 
+  public getRemotePlayerMinimapMarkers(): Array<{
+    id: string;
+    name: string;
+    color: PlayerColor;
+    x: number;
+    y: number;
+    isFainted: boolean;
+  }> {
+    return this.remoteRenderer.getMinimapMarkers();
+  }
+
   public setup(): void {
     this.router.connect();
   }

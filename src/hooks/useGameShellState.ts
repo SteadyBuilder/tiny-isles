@@ -278,6 +278,9 @@ export function useGameShellState() {
       if (e.code === 'KeyB' || e.key === 'b' || e.key === 'B') {
         e.preventDefault();
         handleOpenVillageModalForCurrent();
+      } else if (e.code === 'KeyM' || e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        setShowMinimapModal((prev) => !prev);
       } else if (e.code === 'Digit1' || e.key === '1') {
         GameEvents.emit('use-potion', 'potion_small');
       } else if (e.code === 'Digit2' || e.key === '2') {

@@ -155,6 +155,10 @@ export interface GameEventPayloads {
   'player-respawned': void;
   'online-count-changed': number;
   'game-alert': string;
+
+  // 실시간 미니맵 스냅샷
+  'minimap-terrain-ready': import('../../types/minimap').MinimapTerrainBakePayload;
+  'minimap-snapshot': import('../../types/minimap').MinimapDynamicSnapshot;
 }
 
 /**

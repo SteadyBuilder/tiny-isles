@@ -3,6 +3,7 @@ import { PhaserGame } from './game/PhaserGame';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
+import { LiveMinimapWidget } from './components/minimap/LiveMinimapWidget';
 import { VillageBuildModal } from './components/VillageBuildModal';
 import { SkillTargetingBanner } from './components/SkillTargetingBanner';
 import { TowerPlacementBanner } from './components/TowerPlacementBanner';
@@ -253,6 +254,12 @@ export function App() {
         currentZoom={zoom}
         progression={playerProgression}
         dashState={dashState}
+      />
+
+      <LiveMinimapWidget
+        territories={territories}
+        unlockedIslandIds={unlockedIslandIds}
+        onOpenFullMap={() => setShowMinimapModal(true)}
       />
 
       <MinimapModal

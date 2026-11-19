@@ -189,6 +189,35 @@ export class RemotePlayerRenderer {
     return result;
   }
 
+  public getMinimapMarkers(): Array<{
+    id: string;
+    name: string;
+    color: Player['color'];
+    x: number;
+    y: number;
+    isFainted: boolean;
+  }> {
+    const result: Array<{
+      id: string;
+      name: string;
+      color: Player['color'];
+      x: number;
+      y: number;
+      isFainted: boolean;
+    }> = [];
+    for (const visual of this.remotePlayers.values()) {
+      result.push({
+        id: visual.data.id,
+        name: visual.data.name,
+        color: visual.data.color,
+        x: visual.container.x,
+        y: visual.container.y,
+        isFainted: Boolean(visual.data.isFainted),
+      });
+    }
+    return result;
+  }
+
   public removePlayer(id: string): void {
     serverSync.removePlayerCache(id);
     const visual = this.remotePlayers.get(id);

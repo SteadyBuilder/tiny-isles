@@ -16,6 +16,7 @@ import { MissionSystem } from '../../systems/MissionSystem';
 import { WORLD_BOUNDS } from '../../worldBounds';
 import { generateWorldTerrain, WorldTerrainMap } from '../../world/MapTerrainGenerator';
 import { WorldPersistenceController } from '../controllers/WorldPersistenceController';
+import { MinimapSnapshotEmitter } from '../controllers/MinimapSnapshotEmitter';
 import { CombatFeedbackRenderer } from '../renderers/CombatFeedbackRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { ExpansionAltarRenderer } from '../renderers/ExpansionAltarRenderer';
@@ -83,6 +84,7 @@ export class WorldScene extends Phaser.Scene {
   private systems!: WorldSystemsBundle;
   private controllers!: WorldControllersBundle;
   private persistence!: WorldPersistenceController;
+  private minimapEmitter!: MinimapSnapshotEmitter;
 
   private unbindWebGLGuard: (() => void) | null = null;
   private isCleanedUp = false;
@@ -376,6 +378,26 @@ export class WorldScene extends Phaser.Scene {
     this.systems.playerProgressionSystem.emitState();
     this.persistence.emitWorldStateToReact(true);
     this.systems.waveSystem.emitWaveState();
+
+    this.minimapEmitter = new MinimapSnapshotEmitter({
+      scene: this,
+      isSceneAlive: () => this.isSceneAlive(),
+      getLocalPlayerState: () => {
+        const st = this.controllers.playerMovement.getState();
+        return {
+          x: st.x,
+          y: st.y,
+          direction: st.direction,
+          color: this.playerColor,
+          isFainted: this.systems.playerHealthSystem.isFainted(),
+        };
+      },
+      getRemoteTeammates: () => this.systems.multiplayerSync?.getRemotePlayerMinimapMarkers() ?? [],
+      getMonsterVisuals: () => this.systems.waveSystem.getMonsterVisuals(),
+      getDungeonPortalState: () => this.systems.waveSystem.getDungeonPortalState(),
+    });
+    this.minimapEmitter.emitTerrainBake(this.terrainMap);
+    this.minimapEmitter.update(this.time.now, true);
   }
 
   public update(time: number, delta: number): void {
@@ -412,6 +434,7 @@ export class WorldScene extends Phaser.Scene {
       dungeonPortal: this.systems.waveSystem.getDungeonPortalState(),
     });
     this.systems.multiplayerSync?.maybeBroadcastPlayerMove(time);
+    this.minimapEmitter?.update(time);
   }
 
   private addResources(wood: number, stone: number, gold: number): void {
@@ -497,6 +520,7 @@ export class WorldScene extends Phaser.Scene {
     this.resourceDropEffectsRenderer?.destroy();
     this.celebrationEffects?.destroy();
     this.monsterIndicatorRenderer?.destroy();
+    this.minimapEmitter?.destroy();
     this.systems?.multiplayerSync?.destroy();
   }
 }
