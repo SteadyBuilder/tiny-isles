@@ -117,6 +117,7 @@ export class WaveSystem {
       getIslands: () => this.ctx.getIslands(),
       playExplosionAt: (x, y) => this.ctx.playExplosionAt(x, y),
       shakeObject: (target) => this.ctx.shakeObject(target),
+      setRemoteTarget: (id, x, y) => this.syncBridge.setRemoteTarget(id, x, y),
     });
     this.dungeonSpawner = new DungeonInvasionSpawner({
       scene: ctx.scene,

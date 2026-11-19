@@ -35,12 +35,17 @@ export class ConstructedBuildingRenderer {
 
   public clear(): void {
     this.visuals.forEach((cv) => {
-      cv.colliders?.forEach((col) => col.destroy());
+      cv.colliders?.forEach((col) => {
+        if (col.active) {
+          this.wallColliders.remove(col, true, true);
+        } else {
+          col.destroy();
+        }
+      });
       cv.extraVisuals?.forEach((ev) => ev.destroy());
       cv.container.destroy();
     });
     this.visuals.clear();
-    this.wallColliders.clear(true, true);
   }
 
   public spawnAll(buildings: ConstructedBuilding[], islands: Island[]): void {
@@ -85,9 +90,13 @@ export class ConstructedBuildingRenderer {
           ''
         );
         wallCol.setVisible(false);
+        this.wallColliders.add(wallCol);
         wallCol.setDisplaySize(box.w, box.h);
         wallCol.refreshBody();
-        this.wallColliders.add(wallCol);
+        const body = wallCol.body as Phaser.Physics.Arcade.StaticBody | null;
+        if (body) {
+          body.setSize(box.w, box.h, true);
+        }
         colliders.push(wallCol);
       }
       if (refreshColliders && colliders.length > 0) {
@@ -162,9 +171,13 @@ export class ConstructedBuildingRenderer {
         ''
       );
       footCol.setVisible(false);
+      this.wallColliders.add(footCol);
       footCol.setDisplaySize(footBox.w, footBox.h);
       footCol.refreshBody();
-      this.wallColliders.add(footCol);
+      const footBody = footCol.body as Phaser.Physics.Arcade.StaticBody | null;
+      if (footBody) {
+        footBody.setSize(footBox.w, footBox.h, true);
+      }
       colliders.push(footCol);
       if (refreshColliders) {
         this.wallColliders.refresh();

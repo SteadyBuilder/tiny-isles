@@ -82,6 +82,13 @@ export function useRoomLobbyState(
       transport.onPresenceSync((snapshot) => {
         setIsLobbyHost(snapshot.isHost);
         setWaitingMembers(snapshot.members.slice(0, cfg.maxPlayers));
+        if (snapshot.hostId) {
+          setRoomConfig((prev) =>
+            prev.hostPlayerId === snapshot.hostId
+              ? prev
+              : { ...prev, hostPlayerId: snapshot.hostId }
+          );
+        }
       });
 
       transport.on<{ roomConfig: RoomConfig }>('room_start', (payload) => {
@@ -97,6 +104,7 @@ export function useRoomLobbyState(
       transport.connect(`${cfg.roomId}_lobby`, playerId, {
         name: playerName,
         color: playerColor,
+        preferredHostId: cfg.hostPlayerId || undefined,
       });
     },
     [disconnectLobbyTransport, playerColor, playerId, playerName]
@@ -120,6 +128,7 @@ export function useRoomLobbyState(
       hostPlayerId: '',
     };
     setRoomConfig(nextCfg);
+    setIsLobbyHost(false);
     setSessionStatus('waiting');
     connectLobbyTransport(nextCfg);
   }, [connectLobbyTransport]);
@@ -253,6 +262,7 @@ export function useRoomLobbyState(
   );
 
   const handleStartCoopMatch = useCallback(() => {
+    if (!isLobbyHost) return;
     const transport = lobbyTransportRef.current;
     lobbyTransportRef.current = null;
     const startedRoomConfig: RoomConfig = {
@@ -260,17 +270,23 @@ export function useRoomLobbyState(
       hostPlayerId: playerId,
     };
     setRoomConfig(startedRoomConfig);
-    transport?.emit('room_start', { roomConfig: startedRoomConfig });
     if (transport) {
+      transport.emit('room_start', { roomConfig: startedRoomConfig });
+      setTimeout(() => {
+        transport.emit('room_start', { roomConfig: startedRoomConfig });
+      }, 140);
+      setTimeout(() => {
+        transport.emit('room_start', { roomConfig: startedRoomConfig });
+      }, 300);
       setTimeout(() => {
         transport.disconnect();
-      }, 150);
+      }, 650);
     }
     setWaitingMembers([]);
     setMissionProgress(null);
     setMissionResult(null);
     setSessionStatus('playing');
-  }, [playerId, roomConfig]);
+  }, [isLobbyHost, playerId, roomConfig]);
 
   const handleLeaveToLobby = useCallback(() => {
     disconnectLobbyTransport();

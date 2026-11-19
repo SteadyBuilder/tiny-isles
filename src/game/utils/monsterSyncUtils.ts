@@ -35,15 +35,17 @@ export function hasMonsterSyncChanged(
   const dir: 0 | 1 = cur.direction === 'left' ? 0 : 1;
   const rShield = Math.round(cur.shieldHp ?? 0);
 
-  return (
-    prev.x !== rx ||
-    prev.y !== ry ||
+  if (
     prev.hp !== rhp ||
     prev.maxHp !== rmaxHp ||
     prev.dir !== dir ||
     prev.targetTerritoryId !== cur.targetTerritoryId ||
     prev.shieldHp !== rShield
-  );
+  ) {
+    return true;
+  }
+
+  return Math.abs(prev.x - rx) >= 2 || Math.abs(prev.y - ry) >= 2;
 }
 
 export function toCompactMonsterTuple(m: Monster): CompactMonsterTuple {

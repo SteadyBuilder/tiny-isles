@@ -40,13 +40,18 @@ export function reconcileWorldStateSnapshot(
     const remote = remoteIslandById.get(isl.id);
     if (!remote) return isl;
 
+    // 마물 주둔지(미점령 상태)의 코어 HP/MaxHP는 CampCoreSystem(camp_core_sync / camp_full_sync)이 권위를 가짐
+    const isActiveMonsterCamp = Boolean(isl.isMonsterCamp && !remote.unlocked);
+    const nextCoreHp = isActiveMonsterCamp ? isl.coreHp : remote.coreHp;
+    const nextCoreMaxHp = isActiveMonsterCamp ? isl.coreMaxHp : remote.coreMaxHp;
+
     const islandDiff =
       isl.unlocked !== remote.unlocked ||
       isl.ownerId !== remote.ownerId ||
       isl.ownerName !== remote.ownerName ||
       isl.villageTier !== remote.villageTier ||
-      isl.coreHp !== remote.coreHp ||
-      isl.coreMaxHp !== remote.coreMaxHp;
+      isl.coreHp !== nextCoreHp ||
+      isl.coreMaxHp !== nextCoreMaxHp;
 
     if (!islandDiff) return isl;
     changed = true;
@@ -56,8 +61,8 @@ export function reconcileWorldStateSnapshot(
       ownerId: remote.ownerId,
       ownerName: remote.ownerName,
       villageTier: remote.villageTier,
-      coreHp: remote.coreHp,
-      coreMaxHp: remote.coreMaxHp,
+      coreHp: nextCoreHp,
+      coreMaxHp: nextCoreMaxHp,
     };
   });
 

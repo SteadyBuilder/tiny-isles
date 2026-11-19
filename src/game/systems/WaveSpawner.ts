@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MAP_OUTER_SPAWN_CONFIG, WAVE_SPAWN_SCALING_CONFIG } from '../../data/waves';
+import { MONSTER_SYNC_CONFIG } from '../../data/worldRules';
 import { Island, Monster } from '../../types/game';
 import {
   getBossMonsterTemplate,
@@ -17,6 +18,7 @@ export interface IWaveSpawnerContext {
   getIslands: () => Island[];
   playExplosionAt: (x: number, y: number) => void;
   shakeObject: (target: Phaser.GameObjects.Container) => void;
+  setRemoteTarget?: (id: string, x: number, y: number) => void;
 }
 
 export interface SpawnWaveParams {
@@ -184,14 +186,19 @@ export class WaveSpawner {
       }
     }
 
+    const snapDistSq =
+      MONSTER_SYNC_CONFIG.remoteSnapThresholdPx * MONSTER_SYNC_CONFIG.remoteSnapThresholdPx;
+
     for (const incoming of liveIncoming) {
       const existing = monsters.get(incoming.id);
       if (existing) {
         const m = existing.monster;
         const prevHp = m.hp;
         const prevShield = m.shieldHp ?? 0;
-        m.x = incoming.x;
-        m.y = incoming.y;
+        const dx = incoming.x - m.x;
+        const dy = incoming.y - m.y;
+        const distSq = dx * dx + dy * dy;
+
         m.hp = incoming.hp;
         m.maxHp = incoming.maxHp;
         m.direction = incoming.direction;
@@ -206,8 +213,14 @@ export class WaveSpawner {
           m.shieldUntil = 0;
         }
 
-        existing.container.setPosition(incoming.x, incoming.y);
-        setDepthIfChanged(existing.container, ySortDepth(incoming.y, 28));
+        if (this.ctx.setRemoteTarget && distSq > 0.25 && distSq <= snapDistSq) {
+          this.ctx.setRemoteTarget(incoming.id, incoming.x, incoming.y);
+        } else {
+          m.x = incoming.x;
+          m.y = incoming.y;
+          existing.container.setPosition(incoming.x, incoming.y);
+          setDepthIfChanged(existing.container, ySortDepth(incoming.y, 28));
+        }
         existing.sprite.setFlipX(incoming.direction === 'left');
 
         if (incoming.hp < prevHp) {

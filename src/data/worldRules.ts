@@ -47,8 +47,8 @@ export const MONSTER_SYNC_CONFIG = {
   digestMismatchTriggerCount: 2,
   /** 게스트 측 몬스터 보간 순간이동(Snap) 임계 거리 (px) */
   remoteSnapThresholdPx: 260,
-  /** 게스트 측 몬스터 보간 속도 계수 */
-  remoteLerpSpeedPerSec: 14,
+  /** 게스트 측 몬스터 보간 속도 계수 (180ms 델타 주기에 맞춘 연속 이동 감쇠값) */
+  remoteLerpSpeedPerSec: 9.5,
   /** 협동 처치 시 주변 팀원과 보상/경험치 공유 반경 (px) */
   coopKillShareRadiusPx: 550,
   /** 미완성 분할 전체 동기화 배치를 폐기하는 만료 시간 (ms) */
@@ -67,8 +67,8 @@ export const HOST_SYNC_CONFIG = {
   failoverCandidateStaggerMs: 650,
   /** 동일 게스트의 중복 방장 승계 요청 최소 쿨다운 (ms) */
   failoverClaimCooldownMs: 3000,
-  /** 협동 게임 시작 직후 로비 방장 입장을 대기하는 게스트 유예 시간 (ms) */
-  initialLobbyHostGraceMs: 2500,
+  /** 협동 게임 시작 직후 모바일 에셋·지형 로딩 편차를 고려해 로비 방장 입장을 대기하는 게스트 유예 시간 (ms) */
+  initialLobbyHostGraceMs: 8000,
   /** 채널 끊김 시 지수 백오프 기본 재연결 대기 시간 (ms) */
   reconnectBaseDelayMs: 800,
   /** 채널 재연결 백오프 상한 (ms) */

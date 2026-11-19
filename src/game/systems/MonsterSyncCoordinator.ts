@@ -70,6 +70,10 @@ export class MonsterSyncCoordinator {
     this.remoteApplier.markLocalHit(monsterId);
   }
 
+  public setRemoteTarget(monsterId: string, x: number, y: number): void {
+    this.remoteApplier.setRemoteTarget(monsterId, x, y);
+  }
+
   public recordKill(kill: MonsterKillSyncPayload): void {
     if (this.pendingKills.length >= 256) {
       this.pendingKills.shift();

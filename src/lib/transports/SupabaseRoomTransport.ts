@@ -124,6 +124,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
 
   private ensureChannelHealthy(): void {
     if (this.disposed || !this.roomId || !this.localPlayerId) return;
+    if (this.status === 'connecting') return;
     const state = (this.channel as { state?: string } | null)?.state;
     if (!this.channel || this.status !== 'connected' || (state && state !== 'joined')) {
       this.reconnectNow();
@@ -187,7 +188,19 @@ export class SupabaseRoomTransport implements INetworkTransport {
     channel
       .on('presence', { event: 'sync' }, () => {
         if (epoch !== this.connectionEpoch) return;
-        const rawState = channel.presenceState() as Record<string, PresenceRawEntry[]>;
+        const rawPresence = channel.presenceState() as Record<string, PresenceRawEntry[]>;
+        const rawState: Record<string, PresenceRawEntry[]> = { ...rawPresence };
+        if (!rawState[playerId] || rawState[playerId].length === 0) {
+          rawState[playerId] = [
+            {
+              name: this.baseMeta.name,
+              color: this.baseMeta.color,
+              joinedAt: this.currentJoinedAt || Date.now(),
+              isBackground: this.isBackground,
+              claimedEpoch: this.claimedEpoch,
+            },
+          ];
+        }
         const otherKeys = Object.keys(rawState).filter((id) => id !== playerId);
 
         // SUBSCRIBED 시점에 presenceState가 비어있어 기기 시계 오차로 joinedAt이 앞섰던 게스트/재접속자를 자동 보정
@@ -211,6 +224,15 @@ export class SupabaseRoomTransport implements INetworkTransport {
               shouldRetrack = true;
             }
             if (shouldRetrack) {
+              rawState[playerId] = [
+                {
+                  name: this.baseMeta.name,
+                  color: this.baseMeta.color,
+                  joinedAt: this.currentJoinedAt,
+                  isBackground: this.isBackground,
+                  claimedEpoch: this.claimedEpoch,
+                },
+              ];
               void this.trackPresenceState();
             }
           }

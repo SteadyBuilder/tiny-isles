@@ -190,9 +190,13 @@ export function createCampStructureVisual(params: {
     const box = params.collisionBox;
     collider = scene.physics.add.staticSprite(box.x + box.w / 2, box.y + box.h / 2, '');
     collider.setVisible(false);
+    params.wallColliders.add(collider);
     collider.setDisplaySize(box.w, box.h);
     collider.refreshBody();
-    params.wallColliders.add(collider);
+    const body = collider.body as Phaser.Physics.Arcade.StaticBody | null;
+    if (body) {
+      body.setSize(box.w, box.h, true);
+    }
     if (params.refreshCollider) {
       params.wallColliders.refresh();
     }

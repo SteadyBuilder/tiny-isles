@@ -116,6 +116,10 @@ export class WaveNetworkSyncBridge {
     this.syncCoordinator.markLocalHit(monsterId);
   }
 
+  public setRemoteTarget(monsterId: string, x: number, y: number): void {
+    this.syncCoordinator.setRemoteTarget(monsterId, x, y);
+  }
+
   public recordKill(kill: MonsterKillSyncPayload): void {
     if (this.deps.isHost() && this.shouldBroadcastCoopMonsters()) {
       this.syncCoordinator.recordKill(kill);

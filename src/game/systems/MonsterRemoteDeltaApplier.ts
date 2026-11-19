@@ -76,6 +76,11 @@ export class MonsterRemoteDeltaApplier {
     );
   }
 
+  public setRemoteTarget(monsterId: string, x: number, y: number): void {
+    if (!monsterId) return;
+    this.remoteTargets.set(monsterId, { x, y });
+  }
+
   private applyShieldState(
     m: Monster,
     shieldHp: number,
@@ -292,6 +297,9 @@ export class MonsterRemoteDeltaApplier {
       }
     }
 
+    const snapDistSq =
+      MONSTER_SYNC_CONFIG.remoteSnapThresholdPx * MONSTER_SYNC_CONFIG.remoteSnapThresholdPx;
+
     for (const sp of payload.spawns || []) {
       if (sp.hp <= 0 || this.tombstones.isTombstoned(sp.id, now)) continue;
       const existing = monsters.get(sp.id);
@@ -299,21 +307,29 @@ export class MonsterRemoteDeltaApplier {
         const m = existing.monster;
         const nextShield = sp.shieldHp ?? 0;
         const prevShieldHp = this.applyShieldState(m, nextShield, sp.shieldMaxHp, now);
-        m.x = sp.x;
-        m.y = sp.y;
+        const dx = sp.x - m.x;
+        const dy = sp.y - m.y;
+        const distSq = dx * dx + dy * dy;
         m.direction = sp.direction;
         m.targetTerritoryId = sp.targetTerritoryId;
-        existing.container.setPosition(sp.x, sp.y);
-        setDepthIfChanged(existing.container, ySortDepth(sp.y, 28));
+        if (distSq > 0.25 && distSq <= snapDistSq) {
+          this.remoteTargets.set(sp.id, { x: sp.x, y: sp.y });
+        } else {
+          m.x = sp.x;
+          m.y = sp.y;
+          existing.container.setPosition(sp.x, sp.y);
+          setDepthIfChanged(existing.container, ySortDepth(sp.y, 28));
+          this.remoteTargets.delete(sp.id);
+        }
         existing.sprite.setFlipX(sp.direction === 'left');
         this.localHitGraceUntil.delete(sp.id);
         this.deferredAuthoritativeHps.delete(sp.id);
         this.applyAuthoritativeHp(existing, sp.hp, sp.maxHp, prevShieldHp, nextShield, callbacks);
       } else {
         monsters.set(sp.id, MonsterVisualManager.create(scene, { ...sp }));
+        this.remoteTargets.delete(sp.id);
         spawnedCount++;
       }
-      this.remoteTargets.delete(sp.id);
     }
 
     const missingIdSet = new Set<string>();

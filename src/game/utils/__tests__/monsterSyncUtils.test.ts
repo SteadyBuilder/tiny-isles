@@ -28,7 +28,7 @@ const makeMonster = (overrides: Partial<Monster> = {}): Monster => ({
   ...overrides,
 });
 
-test('hasMonsterSyncChanged detects rounded coordinate, hp, direction, and shield changes', () => {
+test('hasMonsterSyncChanged detects rounded coordinate (>=2px), hp, direction, and shield changes while ignoring 1px patrol jitter', () => {
   const m = makeMonster();
   const prev = createSyncTrackedState(m);
 
@@ -36,13 +36,16 @@ test('hasMonsterSyncChanged detects rounded coordinate, hp, direction, and shiel
   const sameRounded = makeMonster({ x: 1200.2, y: -340.9 });
   assert.equal(hasMonsterSyncChanged(prev, sameRounded), false);
 
-  // Moving >= 1px triggers change
+  // 1px micro-jitter without HP/direction/shield change is ignored to prevent mobile delta packet flooding
+  assert.equal(hasMonsterSyncChanged(prev, makeMonster({ x: 1201, y: -341 })), false);
+
+  // Moving >= 2px triggers change
   assert.equal(hasMonsterSyncChanged(prev, makeMonster({ x: 1202 })), true);
-  // HP change triggers change
+  // HP change triggers change immediately even with 0px movement
   assert.equal(hasMonsterSyncChanged(prev, makeMonster({ hp: 120 })), true);
-  // Direction change triggers change
+  // Direction change triggers change immediately
   assert.equal(hasMonsterSyncChanged(prev, makeMonster({ direction: 'right' })), true);
-  // Shield change triggers change
+  // Shield change triggers change immediately
   assert.equal(hasMonsterSyncChanged(prev, makeMonster({ shieldHp: 45 })), true);
 });
 
