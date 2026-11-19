@@ -9,8 +9,11 @@ export const MINIMAP_CONFIG = {
   desktopCanvasSize: 168,
   /** 모바일 캔버스 논리 크기 (px) */
   mobileCanvasSize: 96,
+  /** 확장 미니맵 최대 캔버스 크기 (px) */
+  expandedMaxCanvasSizeDesktop: 460,
+  expandedMaxCanvasSizeMobile: 320,
   /** 오프스크린 정적 지형 베이크 해상도 (px) */
-  terrainBakeResolution: 256,
+  terrainBakeResolution: 384,
   /** 정적 지형 셀 샘플링 간격 (1=전체, 2=2x2 격자 단위) */
   terrainSampleStep: 2,
   /** PC 스냅샷 발행 주기 (ms) */

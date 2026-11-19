@@ -124,7 +124,8 @@ export function renderMinimapFrame(
     playerPos,
     MINIMAP_CONFIG.radarRadiusPx
   );
-  const markerScale = Math.max(0.68, canvasSize / MINIMAP_CONFIG.desktopCanvasSize);
+  const markerScale = Math.min(1.55, Math.max(0.68, canvasSize / MINIMAP_CONFIG.desktopCanvasSize));
+  const isExpandedCanvas = canvasSize >= 260;
   const pulse = 0.5 + 0.5 * Math.sin(nowMs / 240);
   const { palette, markerBaseSizes, edgeClampPaddingPx } = MINIMAP_CONFIG;
 
@@ -285,13 +286,16 @@ export function renderMinimapFrame(
     ctx.stroke();
 
     if (showTeammateLabels && !pt.isClamped && mate.name) {
-      const shortName = mate.name.length > 4 ? `${mate.name.slice(0, 4)}` : mate.name;
-      ctx.font = 'bold 8px sans-serif';
+      const maxChars = isExpandedCanvas ? 8 : 4;
+      const shortName = mate.name.length > maxChars ? `${mate.name.slice(0, maxChars)}` : mate.name;
+      const fontSize = isExpandedCanvas ? 10 : 8;
+      const boxH = fontSize + 2;
+      ctx.font = `bold ${fontSize}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
-      const textW = ctx.measureText(shortName).width + 4;
-      ctx.fillRect(pt.x - textW / 2, pt.y - mateR - 11, textW, 9);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      const textW = ctx.measureText(shortName).width + 5;
+      ctx.fillRect(pt.x - textW / 2, pt.y - mateR - boxH - 2, textW, boxH);
       ctx.fillStyle = '#fef9c3';
       ctx.fillText(shortName, pt.x, pt.y - mateR - 2);
     }
