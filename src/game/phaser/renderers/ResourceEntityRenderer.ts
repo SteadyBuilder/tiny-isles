@@ -316,6 +316,27 @@ export class ResourceEntityRenderer {
     this.spawnEntity({ ...entity });
   }
 
+  public exportResourceSnapshot(): Entity[] {
+    return this.getEntities().map((e) => ({
+      ...e,
+      x: Math.round(e.x),
+      y: Math.round(e.y),
+      hp: Math.round(e.hp),
+      maxHp: Math.round(e.maxHp),
+    }));
+  }
+
+  public applyResourceSnapshot(entities: Entity[]): void {
+    if (!this.ctx.isSceneAlive() || !Array.isArray(entities) || entities.length === 0) return;
+    for (const ev of this.entityVisuals.values()) {
+      if (ev.container.scene) ev.container.destroy();
+    }
+    this.entityVisuals.clear();
+    for (const ent of entities) {
+      this.spawnEntity({ ...ent });
+    }
+  }
+
   public spawnGoldMineClusterAndAnnounce(): void {
     const activeEntities = this.getEntities();
     const hasCluster = activeEntities.some((e) => e.zoneTag === 'gold_mine');

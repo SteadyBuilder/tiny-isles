@@ -30,6 +30,7 @@ import { CombatFeedbackRenderer } from '../renderers/CombatFeedbackRenderer';
 import { ConstructedBuildingRenderer } from '../renderers/ConstructedBuildingRenderer';
 import { LootChestDropRenderer } from '../renderers/LootChestDropRenderer';
 import { PlayerCelebrationEffects } from '../renderers/PlayerCelebrationEffects';
+import { RemoteMercenaryRenderer } from '../renderers/RemoteMercenaryRenderer';
 import { ResourceEntityRenderer } from '../renderers/ResourceEntityRenderer';
 import { SkillEffectsRenderer } from '../renderers/SkillEffectsRenderer';
 import { TerritoryStructureRenderer } from '../renderers/TerritoryStructureRenderer';
@@ -121,6 +122,7 @@ export interface WorldSystemsBundle {
   towerDefenseSystem: TowerDefenseSystem;
   garrisonSystem: GarrisonSystem;
   mercenarySystem: MercenarySystem;
+  remoteMercenaryRenderer: RemoteMercenaryRenderer;
   multiplayerSync: MultiplayerSyncController;
 }
 
@@ -384,9 +386,24 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       scene: host.scene,
       projectileSystem,
       showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
+      onLocalMercenariesChanged: (units) => {
+        if (host.getRoomMode?.() !== 'coop') return;
+        const ownerId = host.getPlayerId();
+        multiplayerSync?.getDomainBus().emitBatched(
+          'mercenary_sync',
+          {
+            ownerId,
+            ownerName: host.getPlayerName(),
+            units,
+          },
+          `merc_${ownerId}`
+        );
+      },
     },
     waveSystem
   );
+
+  const remoteMercenaryRenderer = new RemoteMercenaryRenderer(host.scene);
 
   multiplayerSync = createWorldMultiplayerSync(host, {
     coreGemSystem,
@@ -396,6 +413,49 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     fieldMonsterSystem,
     waveSystem,
   });
+
+  // 도메인 플러그인 등록: 원격 용병 실시간 동기화 + 중도 합류 자원/용병 스냅샷
+  multiplayerSync.getDomainBus().on('mercenary_sync', (payload) => {
+    if (payload.ownerId === host.getPlayerId()) return;
+    remoteMercenaryRenderer.applyOwnerSync(payload.ownerId, payload.ownerName, payload.units);
+  });
+
+  multiplayerSync.getSnapshotRegistry().register('resources', {
+    capture: () => host.resourceEntityRenderer.exportResourceSnapshot(),
+    apply: (entities) => {
+      if (Array.isArray(entities)) {
+        host.resourceEntityRenderer.applyResourceSnapshot(entities);
+      }
+    },
+  });
+
+  multiplayerSync.getSnapshotRegistry().register('mercenaries', {
+    capture: () => {
+      const localUnits = mercenarySystem.getMercenaries();
+      const groups = remoteMercenaryRenderer.getRemoteOwnersSnapshot();
+      if (localUnits.length > 0) {
+        groups.unshift({
+          ownerId: host.getPlayerId(),
+          ownerName: host.getPlayerName(),
+          units: localUnits,
+        });
+      }
+      return groups;
+    },
+    apply: (groups) => {
+      if (!Array.isArray(groups)) return;
+      const localId = host.getPlayerId();
+      for (const g of groups as Array<{
+        ownerId: string;
+        ownerName: string;
+        units: import('../../../types/game').MercenaryUnit[];
+      }>) {
+        if (!g || g.ownerId === localId || !Array.isArray(g.units)) continue;
+        remoteMercenaryRenderer.applyOwnerSync(g.ownerId, g.ownerName, g.units);
+      }
+    },
+  });
+
   multiplayerSync.setup();
 
   return {
@@ -410,6 +470,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     towerDefenseSystem,
     garrisonSystem,
     mercenarySystem,
+    remoteMercenaryRenderer,
     multiplayerSync,
   };
 }

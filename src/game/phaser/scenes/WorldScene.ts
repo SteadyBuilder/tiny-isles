@@ -467,6 +467,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems.towerDefenseSystem.update(time, clampedDelta);
     this.systems.garrisonSystem.update(time, clampedDelta);
     this.systems.mercenarySystem.update(time, clampedDelta);
+    this.systems.remoteMercenaryRenderer.update(clampedDelta);
     this.missionSystem.setCampConqueredCount(
       this.systems.monsterCampSystem.getFirstClearedCampCount()
     );
@@ -570,6 +571,7 @@ export class WorldScene extends Phaser.Scene {
     this.systems?.projectileSystem?.destroy();
     this.systems?.towerDefenseSystem?.destroy();
     this.systems?.mercenarySystem?.destroy();
+    this.systems?.remoteMercenaryRenderer?.clear();
     this.systems?.monsterCampSystem?.destroy();
     this.systems?.fieldMonsterSystem?.destroy();
     this.systems?.waveSystem?.destroy();

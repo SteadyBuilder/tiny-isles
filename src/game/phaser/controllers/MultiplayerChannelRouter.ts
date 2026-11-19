@@ -47,6 +47,10 @@ export class MultiplayerChannelRouter {
   private lastOnlineCount = -1;
   private lastMembersSignature = '';
   private batchQueue: NetworkBatchQueue;
+  private dynamicHandlers = new Map<string, Set<(payload: unknown) => void>>();
+  private snapshotSyncHandlers = new Set<
+    (snapshot: Record<string, unknown>, hostId: string, hostEpoch: number) => void
+  >();
 
   constructor(callbacks: IMultiplayerChannelCallbacks) {
     this.callbacks = callbacks;
@@ -212,8 +216,56 @@ export class MultiplayerChannelRouter {
     );
   }
 
+  public registerDynamicEvent(event: string, handler: (payload: unknown) => void): () => void {
+    let set = this.dynamicHandlers.get(event);
+    if (!set) {
+      set = new Set();
+      this.dynamicHandlers.set(event, set);
+      if (this.transport) {
+        const unsub = this.transport.on(event, (payload) => {
+          const handlers = this.dynamicHandlers.get(event);
+          if (!handlers) return;
+          for (const h of handlers) h(payload);
+        });
+        this.unsubscribers.push(unsub);
+      }
+    }
+    set.add(handler);
+    return () => {
+      this.dynamicHandlers.get(event)?.delete(handler);
+    };
+  }
+
+  public emitDynamic(
+    event: string,
+    payload: Record<string, unknown>,
+    batched = false,
+    coalesceKey?: string
+  ): void {
+    if (batched) {
+      this.emitBatched(event, event, payload, payload, coalesceKey);
+    } else {
+      this.emit(event, event, payload, payload);
+    }
+  }
+
+  public uploadRoomSnapshot(snapshot: Record<string, unknown>): void {
+    this.transport?.uploadSnapshot?.(snapshot);
+  }
+
+  public onRoomSnapshotSync(
+    handler: (snapshot: Record<string, unknown>, hostId: string, hostEpoch: number) => void
+  ): () => void {
+    this.snapshotSyncHandlers.add(handler);
+    return () => {
+      this.snapshotSyncHandlers.delete(handler);
+    };
+  }
+
   public destroy(): void {
     this.batchQueue.destroy();
+    this.dynamicHandlers.clear();
+    this.snapshotSyncHandlers.clear();
     this.clearLobbyHostGraceTimer();
     for (const unsub of this.unsubscribers) {
       unsub();
@@ -344,6 +396,23 @@ export class MultiplayerChannelRouter {
         t.on(ev, (p) => dispatchSharedChannelEvent(ev, p, this.callbacks))
       )
     );
+
+    for (const event of this.dynamicHandlers.keys()) {
+      this.unsubscribers.push(
+        t.on(event, (payload) => {
+          const handlers = this.dynamicHandlers.get(event);
+          if (!handlers) return;
+          for (const h of handlers) h(payload);
+        })
+      );
+    }
+
+    const snapUnsub = t.onSnapshotSync?.((snapshot, hostId, hostEpoch) => {
+      for (const h of this.snapshotSyncHandlers) h(snapshot, hostId, hostEpoch);
+    });
+    if (snapUnsub) {
+      this.unsubscribers.push(snapUnsub);
+    }
   }
 
   private setupLocalBus(playerId: string, roomId: string): void {

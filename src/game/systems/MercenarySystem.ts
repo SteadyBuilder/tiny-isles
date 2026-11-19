@@ -24,6 +24,7 @@ export interface IMercenaryContext {
   scene: Phaser.Scene;
   projectileSystem?: ProjectileSystem;
   showFloatingText?: (x: number, y: number, text: string, color: string) => void;
+  onLocalMercenariesChanged?: (units: MercenaryUnit[]) => void;
 }
 
 /**
@@ -34,6 +35,7 @@ export class MercenarySystem {
   private waveSystem: WaveSystem;
   private visuals = new Map<string, MercenaryVisualRef>();
   private nextId = 1;
+  private lastSyncBroadcastTime = 0;
 
   constructor(ctx: IMercenaryContext, waveSystem: WaveSystem) {
     this.ctx = ctx;
@@ -122,6 +124,7 @@ export class MercenarySystem {
     this.drawHpBar(ref);
     this.visuals.set(id, ref);
     this.emitUpdate();
+    this.ctx.onLocalMercenariesChanged?.(this.getMercenaries());
     return { ...unit };
   }
 
@@ -178,6 +181,11 @@ export class MercenarySystem {
 
     if (changed) {
       this.emitUpdate();
+      this.ctx.onLocalMercenariesChanged?.(this.getMercenaries());
+      this.lastSyncBroadcastTime = time;
+    } else if (time - this.lastSyncBroadcastTime >= 450) {
+      this.lastSyncBroadcastTime = time;
+      this.ctx.onLocalMercenariesChanged?.(this.getMercenaries());
     }
   }
 

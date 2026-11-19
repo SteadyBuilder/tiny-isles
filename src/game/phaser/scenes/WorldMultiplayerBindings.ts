@@ -232,6 +232,7 @@ export function createWorldMultiplayerSync(
     broadcastAuthoritativeWorldSnapshot(force);
     waveSystem.broadcastFullMonstersSync(force, Boolean(targetPlayerId));
     monsterCampSystem.broadcastFullCampSync(force);
+    sync.broadcastDomainSnapshot();
   };
 
   sync = new MultiplayerSyncController({

@@ -33,6 +33,8 @@ import {
   WorldStateSyncPayload,
 } from '../../../types/monsterSync';
 import { RoomMode } from '../../../types/room';
+import { DomainSyncBus } from '../../net/DomainSyncBus';
+import { WorldSnapshotRegistry } from '../../net/WorldSnapshotRegistry';
 import { RemotePlayerRenderer } from '../renderers/RemotePlayerRenderer';
 import { HostFailoverWatchdog } from './HostFailoverWatchdog';
 import { MultiplayerChannelRouter } from './MultiplayerChannelRouter';
@@ -123,6 +125,8 @@ export class MultiplayerSyncController {
   private ctx: IMultiplayerSyncContext;
   private remoteRenderer: RemotePlayerRenderer;
   private router: MultiplayerChannelRouter;
+  private domainBus: DomainSyncBus;
+  private snapshotRegistry = new WorldSnapshotRegistry();
   private watchdog: HostFailoverWatchdog;
   private lastBroadcastTime = 0;
   private lastHeartbeatTime = 0;
@@ -289,6 +293,27 @@ export class MultiplayerSyncController {
       onRemoteWorldDefenseFailed: (resetAt, attackerName) =>
         this.ctx.onRemoteWorldDefenseFailed?.(resetAt, attackerName),
     });
+
+    this.domainBus = new DomainSyncBus({
+      registerDynamicEvent: (event, handler) => this.router.registerDynamicEvent(event, handler),
+      emitDynamic: (event, payload, batched, coalesceKey) =>
+        this.router.emitDynamic(event, payload, batched, coalesceKey),
+    });
+
+    this.domainBus.on('domain_snapshot_sync', (payload) => {
+      if (this.router.getIsHost()) return;
+      this.markHostConfirmed(undefined, payload.hostEpoch);
+      this.snapshotRegistry.applyAll(payload.slices);
+    });
+
+    this.router.onRoomSnapshotSync((snapshot, hostId, hostEpoch) => {
+      if (this.router.getIsHost()) return;
+      this.markHostConfirmed(hostId, hostEpoch);
+      const slices = snapshot.domainSlices as Record<string, unknown> | undefined;
+      if (slices) {
+        this.snapshotRegistry.applyAll(slices);
+      }
+    });
   }
 
   private markHostConfirmed(hostId?: string, hostEpoch?: number): void {
@@ -405,9 +430,29 @@ export class MultiplayerSyncController {
     this.router.updateRoomMeta(meta, ended);
   }
 
+  public getDomainBus(): DomainSyncBus {
+    return this.domainBus;
+  }
+
+  public getSnapshotRegistry(): WorldSnapshotRegistry {
+    return this.snapshotRegistry;
+  }
+
+  public broadcastDomainSnapshot(): void {
+    if (!this.router.getIsHost()) return;
+    const slices = this.snapshotRegistry.captureAll();
+    if (Object.keys(slices).length === 0) return;
+    const hostEpoch = this.router.getHostEpoch();
+    this.domainBus.emit('domain_snapshot_sync', { hostEpoch, slices });
+    this.router.uploadRoomSnapshot({ hostEpoch, domainSlices: slices });
+  }
+
   public destroy(): void {
     this.stopJoinHelloLoop();
     this.lastSentState = null;
+    this.lastRemoteMovePos.clear();
+    this.domainBus.destroy();
+    this.snapshotRegistry.clear();
     this.watchdog.destroy();
     this.remoteRenderer.clear();
     this.router.destroy();
