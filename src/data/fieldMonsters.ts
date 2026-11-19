@@ -32,6 +32,8 @@ export const FIELD_MONSTER_CONFIG = {
   threatGainOnKill: 1,
   /** 야생 몬스터 순찰 반경 (px) */
   patrolRadiusPx: 145,
+  /** 순찰(배회) AI를 가동하는 최소 플레이어 근접 반경 (px) - 원거리 비활성 몹 패킷 낭비 방지 */
+  patrolActivePlayerRadiusPx: 880,
   /** 순찰 목표 지점 재선정 주기 (ms) */
   patrolStepIntervalMs: 2600,
   /** 플레이어 탐지(선공) 사거리 (px) */

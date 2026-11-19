@@ -317,3 +317,31 @@ test('Root Cause #5: queueMissingMonsterRepair batches IDs, falls back to full s
   host.bridge.destroy();
 });
 
+test('Stage 1: multi-chunk full sync automatically flushes delta changes that occurred during the streaming window', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ctx = createBridge({ isHost: true });
+  ctx.bridge.setOnlineCount(4);
+  const monsters = new Map<string, MonsterVisual>();
+  for (let i = 0; i < 160; i++) {
+    monsters.set(`m_${i}`, makeVisual(makeMonster(`m_${i}`)));
+  }
+
+  // Start 2-chunk full sync (snapshots captured at chunk 0)
+  ctx.bridge.broadcastFullMonstersSync(monsters, true, false);
+  assert.equal(ctx.fullSyncs.length, 1);
+  assert.equal(ctx.deltaSyncs.length, 0);
+
+  // Monster m_0 moves during the 200ms window before chunk 1 finishes, without explicit flushDeltaSyncNow call
+  monsters.get('m_0')!.monster.x = 260;
+
+  // When final chunk timer fires, it unconditionally reconciles any drift since chunk 0 snapshot
+  t.mock.timers.tick(MONSTER_SYNC_CONFIG.fullSyncChunkPaceMs);
+  assert.equal(ctx.fullSyncs.length, 2);
+  assert.equal(ctx.deltaSyncs.length, 1);
+  assert.equal(ctx.deltaSyncs[0].updates.length, 1);
+  assert.equal(ctx.deltaSyncs[0].updates[0][0], 'm_0');
+  assert.equal(ctx.deltaSyncs[0].updates[0][1], 260);
+  ctx.bridge.destroy();
+});
+
+

@@ -265,10 +265,9 @@ export class WaveNetworkSyncBridge {
         if (this.pendingFullSyncTimers.length === 0) {
           const liveMonsters = this.fullSyncStreamMonstersRef ?? monsters;
           this.fullSyncStreamMonstersRef = null;
-          if (this.deltaDeferredDuringFullSync) {
-            this.deltaDeferredDuringFullSync = false;
-            this.flushDeltaSyncNow(liveMonsters);
-          }
+          this.deltaDeferredDuringFullSync = false;
+          // 다중 청크(약 0.65초) 송출 도중 변경된 몬스터 상태나 처치를 즉시 델타로 후속 송출하여 갭 누락을 100% 차단
+          this.flushDeltaSyncNow(liveMonsters);
           if (this.pendingFollowUpFullSync && !this.fullSyncFollowUpTimer) {
             this.pendingFollowUpFullSync = false;
             this.fullSyncFollowUpTimer = setTimeout(() => {

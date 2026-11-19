@@ -7,6 +7,7 @@ import {
   createSyncTrackedState,
   findTargetPlayerForMonster,
   hasMonsterSyncChanged,
+  roundMonsterSnapshotCoords,
   toCompactMonsterTuple,
 } from '../monsterSyncUtils';
 
@@ -84,3 +85,44 @@ test('findTargetPlayerForMonster picks nearest alive player or valid preferred a
   const aggro = findTargetPlayerForMonster(1200, 0, players, 1500, 'host');
   assert.equal(aggro?.player.id, 'host');
 });
+
+test('roundMonsterSnapshotCoords strips default falsy optional fields to shrink full-sync JSON payload while retaining active flags', () => {
+  const plainField = roundMonsterSnapshotCoords(
+    makeMonster({
+      x: 512.7,
+      y: -128.4,
+      homeX: 500.2,
+      homeY: -120.8,
+      isElite: false,
+      isCampMonster: false,
+      shieldHp: 0,
+      shieldMaxHp: 0,
+    })
+  );
+
+  assert.equal(plainField.x, 513);
+  assert.equal(plainField.y, -128);
+  assert.equal(plainField.homeX, 500);
+  assert.equal(plainField.homeY, -121);
+  assert.equal(plainField.isFieldMonster, true);
+  assert.equal('isElite' in plainField, false);
+  assert.equal('isCampMonster' in plainField, false);
+  assert.equal('shieldHp' in plainField, false);
+
+  const eliteBoss = roundMonsterSnapshotCoords(
+    makeMonster({
+      isBoss: true,
+      isElite: true,
+      eliteAffix: 'berserker',
+      eliteTier: 'empowered',
+      shieldHp: 250,
+      shieldMaxHp: 400,
+    })
+  );
+  assert.equal(eliteBoss.isElite, true);
+  assert.equal(eliteBoss.eliteAffix, 'berserker');
+  assert.equal(eliteBoss.eliteTier, 'empowered');
+  assert.equal(eliteBoss.shieldHp, 250);
+  assert.equal(eliteBoss.shieldMaxHp, 400);
+});
+

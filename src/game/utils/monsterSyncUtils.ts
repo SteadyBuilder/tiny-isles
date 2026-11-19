@@ -63,17 +63,43 @@ export function toCompactMonsterTuple(m: Monster): CompactMonsterTuple {
 
 export function roundMonsterSnapshotCoords(m: Monster): Monster {
   const rounded: Monster = {
-    ...m,
+    id: m.id,
+    type: m.type,
+    name: m.name,
+    isBoss: m.isBoss,
     x: Math.round(m.x),
     y: Math.round(m.y),
     hp: Math.round(m.hp),
     maxHp: Math.round(m.maxHp),
+    attack: m.attack,
+    speed: m.speed,
+    targetTerritoryId: m.targetTerritoryId,
+    spawnTerritoryId: m.spawnTerritoryId,
+    direction: m.direction,
   };
+  if (m.role) rounded.role = m.role;
+  if (m.isElite) rounded.isElite = true;
+  if (m.eliteAffix) rounded.eliteAffix = m.eliteAffix;
+  if (m.eliteTier) rounded.eliteTier = m.eliteTier;
+  if (m.isCampMonster) rounded.isCampMonster = true;
+  if (m.isFieldMonster) rounded.isFieldMonster = true;
+  if (m.campRing) rounded.campRing = m.campRing;
   if (typeof m.homeX === 'number' && Number.isFinite(m.homeX)) {
     rounded.homeX = Math.round(m.homeX);
   }
   if (typeof m.homeY === 'number' && Number.isFinite(m.homeY)) {
     rounded.homeY = Math.round(m.homeY);
+  }
+  if (typeof m.patrolRadiusPx === 'number') rounded.patrolRadiusPx = m.patrolRadiusPx;
+  if (typeof m.expReward === 'number') rounded.expReward = m.expReward;
+  if (m.bossTemplateId) rounded.bossTemplateId = m.bossTemplateId;
+  if (m.bossSkillId) rounded.bossSkillId = m.bossSkillId;
+  if (m.bossSpriteKey) rounded.bossSpriteKey = m.bossSpriteKey;
+  if (typeof m.bossTintHex === 'number') rounded.bossTintHex = m.bossTintHex;
+  if (typeof m.bossScale === 'number') rounded.bossScale = m.bossScale;
+  if ((m.shieldHp ?? 0) > 0) {
+    rounded.shieldHp = Math.round(m.shieldHp ?? 0);
+    rounded.shieldMaxHp = Math.round(m.shieldMaxHp ?? m.shieldHp ?? 0);
   }
   return rounded;
 }

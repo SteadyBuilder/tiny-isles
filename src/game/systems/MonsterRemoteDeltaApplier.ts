@@ -404,7 +404,8 @@ export class MonsterRemoteDeltaApplier {
     this.flushDeferredAuthoritativeHps(monsters);
     if (this.remoteTargets.size === 0) return;
 
-    const alpha = Math.min(1, (MONSTER_SYNC_CONFIG.remoteLerpSpeedPerSec * deltaMs) / 1000);
+    const dtSec = Math.min(0.1, Math.max(0, deltaMs) / 1000);
+    const lerpAlpha = Math.min(1, MONSTER_SYNC_CONFIG.remoteLerpSpeedPerSec * dtSec);
     const snapDistSq =
       MONSTER_SYNC_CONFIG.remoteSnapThresholdPx * MONSTER_SYNC_CONFIG.remoteSnapThresholdPx;
 
@@ -423,12 +424,21 @@ export class MonsterRemoteDeltaApplier {
       if (distSq <= 0.25 || distSq > snapDistSq) {
         m.x = target.x;
         m.y = target.y;
-        if (distSq <= 0.25) {
+        this.remoteTargets.delete(id);
+      } else {
+        const dist = Math.sqrt(distSq);
+        // 몬스터 기본 이동 속도 기반 등속 스텝과 거리 비례 감쇠 스텝 중 큰 값을 택해 패킷 간 멈칫거림(Stop-and-Go) 방지
+        const minSpeedPxPerSec = Math.max(48, (m.speed || 70) * 0.92);
+        const linearStep = minSpeedPxPerSec * dtSec;
+        const dampedStep = dist * lerpAlpha;
+        const step = Math.min(dist, Math.max(linearStep, dampedStep));
+        m.x += (dx / dist) * step;
+        m.y += (dy / dist) * step;
+        if (dist - step <= 0.5) {
+          m.x = target.x;
+          m.y = target.y;
           this.remoteTargets.delete(id);
         }
-      } else {
-        m.x += dx * alpha;
-        m.y += dy * alpha;
       }
 
       mv.container.setPosition(m.x, m.y);

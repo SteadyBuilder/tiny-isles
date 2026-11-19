@@ -119,17 +119,18 @@ export class FieldMonsterAI {
       ? FIELD_MONSTER_CONFIG.fieldLeashRadiusPx
       : FIELD_MONSTER_CONFIG.fieldAggroRadiusPx;
 
+    const players = activePlayers ?? this.resolveActivePlayers();
     const targetMatch = findTargetPlayerForMonster(
       m.x,
       m.y,
-      activePlayers ?? this.resolveActivePlayers(),
+      players,
       aggroRadius,
       activeAggroPlayerId ?? undefined
     );
 
     if (!targetMatch) {
       resetMonsterAttackEntry(mv);
-      this.updatePatrolOrReturn(mv, time, dt, homeX, homeY, distFromHome, aliveWalls);
+      this.updatePatrolOrReturn(mv, time, dt, homeX, homeY, distFromHome, aliveWalls, players);
       return true;
     }
 
@@ -158,6 +159,24 @@ export class FieldMonsterAI {
     return true;
   }
 
+  private isAnyPlayerNearPatrolZone(
+    homeX: number,
+    homeY: number,
+    players: ReadonlyArray<ActivePlayerTarget>
+  ): boolean {
+    const maxDist = FIELD_MONSTER_CONFIG.patrolActivePlayerRadiusPx;
+    const maxDistSq = maxDist * maxDist;
+    for (const p of players) {
+      if (p.isFainted) continue;
+      const dx = p.x - homeX;
+      const dy = p.y - homeY;
+      if (dx * dx + dy * dy <= maxDistSq) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private updatePatrolOrReturn(
     mv: MonsterVisual,
     time: number,
@@ -165,7 +184,8 @@ export class FieldMonsterAI {
     homeX: number,
     homeY: number,
     distFromHome: number,
-    aliveWalls: ConstructedBuilding[]
+    aliveWalls: ConstructedBuilding[],
+    players: ReadonlyArray<ActivePlayerTarget>
   ): void {
     const m = mv.monster;
     const patrolRadius = m.patrolRadiusPx ?? FIELD_MONSTER_CONFIG.patrolRadiusPx;
@@ -174,6 +194,11 @@ export class FieldMonsterAI {
       const vx = ((homeX - m.x) / distFromHome) * m.speed * 0.9;
       const vy = ((homeY - m.y) / distFromHome) * m.speed * 0.9;
       this.moveMonster(mv, vx, vy, dt, aliveWalls);
+      return;
+    }
+
+    // 주변에 플레이어가 전혀 없으면 불필요한 상시 배회를 멈추고 거점 경계 유지 (멀티 대역폭 절감)
+    if (!this.isAnyPlayerNearPatrolZone(homeX, homeY, players)) {
       return;
     }
 

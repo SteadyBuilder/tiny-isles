@@ -134,16 +134,22 @@ export class RemotePlayerRenderer {
       scene.tweens.killTweensOf(visual.container);
       if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
         visual.container.setPosition(data.x, data.y);
+        setDepthIfChanged(visual.container, ySortDepth(data.y, 24));
       } else {
         scene.tweens.add({
           targets: visual.container,
           x: data.x,
           y: data.y,
-          duration: 120,
+          duration: 145,
           ease: 'Linear',
+          onUpdate: () => {
+            setDepthIfChanged(visual.container, ySortDepth(visual.container.y, 24));
+          },
+          onComplete: () => {
+            setDepthIfChanged(visual.container, ySortDepth(visual.container.y, 24));
+          },
         });
       }
-      setDepthIfChanged(visual.container, ySortDepth(data.y, 24));
     }
 
     if (visual.lastDirection !== data.direction) {
