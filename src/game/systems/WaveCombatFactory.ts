@@ -40,6 +40,7 @@ export function createWaveCombatAI(params: {
     projectileSystem: ctx.projectileSystem,
     markLocalMonsterHit: (monsterId) => syncBridge.markLocalHit(monsterId),
     onMonsterDamaged: () => syncBridge.scheduleDeltaSyncFlush(() => monsters),
+    onRemoteGhostMonsterHit: (monsterId) => syncBridge.recordGhostRemoval(monsterId, () => monsters),
     onMonsterHitImpact: (opts, restoreTint) => ctx.onMonsterHitImpact?.(opts, restoreTint),
     onMonsterKilled: (x, y, isBoss, expReward, isCampMonster, meta) => {
       if (meta?.monsterId) {

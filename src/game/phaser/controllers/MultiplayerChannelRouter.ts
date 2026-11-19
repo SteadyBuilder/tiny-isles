@@ -30,6 +30,7 @@ export class MultiplayerChannelRouter {
   private hasLocalBusPeer = false;
   private unsubscribers: Array<() => void> = [];
   private isHost = true;
+  private hostEpoch = 0;
   private presenceResolved = false;
   private knownMemberIds = new Set<string>();
   private lastOnlineCount = -1;
@@ -43,6 +44,26 @@ export class MultiplayerChannelRouter {
     return this.isHost;
   }
 
+  public getHostEpoch(): number {
+    return this.hostEpoch;
+  }
+
+  public getOnlineCount(): number {
+    return Math.max(1, this.lastOnlineCount);
+  }
+
+  public claimHostAuthority(nextEpoch: number): void {
+    this.transport?.claimHostAuthority?.(nextEpoch);
+  }
+
+  public yieldHostAuthority(isBackground: boolean): void {
+    this.transport?.yieldHostAuthority?.(isBackground);
+  }
+
+  public updatePresenceBackground(isBackground: boolean): void {
+    this.transport?.updatePresenceBackground?.(isBackground);
+  }
+
   public connect(customTransport?: INetworkTransport): void {
     serverSync.clearEventCaches();
     const playerId = this.callbacks.getPlayerId();
@@ -51,6 +72,7 @@ export class MultiplayerChannelRouter {
 
     // 협동 모드에서는 Presence가 첫 동기화될 때까지 임의 스폰을 막기 위해 false로 시작
     this.isHost = roomMode === 'solo';
+    this.hostEpoch = 0;
     this.presenceResolved = roomMode === 'solo';
     this.knownMemberIds.clear();
     this.lastOnlineCount = -1;
@@ -113,12 +135,21 @@ export class MultiplayerChannelRouter {
     const t = this.transport;
     if (!t) return;
 
+    const resumeUnsub = t.onConnectionResume?.(() => {
+      this.callbacks.onConnectionResume?.();
+    });
+    if (resumeUnsub) {
+      this.unsubscribers.push(resumeUnsub);
+    }
+
     this.unsubscribers.push(
       t.onPresenceSync((snapshot) => {
         const hostResolutionChanged = !this.presenceResolved || this.isHost !== snapshot.isHost;
+        const hostEpochChanged = this.hostEpoch !== snapshot.hostEpoch;
         const becameHost = hostResolutionChanged && snapshot.isHost;
         this.presenceResolved = true;
         this.isHost = snapshot.isHost;
+        this.hostEpoch = snapshot.hostEpoch;
 
         const localPlayerId = this.callbacks.getPlayerId();
         let hasNewPeer = false;
@@ -130,13 +161,15 @@ export class MultiplayerChannelRouter {
             hasNewPeer = true;
           }
           signatureParts.push(
-            `${member.playerId}:${member.name}:${member.color}:${member.isHost ? 1 : 0}`
+            `${member.playerId}:${member.name}:${member.color}:${member.isHost ? 1 : 0}:${member.isBackground ? 1 : 0}`
           );
         }
         this.knownMemberIds = nextKnown;
 
-        if (hostResolutionChanged) {
-          this.callbacks.onHostStatusChanged?.(snapshot.isHost);
+        this.callbacks.onPresenceSnapshot?.(snapshot);
+
+        if (hostResolutionChanged || (snapshot.isHost && hostEpochChanged)) {
+          this.callbacks.onHostStatusChanged?.(snapshot.isHost, snapshot.hostEpoch);
         }
         const shouldSyncPeers = hasNewPeer || (becameHost && snapshot.onlineCount > 1);
         this.callbacks.onOnlineCountChanged(snapshot.onlineCount, shouldSyncPeers);

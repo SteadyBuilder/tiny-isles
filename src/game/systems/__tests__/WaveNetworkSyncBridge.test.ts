@@ -187,3 +187,39 @@ test('scheduleDeltaSyncFlush batches microtask flushes and stops after destroy',
   await Promise.resolve();
   assert.equal(ctx.deltaSyncs.length, 1);
 });
+
+test('scheduleDeltaSyncFlush coalesces rapid back-to-back calls within deltaFlushMinIntervalMs', async () => {
+  const ctx = createBridge({ isHost: true });
+  const monsters = new Map([['m1', makeVisual(makeMonster('m1'))]]);
+  ctx.bridge.setOnlineCount(2);
+
+  // First flush runs immediately on microtask
+  ctx.bridge.scheduleDeltaSyncFlush(() => monsters);
+  await Promise.resolve();
+  assert.equal(ctx.deltaSyncs.length, 1);
+
+  // Rapid follow-up within min interval is deferred instead of flooding microtasks
+  monsters.get('m1')!.monster.hp = 60;
+  ctx.bridge.scheduleDeltaSyncFlush(() => monsters);
+  await Promise.resolve();
+  assert.equal(ctx.deltaSyncs.length, 1);
+
+  ctx.bridge.destroy();
+});
+
+test('broadcastFullMonstersSync paces multi-chunk sends and cancels pending chunks on destroy', () => {
+  const ctx = createBridge({ isHost: true });
+  ctx.bridge.setOnlineCount(2);
+  const monsters = new Map<string, MonsterVisual>();
+  for (let i = 0; i < 250; i++) {
+    monsters.set(`m_${i}`, makeVisual(makeMonster(`m_${i}`)));
+  }
+
+  ctx.bridge.broadcastFullMonstersSync(monsters, true, false);
+  // First chunk sends immediately; subsequent chunks are paced via timers
+  assert.equal(ctx.fullSyncs.length, 1);
+  assert.equal(ctx.fullSyncs[0].chunkIndex, 0);
+  assert.equal(ctx.fullSyncs[0].totalChunks, 3);
+
+  ctx.bridge.destroy();
+});

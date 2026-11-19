@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { computeMonotonicJoinedAt, electHostFromPresence } from '../HostAuthorityHelper';
+import {
+  computeMaxClaimedEpoch,
+  computeMonotonicJoinedAt,
+  computeNextFailoverRank,
+  electHostFromPresence,
+} from '../HostAuthorityHelper';
 
 test('electHostFromPresence defaults to localPlayerId as host when presence is empty', () => {
   const res = electHostFromPresence({}, 'local_p1');
@@ -65,6 +70,45 @@ test('electHostFromPresence falls back to MAX_SAFE_INTEGER for empty entry array
   const fallbackRes = electHostFromPresence(allInvalid, 'alpha');
   assert.equal(fallbackRes.hostId, 'alpha');
   assert.equal(fallbackRes.isHost, true);
+});
+
+test('electHostFromPresence demotes backgrounded host in favor of active foreground peers', () => {
+  const presence = {
+    p_host_bg: [{ joinedAt: 1000, isBackground: true, claimedEpoch: 3 }],
+    p_guest_fg: [{ joinedAt: 3000, isBackground: false, claimedEpoch: 0 }],
+    p_guest_fg2: [{ joinedAt: 2500, isBackground: false, claimedEpoch: 0 }],
+  };
+
+  const res = electHostFromPresence(presence, 'p_guest_fg2');
+  assert.equal(res.hostId, 'p_guest_fg2');
+  assert.equal(res.isHost, true);
+});
+
+test('electHostFromPresence prioritizes higher claimedEpoch among foreground peers and reads latest presence entry', () => {
+  const presence = {
+    p_old_host: [{ joinedAt: 1000, isBackground: false, claimedEpoch: 0 }],
+    p_failover: [
+      { joinedAt: 2000, isBackground: false, claimedEpoch: 0 },
+      { joinedAt: 2000, isBackground: false, claimedEpoch: 2 },
+    ],
+  };
+
+  assert.equal(electHostFromPresence(presence, 'p_failover').hostId, 'p_failover');
+  assert.equal(computeMaxClaimedEpoch(presence), 2);
+});
+
+test('computeNextFailoverRank orders active foreground candidates deterministically excluding current host', () => {
+  const members = [
+    { playerId: 'p1', name: 'A', color: 'blue' as const, isHost: true, joinedAt: 1000, isBackground: false },
+    { playerId: 'p2', name: 'B', color: 'red' as const, isHost: false, joinedAt: 2000, isBackground: true },
+    { playerId: 'p3', name: 'C', color: 'blue' as const, isHost: false, joinedAt: 3000, isBackground: false },
+    { playerId: 'p4', name: 'D', color: 'red' as const, isHost: false, joinedAt: 2500, isBackground: false },
+  ];
+
+  assert.equal(computeNextFailoverRank(members, 'p4', 'p1'), 0);
+  assert.equal(computeNextFailoverRank(members, 'p3', 'p1'), 1);
+  assert.equal(computeNextFailoverRank(members, 'p2', 'p1'), -1);
+  assert.equal(computeNextFailoverRank(members, 'p1', 'p1'), -1);
 });
 
 test('computeMonotonicJoinedAt returns now when presence is empty or now exceeds maxExistingJoinedAt', () => {

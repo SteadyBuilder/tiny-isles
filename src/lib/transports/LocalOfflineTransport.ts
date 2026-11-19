@@ -24,6 +24,7 @@ export class LocalOfflineTransport implements INetworkTransport {
     const snapshot = {
       isHost: true,
       hostId: playerId,
+      hostEpoch: 0,
       onlineCount: 1,
       members: [
         {
@@ -32,6 +33,8 @@ export class LocalOfflineTransport implements INetworkTransport {
           color: meta.color,
           isHost: true,
           joinedAt: Date.now(),
+          isBackground: false,
+          claimedEpoch: 0,
         },
       ],
     };

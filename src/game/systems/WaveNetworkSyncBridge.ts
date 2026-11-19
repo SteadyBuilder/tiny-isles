@@ -28,10 +28,13 @@ export class WaveNetworkSyncBridge {
   private syncCoordinator = new MonsterSyncCoordinator();
   private monsterSyncAccumMs = 0;
   private lastFullSyncSentAt = 0;
+  private lastDeltaFlushAt = 0;
   private lastGuestSyncRequestAt = 0;
   private hasCompletedInitialSync = false;
   private remoteSyncPeerSeen = false;
   private deltaFlushQueued = false;
+  private deltaFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingFullSyncTimers: Array<ReturnType<typeof setTimeout>> = [];
   private destroyed = false;
   private onlineCount = 1;
 
@@ -41,14 +44,43 @@ export class WaveNetworkSyncBridge {
     return this.deps.getNow ? this.deps.getNow() : performance.now();
   }
 
+  private clearPendingTimers(): void {
+    if (this.deltaFlushTimer) {
+      clearTimeout(this.deltaFlushTimer);
+      this.deltaFlushTimer = null;
+    }
+    this.deltaFlushQueued = false;
+    this.clearPendingFullSyncChunks();
+  }
+
+  private clearPendingFullSyncChunks(): void {
+    if (this.pendingFullSyncTimers.length === 0) return;
+    for (const timer of this.pendingFullSyncTimers) {
+      clearTimeout(timer);
+    }
+    this.pendingFullSyncTimers = [];
+  }
+
   public destroy(): void {
     this.destroyed = true;
-    this.deltaFlushQueued = false;
+    this.clearPendingTimers();
     this.syncCoordinator.resetAll();
   }
 
   public resetAll(): void {
+    this.clearPendingTimers();
     this.syncCoordinator.resetAll();
+  }
+
+  public setHostEpoch(epoch: number): void {
+    this.syncCoordinator.setHostEpoch(epoch);
+  }
+
+  public getLiveMonsterDigest(monsters: ReadonlyMap<string, MonsterVisual>): {
+    count: number;
+    digest: number;
+  } {
+    return this.syncCoordinator.getLiveMonsterDigest(monsters);
   }
 
   public markLocalHit(monsterId: string): void {
@@ -59,6 +91,15 @@ export class WaveNetworkSyncBridge {
     if (this.deps.isHost() && this.shouldBroadcastCoopMonsters()) {
       this.syncCoordinator.recordKill(kill);
     }
+  }
+
+  public recordGhostRemoval(
+    monsterId: string,
+    getMonsters: () => Map<string, MonsterVisual>
+  ): void {
+    if (!this.deps.isHost() || !this.shouldBroadcastCoopMonsters()) return;
+    this.syncCoordinator.recordGhostRemoval(monsterId);
+    this.scheduleDeltaSyncFlush(getMonsters);
   }
 
   public setOnlineCount(count: number): void {
@@ -78,12 +119,15 @@ export class WaveNetworkSyncBridge {
 
   public onEnterHostMode(switchedFromGuest: boolean): void {
     if (!switchedFromGuest) return;
+    this.clearPendingTimers();
     this.monsterSyncAccumMs = 0;
     this.lastFullSyncSentAt = 0;
+    this.lastDeltaFlushAt = 0;
     this.syncCoordinator.resetAll();
   }
 
   public onEnterGuestMode(): void {
+    this.clearPendingTimers();
     this.monsterSyncAccumMs = 0;
     this.hasCompletedInitialSync = false;
     this.syncCoordinator.resetAll();
@@ -106,25 +150,46 @@ export class WaveNetworkSyncBridge {
     if (!force && now - this.lastFullSyncSentAt < MONSTER_SYNC_CONFIG.hostFullSyncCooldownMs) {
       return;
     }
-    const { waveCount, bossWaveCount } = this.deps.getWaveCounts();
-    const chunks = this.syncCoordinator.buildFullSyncChunks(monsters, waveCount, bossWaveCount);
     if (!fromGuestRequest && !this.shouldBroadcastCoopMonsters()) {
       return;
     }
+    const { waveCount, bossWaveCount } = this.deps.getWaveCounts();
+    const chunks = this.syncCoordinator.buildFullSyncChunks(monsters, waveCount, bossWaveCount);
     this.lastFullSyncSentAt = now;
-    for (const chunk of chunks) {
-      this.deps.broadcastFullSync?.(chunk);
+    this.clearPendingFullSyncChunks();
+
+    if (chunks.length === 0) return;
+    this.deps.broadcastFullSync?.(chunks[0]);
+
+    for (let i = 1; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const timer = setTimeout(() => {
+        if (this.destroyed || !this.deps.isHost()) return;
+        this.deps.broadcastFullSync?.(chunk);
+      }, i * MONSTER_SYNC_CONFIG.fullSyncChunkPaceMs);
+      this.pendingFullSyncTimers.push(timer);
     }
   }
 
   public scheduleDeltaSyncFlush(getMonsters: () => Map<string, MonsterVisual>): void {
     if (this.deltaFlushQueued || !this.deps.isHost() || !this.shouldBroadcastCoopMonsters()) return;
     this.deltaFlushQueued = true;
-    queueMicrotask(() => {
+
+    const elapsedSinceFlush = this.now() - this.lastDeltaFlushAt;
+    const remainingMs = MONSTER_SYNC_CONFIG.deltaFlushMinIntervalMs - elapsedSinceFlush;
+
+    const execute = () => {
       this.deltaFlushQueued = false;
+      this.deltaFlushTimer = null;
       if (this.destroyed || !this.deps.isHost() || !this.shouldBroadcastCoopMonsters()) return;
       this.flushDeltaSyncNow(getMonsters());
-    });
+    };
+
+    if (remainingMs <= 0) {
+      queueMicrotask(execute);
+    } else {
+      this.deltaFlushTimer = setTimeout(execute, remainingMs);
+    }
   }
 
   public flushDeltaSyncNow(monsters: Map<string, MonsterVisual>): void {
@@ -133,6 +198,7 @@ export class WaveNetworkSyncBridge {
     const batches = this.syncCoordinator.buildDeltaBatches(monsters, waveCount, bossWaveCount);
     if (batches.length === 0) return;
     this.monsterSyncAccumMs = 0;
+    this.lastDeltaFlushAt = this.now();
     for (const batch of batches) {
       this.deps.broadcastDeltaSync?.(batch);
     }

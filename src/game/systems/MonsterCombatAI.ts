@@ -71,6 +71,7 @@ export interface IMonsterCombatContext {
   projectileSystem?: ProjectileSystem;
   markLocalMonsterHit?: (monsterId: string) => void;
   onMonsterDamaged?: () => void;
+  onRemoteGhostMonsterHit?: (monsterId: string) => void;
   onMonsterHitImpact?: (opts: CombatHitFeedbackOptions, restoreTint?: number | null) => void;
   onMonsterKilled?: (
     x: number,
@@ -467,7 +468,12 @@ export class MonsterCombatAI {
   }): boolean {
     const monsters = this.ctx.getMonsters();
     const mv = monsters.get(params.monsterId);
-    if (!mv) return false;
+    if (!mv || mv.monster.hp <= 0) {
+      if (params.isHost && params.fromRemote) {
+        this.ctx.onRemoteGhostMonsterHit?.(params.monsterId);
+      }
+      return false;
+    }
 
     const localPlayerId = this.ctx.getLocalPlayerId();
     const isLocalPlayerAttack = Boolean(

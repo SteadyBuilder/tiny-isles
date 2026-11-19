@@ -1,13 +1,17 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { HOST_SYNC_CONFIG } from '../../data/worldRules';
 import {
+  computeMaxClaimedEpoch,
   computeMonotonicJoinedAt,
   electHostFromPresence,
+  extractLatestPresenceMeta,
   PresenceEntryMeta,
 } from '../../game/phaser/controllers/HostAuthorityHelper';
 import { RoomMember } from '../../types/room';
 import { serverSync } from '../serverSync';
 import { supabase } from '../supabase';
 import {
+  ConnectionResumeHandler,
   INetworkTransport,
   NetworkEventHandler,
   NetworkPresenceMeta,
@@ -28,37 +32,128 @@ interface PresenceRawEntry extends PresenceEntryMeta {
 
 /**
  * Supabase Realtime 채널 기반 인스턴스 룸(1~4인 코옵) 전송 어댑터
+ * - 모바일 슬립/네트워크 절체 시 지수 백오프 자동 재연결 및 Presence 기반 무중단 방장 이양 지원
  */
 export class SupabaseRoomTransport implements INetworkTransport {
   private channel: RealtimeChannel | null = null;
   private status: NetworkTransportStatus = 'disconnected';
+  private roomId = '';
   private localPlayerId = '';
+  private baseMeta: Omit<NetworkPresenceMeta, 'joinedAt'> = { name: '수호자', color: 'blue' };
+  private currentJoinedAt = 0;
+  private isBackground = false;
+  private claimedEpoch = 0;
   private isHost = true;
   private onlineCount = 1;
   private connectionEpoch = 0;
+  private wasEverConnected = false;
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private disposed = false;
 
   private eventHandlers = new Map<string, Set<NetworkEventHandler>>();
   private presenceHandlers = new Set<PresenceSyncHandler>();
   private leaveHandlers = new Set<PlayerLeaveHandler>();
+  private resumeHandlers = new Set<ConnectionResumeHandler>();
+
+  private boundOnlineHandler: (() => void) | null = null;
+  private boundVisibilityHandler: (() => void) | null = null;
 
   public connect(
     roomId: string,
     playerId: string,
     meta: Omit<NetworkPresenceMeta, 'joinedAt'>
   ): void {
+    this.disposed = false;
+    this.clearReconnectTimer();
     this.cleanupChannel();
     const epoch = ++this.connectionEpoch;
+    this.roomId = roomId;
     this.localPlayerId = playerId;
+    this.baseMeta = { name: meta.name, color: meta.color };
+    this.isBackground =
+      typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    this.claimedEpoch = 0;
+    this.currentJoinedAt = 0;
+    this.wasEverConnected = false;
+    this.reconnectAttempt = 0;
     this.status = 'connecting';
 
-    const channelName = `tiny_isles_room_${roomId}`;
-    void this.openChannel(channelName, playerId, meta, epoch);
+    this.attachNetworkRecoveryListeners();
+    void this.openChannel(`tiny_isles_room_${roomId}`, playerId, epoch);
+  }
+
+  private attachNetworkRecoveryListeners(): void {
+    if (typeof window === 'undefined' || this.boundOnlineHandler) return;
+    this.boundOnlineHandler = () => {
+      if (this.disposed) return;
+      this.ensureChannelHealthy();
+    };
+    this.boundVisibilityHandler = () => {
+      if (this.disposed || typeof document === 'undefined') return;
+      if (document.visibilityState === 'visible') {
+        this.ensureChannelHealthy();
+      }
+    };
+    window.addEventListener('online', this.boundOnlineHandler);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.boundVisibilityHandler);
+    }
+  }
+
+  private detachNetworkRecoveryListeners(): void {
+    if (this.boundOnlineHandler && typeof window !== 'undefined') {
+      window.removeEventListener('online', this.boundOnlineHandler);
+      this.boundOnlineHandler = null;
+    }
+    if (this.boundVisibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
+      this.boundVisibilityHandler = null;
+    }
+  }
+
+  private ensureChannelHealthy(): void {
+    if (this.disposed || !this.roomId || !this.localPlayerId) return;
+    const state = (this.channel as { state?: string } | null)?.state;
+    if (!this.channel || this.status !== 'connected' || (state && state !== 'joined')) {
+      this.reconnectNow();
+    }
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.disposed || this.reconnectTimer || !this.roomId || !this.localPlayerId) return;
+    const delay = Math.min(
+      HOST_SYNC_CONFIG.reconnectMaxDelayMs,
+      HOST_SYNC_CONFIG.reconnectBaseDelayMs * Math.pow(2, this.reconnectAttempt)
+    );
+    this.reconnectAttempt = Math.min(this.reconnectAttempt + 1, 5);
+    this.status = 'connecting';
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.disposed) return;
+      this.reconnectNow();
+    }, delay);
+  }
+
+  private reconnectNow(): void {
+    if (this.disposed || !this.roomId || !this.localPlayerId) return;
+    this.clearReconnectTimer();
+    this.cleanupChannel();
+    const epoch = ++this.connectionEpoch;
+    this.status = 'connecting';
+    void this.openChannel(`tiny_isles_room_${this.roomId}`, this.localPlayerId, epoch);
   }
 
   private async openChannel(
     channelName: string,
     playerId: string,
-    meta: Omit<NetworkPresenceMeta, 'joinedAt'>,
     epoch: number
   ): Promise<void> {
     const targetTopic = `realtime:${channelName}`;
@@ -68,7 +163,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
     if (staleChannels.length > 0) {
       await Promise.all(staleChannels.map((ch) => supabase.removeChannel(ch)));
     }
-    if (epoch !== this.connectionEpoch) return;
+    if (epoch !== this.connectionEpoch || this.disposed) return;
 
     const channel = supabase.channel(channelName, {
       config: {
@@ -83,23 +178,27 @@ export class SupabaseRoomTransport implements INetworkTransport {
         if (epoch !== this.connectionEpoch) return;
         const rawState = channel.presenceState() as Record<string, PresenceRawEntry[]>;
         const { isHost, hostId, onlineCount } = electHostFromPresence(rawState, playerId);
+        const hostEpoch = computeMaxClaimedEpoch(rawState);
         this.isHost = isHost;
         this.onlineCount = onlineCount;
 
         const members: RoomMember[] = Object.entries(rawState).map(([id, entries]) => {
-          const first = Array.isArray(entries) && entries.length > 0 ? entries[0] : undefined;
+          const latest = extractLatestPresenceMeta(entries) as PresenceRawEntry | undefined;
           return {
             playerId: id,
-            name: first?.name || '수호자',
-            color: first?.color === 'red' ? 'red' : 'blue',
+            name: latest?.name || '수호자',
+            color: latest?.color === 'red' ? 'red' : 'blue',
             isHost: id === hostId,
-            joinedAt: typeof first?.joinedAt === 'number' ? first.joinedAt : Number.MAX_SAFE_INTEGER,
+            joinedAt:
+              typeof latest?.joinedAt === 'number' ? latest.joinedAt : Number.MAX_SAFE_INTEGER,
+            isBackground: latest?.isBackground === true,
+            claimedEpoch: typeof latest?.claimedEpoch === 'number' ? latest.claimedEpoch : 0,
           };
         });
         members.sort((a, b) => a.joinedAt - b.joinedAt || a.playerId.localeCompare(b.playerId));
 
         this.presenceHandlers.forEach((h) =>
-          h({ isHost, hostId, onlineCount, members })
+          h({ isHost, hostId, hostEpoch, onlineCount, members })
         );
       })
       .on('presence', { event: 'leave' }, ({ key }: { key: string }) => {
@@ -117,18 +216,69 @@ export class SupabaseRoomTransport implements INetworkTransport {
         handlers.forEach((handler) => handler(payload));
       })
       .subscribe(async (subStatus: string) => {
-        if (epoch !== this.connectionEpoch) return;
+        if (epoch !== this.connectionEpoch || this.disposed) return;
         if (subStatus === 'SUBSCRIBED') {
+          this.clearReconnectTimer();
+          this.reconnectAttempt = 0;
           this.status = 'connected';
           const currentPresence = channel.presenceState() as Record<string, PresenceEntryMeta[]>;
-          const joinedAt = computeMonotonicJoinedAt(currentPresence, Date.now());
-          await channel.track({
-            name: meta.name,
-            color: meta.color,
-            joinedAt,
-          });
+          this.currentJoinedAt = computeMonotonicJoinedAt(currentPresence, Date.now());
+          if (this.wasEverConnected && Object.keys(currentPresence).some((id) => id !== playerId)) {
+            this.claimedEpoch = 0;
+          }
+          await this.trackPresenceState();
+          if (this.wasEverConnected) {
+            this.resumeHandlers.forEach((h) => h());
+          }
+          this.wasEverConnected = true;
+          return;
+        }
+        if (subStatus === 'CHANNEL_ERROR' || subStatus === 'TIMED_OUT' || subStatus === 'CLOSED') {
+          this.scheduleReconnect();
         }
       });
+  }
+
+  private async trackPresenceState(): Promise<void> {
+    if (!this.channel || this.status !== 'connected' || this.disposed) return;
+    try {
+      const result = await this.channel.track({
+        name: this.baseMeta.name,
+        color: this.baseMeta.color,
+        joinedAt: this.currentJoinedAt || Date.now(),
+        isBackground: this.isBackground,
+        claimedEpoch: this.claimedEpoch,
+      });
+      if (result === 'timed out' || result === 'error') {
+        this.scheduleReconnect();
+      }
+    } catch {
+      this.scheduleReconnect();
+    }
+  }
+
+  public claimHostAuthority(nextEpoch: number): void {
+    this.isBackground = false;
+    this.claimedEpoch = Math.max(this.claimedEpoch, Math.max(1, Math.floor(nextEpoch)));
+    void this.trackPresenceState();
+  }
+
+  public yieldHostAuthority(isBackground: boolean): void {
+    this.isBackground = isBackground;
+    this.claimedEpoch = 0;
+    if (this.channel && this.status === 'connected') {
+      const raw = this.channel.presenceState() as Record<string, PresenceEntryMeta[]>;
+      const hasOtherPeers = Object.keys(raw).some((id) => id !== this.localPlayerId);
+      if (hasOtherPeers) {
+        this.currentJoinedAt = computeMonotonicJoinedAt(raw, Date.now());
+      }
+    }
+    void this.trackPresenceState();
+  }
+
+  public updatePresenceBackground(isBackground: boolean): void {
+    this.isBackground = isBackground;
+    void this.trackPresenceState();
   }
 
   private cleanupChannel(): void {
@@ -142,10 +292,14 @@ export class SupabaseRoomTransport implements INetworkTransport {
   }
 
   public disconnect(): void {
+    this.disposed = true;
+    this.clearReconnectTimer();
+    this.detachNetworkRecoveryListeners();
     this.cleanupChannel();
     this.eventHandlers.clear();
     this.presenceHandlers.clear();
     this.leaveHandlers.clear();
+    this.resumeHandlers.clear();
   }
 
   public emit<T extends object>(event: string, payload: T): void {
@@ -177,6 +331,13 @@ export class SupabaseRoomTransport implements INetworkTransport {
     this.leaveHandlers.add(handler);
     return () => {
       this.leaveHandlers.delete(handler);
+    };
+  }
+
+  public onConnectionResume(handler: ConnectionResumeHandler): () => void {
+    this.resumeHandlers.add(handler);
+    return () => {
+      this.resumeHandlers.delete(handler);
     };
   }
 

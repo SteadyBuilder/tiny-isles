@@ -1,10 +1,39 @@
+import { RoomMember } from '../../../types/room';
+
 export interface PresenceEntryMeta {
   joinedAt?: number;
+  isBackground?: boolean;
+  claimedEpoch?: number;
+}
+
+export function extractLatestPresenceMeta(
+  entries: PresenceEntryMeta[] | undefined
+): PresenceEntryMeta | undefined {
+  if (!Array.isArray(entries) || entries.length === 0) return undefined;
+  return entries[entries.length - 1];
+}
+
+function normalizeJoinedAt(meta: PresenceEntryMeta | undefined): number {
+  return typeof meta?.joinedAt === 'number' && Number.isFinite(meta.joinedAt)
+    ? meta.joinedAt
+    : Number.MAX_SAFE_INTEGER;
+}
+
+function normalizeClaimedEpoch(meta: PresenceEntryMeta | undefined): number {
+  return typeof meta?.claimedEpoch === 'number' &&
+    Number.isFinite(meta.claimedEpoch) &&
+    meta.claimedEpoch > 0
+    ? Math.floor(meta.claimedEpoch)
+    : 0;
 }
 
 /**
- * Supabase Presence 상태에서 가장 먼저 접속한 플레이어를 결정론적으로 호스트(방장)로 선출합니다.
- * 동일 시각 접속 시 playerId 사전순으로 타이브레이크합니다.
+ * Supabase Presence 상태에서 결정론적으로 호스트(방장)를 선출합니다.
+ * 우선순위:
+ * 1) 포그라운드 활성 유저(isBackground !== true) 최우선
+ * 2) 더 높은 장애복구 승계 에폭(claimedEpoch) 우선
+ * 3) 먼저 접속한 유저(joinedAt 오름차순)
+ * 4) playerId 사전순 타이브레이크
  */
 export function electHostFromPresence(
   presenceState: Record<string, PresenceEntryMeta[]>,
@@ -16,15 +45,22 @@ export function electHostFromPresence(
   }
 
   const candidates = keys.map((id) => {
-    const entries = presenceState[id];
-    const joinedAt =
-      Array.isArray(entries) && entries.length > 0 && typeof entries[0]?.joinedAt === 'number'
-        ? entries[0].joinedAt
-        : Number.MAX_SAFE_INTEGER;
-    return { id, joinedAt };
+    const latest = extractLatestPresenceMeta(presenceState[id]);
+    return {
+      id,
+      isBackground: latest?.isBackground === true ? 1 : 0,
+      claimedEpoch: normalizeClaimedEpoch(latest),
+      joinedAt: normalizeJoinedAt(latest),
+    };
   });
 
-  candidates.sort((a, b) => a.joinedAt - b.joinedAt || a.id.localeCompare(b.id));
+  candidates.sort(
+    (a, b) =>
+      a.isBackground - b.isBackground ||
+      b.claimedEpoch - a.claimedEpoch ||
+      a.joinedAt - b.joinedAt ||
+      a.id.localeCompare(b.id)
+  );
   const hostId = candidates[0]?.id ?? localPlayerId;
 
   return {
@@ -32,6 +68,44 @@ export function electHostFromPresence(
     hostId,
     onlineCount: Math.max(1, keys.length),
   };
+}
+
+/**
+ * 현재 Presence 상태에 등록된 가장 높은 호스트 승계 에폭(claimedEpoch)을 반환합니다.
+ */
+export function computeMaxClaimedEpoch(
+  presenceState: Record<string, PresenceEntryMeta[]>
+): number {
+  let maxEpoch = 0;
+  for (const entries of Object.values(presenceState)) {
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      const epoch = normalizeClaimedEpoch(entry);
+      if (epoch > maxEpoch) {
+        maxEpoch = epoch;
+      }
+    }
+  }
+  return maxEpoch;
+}
+
+/**
+ * 무응답 호스트(stalledHostId)를 제외하고 포그라운드 활성 후보 중
+ * localPlayerId의 0-based 승계 우선순위(rank)를 계산합니다. 후보 자격이 없으면 -1을 반환합니다.
+ */
+export function computeNextFailoverRank(
+  members: ReadonlyArray<RoomMember>,
+  localPlayerId: string,
+  stalledHostId: string
+): number {
+  const eligible = members
+    .filter((m) => m.playerId !== stalledHostId && m.isBackground !== true)
+    .sort((a, b) => {
+      const epochA = a.claimedEpoch ?? 0;
+      const epochB = b.claimedEpoch ?? 0;
+      return epochB - epochA || a.joinedAt - b.joinedAt || a.playerId.localeCompare(b.playerId);
+    });
+  return eligible.findIndex((m) => m.playerId === localPlayerId);
 }
 
 /**

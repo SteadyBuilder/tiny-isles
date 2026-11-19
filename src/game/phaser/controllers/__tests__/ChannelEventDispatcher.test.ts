@@ -83,3 +83,49 @@ test('dispatchSharedChannelEvent preserves hp and maxHp fields on player_move', 
   assert.equal(received[0].hp, 64);
   assert.equal(received[0].maxHp, 140);
 });
+
+test('SHARED_CHANNEL_EVENTS includes host_heartbeat, host_handover, and world_state_sync', () => {
+  assert.ok(SHARED_CHANNEL_EVENTS.includes('host_heartbeat'));
+  assert.ok(SHARED_CHANNEL_EVENTS.includes('host_handover'));
+  assert.ok(SHARED_CHANNEL_EVENTS.includes('world_state_sync'));
+});
+
+test('dispatchSharedChannelEvent routes host_heartbeat, host_handover, world_state_sync, and monsters_sync metadata', () => {
+  const heartbeats: unknown[] = [];
+  const handovers: unknown[] = [];
+  const worldSyncs: unknown[] = [];
+  const monsterSyncs: Array<{ hostEpoch?: number; syncSeq?: number }> = [];
+
+  const callbacks = createStubCallbacks({
+    onRemoteHostHeartbeat: (p) => heartbeats.push(p),
+    onRemoteHostHandover: (p) => handovers.push(p),
+    onRemoteWorldStateSync: (p) => worldSyncs.push(p),
+    onRemoteMonstersSync: (p) => monsterSyncs.push({ hostEpoch: p.hostEpoch, syncSeq: p.syncSeq }),
+  });
+
+  dispatchSharedChannelEvent(
+    'host_heartbeat',
+    { hostId: 'p1', hostEpoch: 2, liveMonsterCount: 5, liveMonsterDigest: 99, sentAt: 1000 },
+    callbacks
+  );
+  dispatchSharedChannelEvent(
+    'host_handover',
+    { fromHostId: 'p1', hostEpoch: 2, reason: 'background' },
+    callbacks
+  );
+  dispatchSharedChannelEvent(
+    'world_state_sync',
+    { hostEpoch: 2, islands: [], constructedBuildings: [] },
+    callbacks
+  );
+  dispatchSharedChannelEvent(
+    'monsters_sync',
+    { monsters: [], waveCount: 1, bossWaveCount: 0, hostEpoch: 2, syncSeq: 7 },
+    callbacks
+  );
+
+  assert.equal(heartbeats.length, 1);
+  assert.equal(handovers.length, 1);
+  assert.equal(worldSyncs.length, 1);
+  assert.deepEqual(monsterSyncs, [{ hostEpoch: 2, syncSeq: 7 }]);
+});

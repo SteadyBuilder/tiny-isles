@@ -17,16 +17,24 @@ export const WORLD_CLOCK_CONFIG = {
 export const MONSTER_SYNC_CONFIG = {
   /** 전체 동기화 1회 브로드캐스트당 최대 몬스터 수 (Supabase 페이로드 제한 방지) */
   fullSyncChunkSize: 120,
+  /** 다중 청크 전체 동기화 시 청크 간 페이싱 간격 (ms) - 레이트리밋 유실 방지 */
+  fullSyncChunkPaceMs: 45,
   /** 델타 동기화 1회 브로드캐스트당 최대 위치/HP 업데이트 수 */
   deltaUpdateChunkSize: 160,
   /** 델타 동기화 1회 브로드캐스트당 최대 신규 스폰 수 */
   deltaSpawnChunkSize: 80,
+  /** 피격/처치 즉시 델타 플러시 최소 병합 간격 (ms) - 4인 동시 타격 폭주 방지 */
+  deltaFlushMinIntervalMs: 55,
   /** 게스트가 전체 동기화를 재요청하는 최소 간격 (ms) */
   guestSyncRequestThrottleMs: 2000,
   /** 호스트가 중복 전체 동기화 요청을 무시하는 최소 간격 (ms) */
   hostFullSyncCooldownMs: 300,
   /** 게스트 로컬 선타격 후 호스트의 이전 HP 패킷으로 되감기는 현상을 막는 유예 시간 (ms) */
   localHitHpGraceMs: 260,
+  /** 처치/제거된 몬스터 ID가 역순 지연 패킷으로 부활하는 것을 막는 툼스톤 유지 시간 (ms) */
+  killTombstoneTtlMs: 6500,
+  /** 마릿수 또는 ID 다이제스트 불일치 연속 감지 시 자동 전체 재동기화 임계 횟수 */
+  digestMismatchTriggerCount: 2,
   /** 게스트 측 몬스터 보간 순간이동(Snap) 임계 거리 (px) */
   remoteSnapThresholdPx: 260,
   /** 게스트 측 몬스터 보간 속도 계수 */
@@ -38,11 +46,33 @@ export const MONSTER_SYNC_CONFIG = {
 } as const;
 
 /**
+ * 실시간 방장 생존 감시(Watchdog)·모바일 백그라운드 이양·재연결 복구 설정
+ */
+export const HOST_SYNC_CONFIG = {
+  /** 호스트가 생존 신호 및 몬스터 ID 다이제스트를 송신하는 주기 (ms) */
+  heartbeatIntervalMs: 1500,
+  /** 포그라운드 게스트가 방장 무응답을 판정해 자동 승계를 시작하는 기준 시간 (ms) */
+  failoverTimeoutMs: 4500,
+  /** 다수 게스트 동시 승계 충돌을 막기 위한 후보 순위별 지연 간격 (ms) */
+  failoverCandidateStaggerMs: 650,
+  /** 동일 게스트의 중복 방장 승계 요청 최소 쿨다운 (ms) */
+  failoverClaimCooldownMs: 3000,
+  /** 채널 끊김 시 지수 백오프 기본 재연결 대기 시간 (ms) */
+  reconnectBaseDelayMs: 800,
+  /** 채널 재연결 백오프 상한 (ms) */
+  reconnectMaxDelayMs: 6000,
+  /** 모바일 백그라운드 복귀 직후 프레임 delta 급등 방지를 위한 상한 (ms) */
+  maxFrameDeltaMs: 100,
+} as const;
+
+/**
  * 실시간 플레이어 이동 동기화(변경 감지 + 정지 시 저빈도 하트비트) 설정
  */
 export const PLAYER_SYNC_CONFIG = {
   /** 상태 변경 시 최소 위치 브로드캐스트 간격 (ms) */
   moveBroadcastIntervalMs: 60,
+  /** 3~4인 협동 시 채널 여유 확보를 위한 위치 브로드캐스트 간격 (ms) */
+  coopMoveBroadcastIntervalMs: 85,
   /** 정지/동일 상태 유지 시 keep-alive 하트비트 전송 주기 (ms) */
   idleHeartbeatMs: 1500,
 } as const;

@@ -19,14 +19,18 @@ import {
 } from '../../../types/game';
 import {
   ActivePlayerTarget,
+  HostHandoverPayload,
+  HostHeartbeatPayload,
   MonsterHitPayload,
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
   MonstersFullSyncPayload,
   ThreatSyncPayload,
+  WorldStateSyncPayload,
 } from '../../../types/monsterSync';
 import { RoomMode } from '../../../types/room';
 import { RemotePlayerRenderer } from '../renderers/RemotePlayerRenderer';
+import { HostFailoverWatchdog } from './HostFailoverWatchdog';
 import { MultiplayerChannelRouter } from './MultiplayerChannelRouter';
 
 export interface IMultiplayerSyncContext {
@@ -38,6 +42,7 @@ export interface IMultiplayerSyncContext {
   getRoomMode?: () => RoomMode;
   isLocalPlayerFainted?: () => boolean;
   getLocalPlayerHp?: () => { hp: number; maxHp: number };
+  getLiveMonsterDigest?: () => { count: number; digest: number };
   getLocalPlayerState: () => {
     x: number;
     y: number;
@@ -45,7 +50,9 @@ export interface IMultiplayerSyncContext {
     action: PlayerAction;
   };
   onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
-  onHostStatusChanged?: (isHost: boolean) => void;
+  onHostStatusChanged?: (isHost: boolean, hostEpoch?: number) => void;
+  onSyncResyncRequested?: () => void;
+  onRemoteWorldStateSync?: (payload: WorldStateSyncPayload) => void;
   onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteEntityRespawned?: (entity: Entity) => void;
@@ -98,12 +105,13 @@ interface LastSentMoveSnapshot {
 }
 
 /**
- * 실시간 멀티플레이(채널 라우터 + 원격 플레이어 렌더러) 조율 컨트롤러
+ * 실시간 멀티플레이(채널 라우터 + 방장 생존 감시 + 원격 플레이어 렌더러) 조율 컨트롤러
  */
 export class MultiplayerSyncController {
   private ctx: IMultiplayerSyncContext;
   private remoteRenderer: RemotePlayerRenderer;
   private router: MultiplayerChannelRouter;
+  private watchdog: HostFailoverWatchdog;
   private lastBroadcastTime = 0;
   private lastHeartbeatTime = 0;
   private lastSentState: LastSentMoveSnapshot | null = null;
@@ -111,6 +119,21 @@ export class MultiplayerSyncController {
   constructor(ctx: IMultiplayerSyncContext) {
     this.ctx = ctx;
     this.remoteRenderer = new RemotePlayerRenderer(ctx.scene);
+    this.watchdog = new HostFailoverWatchdog({
+      getLocalPlayerId: () => this.ctx.getPlayerId(),
+      isCoopMode: () => this.ctx.getRoomMode?.() === 'coop',
+      getLiveMonsterDigest: () => this.ctx.getLiveMonsterDigest?.() ?? { count: 0, digest: 0 },
+      onSendHostHeartbeat: (payload: HostHeartbeatPayload) =>
+        this.router.emit('host_heartbeat', 'host_heartbeat', payload),
+      onSendHostHandover: (payload: HostHandoverPayload) =>
+        this.router.emit('host_handover', 'host_handover', payload),
+      onClaimHostAuthority: (nextEpoch) => this.router.claimHostAuthority(nextEpoch),
+      onYieldHostAuthority: (isBackground) => this.router.yieldHostAuthority(isBackground),
+      onUpdatePresenceBackground: (isBackground) =>
+        this.router.updatePresenceBackground(isBackground),
+      onDigestMismatchDetected: () => this.ctx.onSyncResyncRequested?.(),
+      onResumeResyncNeeded: () => this.ctx.onSyncResyncRequested?.(),
+    });
     this.router = new MultiplayerChannelRouter({
       getPlayerId: () => this.ctx.getPlayerId(),
       getPlayerName: () => this.ctx.getPlayerName(),
@@ -118,7 +141,15 @@ export class MultiplayerSyncController {
       getRoomId: () => this.ctx.getRoomId?.() || 'default_room',
       getRoomMode: () => this.ctx.getRoomMode?.() || 'solo',
       onOnlineCountChanged: (count, hasNewPeer) => this.ctx.onOnlineCountChanged(count, hasNewPeer),
-      onHostStatusChanged: (isHost) => this.ctx.onHostStatusChanged?.(isHost),
+      onHostStatusChanged: (isHost, hostEpoch) => this.ctx.onHostStatusChanged?.(isHost, hostEpoch),
+      onPresenceSnapshot: (snapshot) => this.watchdog.updatePresenceSnapshot(snapshot),
+      onConnectionResume: () => this.ctx.onSyncResyncRequested?.(),
+      onRemoteHostHeartbeat: (payload) => this.watchdog.handleHostHeartbeat(payload),
+      onRemoteHostHandover: (payload) => this.watchdog.handleHostHandover(payload),
+      onRemoteWorldStateSync: (payload) => {
+        this.watchdog.recordHostActivity(payload.hostEpoch);
+        this.ctx.onRemoteWorldStateSync?.(payload);
+      },
       onRemotePlayerMove: (player) =>
         this.remoteRenderer.updatePlayer(player, this.ctx.getPlayerId()),
       onRemotePlayerLeave: (playerId) => this.remoteRenderer.removePlayer(playerId),
@@ -135,19 +166,31 @@ export class MultiplayerSyncController {
       onRemoteWaveSpawned: (isBossWave) => this.ctx.onRemoteWaveSpawned(isBossWave),
       onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
         this.ctx.onRemoteWaveSummonRequest?.(isBossWave, isEarlySummon),
-      onRemoteMonstersSync: (payload) => this.ctx.onRemoteMonstersSync(payload),
-      onRemoteMonstersDeltaSync: (payload) => this.ctx.onRemoteMonstersDeltaSync?.(payload),
+      onRemoteMonstersSync: (payload) => {
+        this.watchdog.recordHostActivity(payload.hostEpoch);
+        this.ctx.onRemoteMonstersSync(payload);
+      },
+      onRemoteMonstersDeltaSync: (payload) => {
+        this.watchdog.recordHostActivity(payload.hostEpoch);
+        this.ctx.onRemoteMonstersDeltaSync?.(payload);
+      },
       onRemoteMonstersSyncRequest: () => this.ctx.onRemoteMonstersSyncRequest?.(),
       onRemoteMonsterHit: (payload) => this.ctx.onRemoteMonsterHit(payload),
       onRemoteMonsterPlayerAttack: (payload) => this.ctx.onRemoteMonsterPlayerAttack?.(payload),
       onRemoteThreatAdded: (amount) => this.ctx.onRemoteThreatAdded?.(amount),
-      onRemoteThreatSync: (payload) => this.ctx.onRemoteThreatSync?.(payload),
+      onRemoteThreatSync: (payload) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteThreatSync?.(payload);
+      },
       onRemoteDungeonPortalSync: (portal) => this.ctx.onRemoteDungeonPortalSync?.(portal),
       onRemoteCampStructureHit: (payload) => this.ctx.onRemoteCampStructureHit?.(payload),
       onRemoteCampCoreHit: (payload) => this.ctx.onRemoteCampCoreHit?.(payload),
       onRemoteCampStructureHpSync: (payload) => this.ctx.onRemoteCampStructureHpSync?.(payload),
       onRemoteCampCoreSync: (payload) => this.ctx.onRemoteCampCoreSync?.(payload),
-      onRemoteCampFullSync: (payload) => this.ctx.onRemoteCampFullSync?.(payload),
+      onRemoteCampFullSync: (payload) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteCampFullSync?.(payload);
+      },
       onRemoteTerritoryLost: (territoryId, reason) =>
         this.ctx.onRemoteTerritoryLost(territoryId, reason),
       onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
@@ -165,6 +208,10 @@ export class MultiplayerSyncController {
 
   public getIsHost(): boolean {
     return this.router.getIsHost();
+  }
+
+  public getHostEpoch(): number {
+    return this.router.getHostEpoch();
   }
 
   public getActivePlayers(
@@ -192,18 +239,28 @@ export class MultiplayerSyncController {
   }
 
   public setup(): void {
+    this.watchdog.attachBrowserLifecycle();
     this.router.connect();
+  }
+
+  public update(): void {
+    this.watchdog.tick();
   }
 
   public destroy(): void {
     this.lastSentState = null;
+    this.watchdog.destroy();
     this.remoteRenderer.clear();
     this.router.destroy();
   }
 
   public maybeBroadcastPlayerMove(time: number): void {
     if (this.ctx.getRoomMode?.() === 'solo') return;
-    if (time - this.lastBroadcastTime <= PLAYER_SYNC_CONFIG.moveBroadcastIntervalMs) return;
+    const minInterval =
+      this.router.getOnlineCount() >= 3
+        ? PLAYER_SYNC_CONFIG.coopMoveBroadcastIntervalMs
+        : PLAYER_SYNC_CONFIG.moveBroadcastIntervalMs;
+    if (time - this.lastBroadcastTime <= minInterval) return;
 
     const state = this.ctx.getLocalPlayerState();
     const rx = Math.round(state.x);
@@ -398,5 +455,9 @@ export class MultiplayerSyncController {
       resetAt,
       attackerName,
     });
+  }
+
+  public broadcastWorldStateSync(payload: WorldStateSyncPayload): void {
+    this.router.emit('world_state_sync', 'world_state_sync', payload);
   }
 }

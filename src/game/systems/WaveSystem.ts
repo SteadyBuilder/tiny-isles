@@ -143,22 +143,33 @@ export class WaveSystem {
     this.syncBridge.destroy();
   }
 
-  public setHostMode(isHost: boolean): void {
+  public setHostMode(isHost: boolean, hostEpoch?: number): void {
     const prev = this.isHost;
     this.isHost = isHost;
+    if (typeof hostEpoch === 'number') {
+      this.syncBridge.setHostEpoch(hostEpoch);
+    }
     if (isHost) {
       this.syncBridge.onEnterHostMode(!prev);
       return;
     }
-    if (prev || this.monsters.size > 0) {
-      for (const mv of this.monsters.values()) MonsterVisualManager.disposeVisual(mv);
-      this.monsters.clear();
-      MonsterVisualManager.clearTrackedVisuals();
-      this.combatAI.pruneStaleMonsterState(new Set());
-    }
+    // 방장 -> 게스트 전환 시 로컬 몬스터를 일괄 삭제하지 않고 유지한 뒤,
+    // 새 호스트의 전체 동기화 수신 시 자연 보정(Reconcile)하여 화면 깜빡임 및 유실을 방지합니다.
     this.dungeonSpawner.clearTimersAndPortal(false);
     this.threatTracker.resetGuestTransientState();
     this.syncBridge.onEnterGuestMode();
+  }
+
+  public setHostEpoch(hostEpoch: number): void {
+    this.syncBridge.setHostEpoch(hostEpoch);
+  }
+
+  public getLiveMonsterDigest(): { count: number; digest: number } {
+    return this.syncBridge.getLiveMonsterDigest(this.monsters);
+  }
+
+  public requestMonstersSyncNow(): void {
+    this.syncBridge.requestMonstersSyncThrottled(true);
   }
 
   public getIsHost(): boolean { return this.isHost; }

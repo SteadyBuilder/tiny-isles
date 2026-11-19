@@ -172,7 +172,8 @@ export class WaveSpawner {
 
   public applyRemoteSync(incomingList: Monster[]): void {
     const monsters = this.ctx.getMonsters();
-    const incomingIds = new Set(incomingList.map((m) => m.id));
+    const liveIncoming = incomingList.filter((m) => m.hp > 0);
+    const incomingIds = new Set(liveIncoming.map((m) => m.id));
     const now = performance.now();
 
     for (const [id, mv] of monsters.entries()) {
@@ -183,8 +184,7 @@ export class WaveSpawner {
       }
     }
 
-    for (const incoming of incomingList) {
-      if (incoming.hp <= 0) continue;
+    for (const incoming of liveIncoming) {
       const existing = monsters.get(incoming.id);
       if (existing) {
         const m = existing.monster;

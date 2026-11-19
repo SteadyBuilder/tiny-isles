@@ -1,9 +1,13 @@
 import Phaser from 'phaser';
 import { PLAYER_CLASS_DEFINITIONS } from '../../../data/classes';
 import { sound } from '../../../lib/sound';
-import { ConstructedBuilding, PlayerAction, PlayerColor } from '../../../types/game';
+import { ConstructedBuilding, Island, PlayerAction, PlayerColor } from '../../../types/game';
 import { RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
+import {
+  buildWorldStateSyncPayload,
+  reconcileWorldStateSnapshot,
+} from '../../utils/worldStateSyncUtils';
 import { CampFortificationSystem } from '../../systems/CampFortificationSystem';
 import { CoreGemSystem } from '../../systems/CoreGemSystem';
 import { FieldMonsterSystem } from '../../systems/FieldMonsterSystem';
@@ -22,6 +26,12 @@ export interface IWorldMultiplayerHost {
   getPlayerColor: () => PlayerColor;
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
+  getIslands?: () => Island[];
+  getConstructedBuildings?: () => ConstructedBuilding[];
+  applySyncedWorldState?: (
+    updatedIslands: Island[],
+    updatedBuildings: ConstructedBuilding[]
+  ) => void;
   getLocalPlayerState: () => {
     x: number;
     y: number;
@@ -70,7 +80,41 @@ export function createWorldMultiplayerSync(
     waveSystem,
   } = systems;
 
+  let hasResolvedHostOnce = false;
+  let lastKnownHostState = false;
   let sync!: MultiplayerSyncController;
+
+  let lastWorldSnapshotBroadcastAt = 0;
+
+  const broadcastAuthoritativeWorldSnapshot = (force = false) => {
+    if (!waveSystem.getIsHost()) return;
+    const now = Date.now();
+    if (!force && now - lastWorldSnapshotBroadcastAt < 1200) return;
+    const islands = host.getIslands?.();
+    const buildings = host.getConstructedBuildings?.();
+    if (!islands || !buildings) return;
+    lastWorldSnapshotBroadcastAt = now;
+    sync.broadcastWorldStateSync(
+      buildWorldStateSyncPayload(sync.getHostEpoch(), islands, buildings)
+    );
+  };
+
+  const broadcastFullRoomState = (force: boolean) => {
+    if (!waveSystem.getIsHost()) return;
+    const ws = waveSystem.getWaveState();
+    sync.broadcastThreatSync({
+      threatPercent: ws.threatPercent,
+      waveCount: ws.waveCount,
+      bossWaveCount: ws.bossWaveCount,
+      countdownSecondsRemaining: ws.countdownSecondsRemaining,
+      nextWaveIsBoss: ws.nextWaveIsBoss,
+    });
+    sync.broadcastDungeonPortalSync(waveSystem.getDungeonPortalState());
+    broadcastAuthoritativeWorldSnapshot(force);
+    waveSystem.broadcastFullMonstersSync(force);
+    monsterCampSystem.broadcastFullCampSync(force);
+  };
+
   sync = new MultiplayerSyncController({
     scene: host.scene,
     getPlayerId: host.getPlayerId,
@@ -80,35 +124,50 @@ export function createWorldMultiplayerSync(
     getRoomMode: host.getRoomMode,
     isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
     getLocalPlayerHp: () => playerHealthSystem.getState(),
+    getLiveMonsterDigest: () => waveSystem.getLiveMonsterDigest(),
     getLocalPlayerState: host.getLocalPlayerState,
     onOnlineCountChanged: (count, hasNewPeer) => {
       waveSystem.setOnlineCount(count);
       monsterCampSystem.setOnlineCount(count);
       fieldMonsterSystem.setOnlineCount(count);
-      if (waveSystem.getIsHost() && hasNewPeer) {
-        const ws = waveSystem.getWaveState();
-        sync.broadcastThreatSync({
-          threatPercent: ws.threatPercent,
-          waveCount: ws.waveCount,
-          bossWaveCount: ws.bossWaveCount,
-          countdownSecondsRemaining: ws.countdownSecondsRemaining,
-          nextWaveIsBoss: ws.nextWaveIsBoss,
-        });
-        sync.broadcastDungeonPortalSync(waveSystem.getDungeonPortalState());
-        if (count > 1) {
-          waveSystem.broadcastFullMonstersSync(true);
-          monsterCampSystem.broadcastFullCampSync(true);
-        }
+      if (waveSystem.getIsHost() && hasNewPeer && count > 1) {
+        broadcastFullRoomState(true);
       }
     },
-    onHostStatusChanged: (isHost) => {
-      waveSystem.setHostMode(isHost);
+    onHostStatusChanged: (isHost, hostEpoch) => {
+      const migratedMidGame = hasResolvedHostOnce && isHost && !lastKnownHostState;
+      hasResolvedHostOnce = true;
+      lastKnownHostState = isHost;
+
+      waveSystem.setHostMode(isHost, hostEpoch);
       if (isHost) {
         monsterCampSystem.ensureHostGarrisonsSpawned();
         fieldMonsterSystem.ensureHostInitialized();
+        if (migratedMidGame && host.getRoomMode?.() === 'coop') {
+          GameEvents.emit(
+            'game-alert',
+            '📡 방장 권한을 자동으로 이어받았습니다. 게임이 끊김 없이 계속됩니다!'
+          );
+          broadcastFullRoomState(true);
+        }
       } else {
         fieldMonsterSystem.resetForGuest();
         monsterCampSystem.resetGuestGarrisonState();
+      }
+    },
+    onSyncResyncRequested: () => {
+      if (!waveSystem.getIsHost()) {
+        waveSystem.requestMonstersSyncNow();
+      }
+    },
+    onRemoteWorldStateSync: (payload) => {
+      if (waveSystem.getIsHost()) return;
+      const islands = host.getIslands?.();
+      const buildings = host.getConstructedBuildings?.();
+      if (!islands || !buildings || !host.applySyncedWorldState) return;
+      const result = reconcileWorldStateSnapshot(islands, buildings, payload);
+      if (result.changed) {
+        host.applySyncedWorldState(result.islands, result.constructedBuildings);
       }
     },
     onRemotePlayerSkillCast: (payload) => {
@@ -157,6 +216,18 @@ export function createWorldMultiplayerSync(
     onRemoteMonstersSyncRequest: () => {
       waveSystem.handleRemoteMonstersSyncRequest();
       monsterCampSystem.broadcastFullCampSync(false);
+      if (waveSystem.getIsHost()) {
+        const ws = waveSystem.getWaveState();
+        sync.broadcastThreatSync({
+          threatPercent: ws.threatPercent,
+          waveCount: ws.waveCount,
+          bossWaveCount: ws.bossWaveCount,
+          countdownSecondsRemaining: ws.countdownSecondsRemaining,
+          nextWaveIsBoss: ws.nextWaveIsBoss,
+        });
+        sync.broadcastDungeonPortalSync(waveSystem.getDungeonPortalState());
+        broadcastAuthoritativeWorldSnapshot();
+      }
     },
     onRemoteMonsterHit: (payload) => {
       if (waveSystem.getIsHost()) {

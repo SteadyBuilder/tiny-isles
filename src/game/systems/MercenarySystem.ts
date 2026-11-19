@@ -219,9 +219,8 @@ export class MercenarySystem {
     this.waveSystem.damageMonster(
       target.monster.id,
       ref.unit.attack,
-      ref.unit.isRanged ? '#fde047' : '#fb923c',
-      false,
-      '용병'
+      '용병',
+      false
     );
   }
 

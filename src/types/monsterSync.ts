@@ -1,4 +1,4 @@
-import { Monster, MonsterCombatRole } from './game';
+import { ConstructedBuilding, Monster, MonsterCombatRole, VillageTier } from './game';
 import { DungeonPortalState, FieldEliteTier } from './hunting';
 
 /**
@@ -48,6 +48,8 @@ export interface MonstersFullSyncPayload {
   syncId?: string;
   chunkIndex?: number;
   totalChunks?: number;
+  hostEpoch?: number;
+  syncSeq?: number;
 }
 
 export interface MonstersDeltaSyncPayload {
@@ -60,6 +62,39 @@ export interface MonstersDeltaSyncPayload {
   bossWaveCount: number;
   batchIndex?: number;
   totalBatches?: number;
+  hostEpoch?: number;
+  syncSeq?: number;
+  liveMonsterDigest?: number;
+}
+
+export interface HostHeartbeatPayload {
+  hostId: string;
+  hostEpoch: number;
+  liveMonsterCount: number;
+  liveMonsterDigest: number;
+  sentAt: number;
+}
+
+export interface HostHandoverPayload {
+  fromHostId: string;
+  hostEpoch: number;
+  reason: 'background' | 'manual';
+}
+
+export interface WorldIslandSyncEntry {
+  id: number;
+  unlocked: boolean;
+  ownerId?: string;
+  ownerName?: string;
+  villageTier: VillageTier;
+  coreHp: number;
+  coreMaxHp: number;
+}
+
+export interface WorldStateSyncPayload {
+  hostEpoch: number;
+  islands: WorldIslandSyncEntry[];
+  constructedBuildings: ConstructedBuilding[];
 }
 
 export interface MonsterHitPayload {

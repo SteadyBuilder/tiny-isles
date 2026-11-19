@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { INSTANCE_ROOM_DEFAULTS, getDifficultyConfig } from '../../../data/missions';
 import { computeMetaBonuses } from '../../../data/metaProgression';
+import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
 import { saveRepository } from '../../../lib/repositories/LocalStorageSaveRepository';
 import { storage } from '../../../lib/storage';
 import {
@@ -402,37 +403,39 @@ export class WorldScene extends Phaser.Scene {
 
   public update(time: number, delta: number): void {
     if (this.isPaused) return;
-    this.systems.waveSystem.update(time, delta);
-    this.systems.projectileSystem.update(time, delta);
-    this.systems.playerProgressionSystem.update(delta);
-    this.systems.monsterCampSystem.update(delta);
-    this.systems.fieldMonsterSystem.update(delta);
-    this.systems.towerDefenseSystem.update(time, delta);
-    this.systems.garrisonSystem.update(time, delta);
-    this.systems.mercenarySystem.update(time, delta);
+    const clampedDelta = Math.min(Math.max(0, delta), HOST_SYNC_CONFIG.maxFrameDeltaMs);
+    this.systems.waveSystem.update(time, clampedDelta);
+    this.systems.projectileSystem.update(time, clampedDelta);
+    this.systems.playerProgressionSystem.update(clampedDelta);
+    this.systems.monsterCampSystem.update(clampedDelta);
+    this.systems.fieldMonsterSystem.update(clampedDelta);
+    this.systems.towerDefenseSystem.update(time, clampedDelta);
+    this.systems.garrisonSystem.update(time, clampedDelta);
+    this.systems.mercenarySystem.update(time, clampedDelta);
     this.missionSystem.setCampConqueredCount(
       this.systems.monsterCampSystem.getFirstClearedCampCount()
     );
-    this.missionSystem.update(delta, this.systems.waveSystem.getWaveState(), this.islands);
-    this.controllers.territoryPassive.update(delta);
+    this.missionSystem.update(clampedDelta, this.systems.waveSystem.getWaveState(), this.islands);
+    this.controllers.territoryPassive.update(clampedDelta);
     this.constructedBuildingRenderer.updateResourceTimers(
       this.controllers.territoryPassive.getCycleProgress()
     );
-    this.controllers.playerMovement.update(time, delta);
+    this.controllers.playerMovement.update(time, clampedDelta);
     this.controllers.skillTargeting.update();
     this.controllers.viewportCulling.update(time);
-    this.resourceEntityRenderer.updateSheepWandering(time, delta, (x, y) =>
+    this.resourceEntityRenderer.updateSheepWandering(time, clampedDelta, (x, y) =>
       !this.terrainMap.waterBodies.some(
         (w) => x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h
       )
     );
-    this.effectsRenderer.updateClouds(delta);
-    this.resourceDropEffectsRenderer.update(delta);
+    this.effectsRenderer.updateClouds(clampedDelta);
+    this.resourceDropEffectsRenderer.update(clampedDelta);
     this.monsterIndicatorRenderer.update(time, this.systems.waveSystem.getMonsterVisuals(), {
       isHuntingMode: this.missionSystem.isHuntingMode(),
       campTargets: this.systems.monsterCampSystem.getActiveCampTargets(),
       dungeonPortal: this.systems.waveSystem.getDungeonPortalState(),
     });
+    this.systems.multiplayerSync?.update();
     this.systems.multiplayerSync?.maybeBroadcastPlayerMove(time);
     this.minimapEmitter?.update(time);
   }

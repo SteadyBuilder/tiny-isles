@@ -62,6 +62,8 @@ export interface RoomMember {
   color: PlayerColor;
   isHost: boolean;
   joinedAt: number;
+  isBackground?: boolean;
+  claimedEpoch?: number;
 }
 
 export type RoomSessionStatus = 'lobby' | 'waiting' | 'playing' | 'paused' | 'ended';

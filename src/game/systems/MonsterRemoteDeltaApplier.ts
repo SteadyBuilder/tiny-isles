@@ -7,12 +7,19 @@ import {
   MonstersFullSyncPayload,
 } from '../../types/monsterSync';
 import { setDepthIfChanged, ySortDepth } from '../depthLayers';
+import {
+  MonsterTombstoneTracker,
+  SyncSequenceGuard,
+  computeMonsterIdDigest,
+} from './MonsterReconciliationHelper';
 import { MonsterVisual, MonsterVisualManager } from './MonsterVisualManager';
 
 interface PendingFullSyncBatch {
   totalChunks: number;
   chunks: Map<number, Monster[]>;
   createdAt: number;
+  hostEpoch?: number;
+  syncSeq?: number;
 }
 
 interface DeferredAuthoritativeHp {
@@ -29,8 +36,8 @@ export interface RemoteDeltaApplyCallbacks {
 
 /**
  * 게스트 측 멀티플레이 몬스터 수신 전담 모듈
- * - 전체 청크 재조립(TTL 만료 정리 포함)
- * - 델타 패킷 적용, 피격 유예 보호 및 보류 권위 HP 최종 정합
+ * - 전체 청크 재조립(TTL 만료 정리 및 epoch/seq 필터링)
+ * - 델타 패킷 적용, 툼스톤 부활 차단, hp<=0 즉시 소거, 피격 유예 보호 및 ID 다이제스트 정합
  * - 원격 좌표 스냅/선형 보간
  */
 export class MonsterRemoteDeltaApplier {
@@ -38,10 +45,14 @@ export class MonsterRemoteDeltaApplier {
   private remoteTargets = new Map<string, { x: number; y: number }>();
   private localHitGraceUntil = new Map<string, number>();
   private deferredAuthoritativeHps = new Map<string, DeferredAuthoritativeHp>();
+  private tombstones = new MonsterTombstoneTracker();
+  private seqGuard = new SyncSequenceGuard();
   private countMismatchStreak = 0;
 
   public resetAll(): void {
     this.incomingFullSyncBatches.clear();
+    this.tombstones.clear();
+    this.seqGuard.reset();
     this.clearTransientSyncState();
   }
 
@@ -97,6 +108,25 @@ export class MonsterRemoteDeltaApplier {
     }
   }
 
+  private disposeMonsterEntry(
+    id: string,
+    monsters: Map<string, MonsterVisual>,
+    now: number,
+    onExplosion?: (x: number, y: number) => void
+  ): MonsterVisual | undefined {
+    const mv = monsters.get(id);
+    if (mv) {
+      onExplosion?.(mv.container.x, mv.container.y);
+      MonsterVisualManager.disposeVisual(mv);
+      monsters.delete(id);
+    }
+    this.tombstones.markDead(id, now);
+    this.remoteTargets.delete(id);
+    this.localHitGraceUntil.delete(id);
+    this.deferredAuthoritativeHps.delete(id);
+    return mv;
+  }
+
   private flushDeferredAuthoritativeHps(monsters: Map<string, MonsterVisual>): void {
     if (this.deferredAuthoritativeHps.size === 0) return;
     const now = performance.now();
@@ -130,10 +160,18 @@ export class MonsterRemoteDeltaApplier {
     const now = performance.now();
     this.pruneExpiredFullSyncBatches(now);
 
+    if (!this.seqGuard.canAccept(payload.hostEpoch, payload.syncSeq)) {
+      return { ready: false, monsters: [] };
+    }
+
     const total = payload.totalChunks ?? 1;
     if (total <= 1 || !payload.syncId) {
+      const liveMonsters = (payload.monsters || []).filter((m) => m.hp > 0);
+      this.seqGuard.commit(payload.hostEpoch, payload.syncSeq);
       this.clearTransientSyncState();
-      return { ready: true, monsters: payload.monsters || [] };
+      this.tombstones.prune(now);
+      for (const m of liveMonsters) this.tombstones.revive(m.id);
+      return { ready: true, monsters: liveMonsters };
     }
 
     const syncId = payload.syncId;
@@ -148,7 +186,13 @@ export class MonsterRemoteDeltaApplier {
 
     let batch = this.incomingFullSyncBatches.get(syncId);
     if (!batch) {
-      batch = { totalChunks: total, chunks: new Map(), createdAt: now };
+      batch = {
+        totalChunks: total,
+        chunks: new Map(),
+        createdAt: now,
+        hostEpoch: payload.hostEpoch,
+        syncSeq: payload.syncSeq,
+      };
       this.incomingFullSyncBatches.set(syncId, batch);
     }
     batch.chunks.set(chunkIdx, payload.monsters || []);
@@ -161,9 +205,15 @@ export class MonsterRemoteDeltaApplier {
     const merged: Monster[] = [];
     for (let i = 0; i < batch.totalChunks; i++) {
       const part = batch.chunks.get(i);
-      if (part) merged.push(...part);
+      if (!part) continue;
+      for (const m of part) {
+        if (m.hp > 0) merged.push(m);
+      }
     }
+    this.seqGuard.commit(batch.hostEpoch, batch.syncSeq);
     this.clearTransientSyncState();
+    this.tombstones.prune(now);
+    for (const m of merged) this.tombstones.revive(m.id);
     return { ready: true, monsters: merged };
   }
 
@@ -173,41 +223,36 @@ export class MonsterRemoteDeltaApplier {
     payload: MonstersDeltaSyncPayload,
     callbacks: RemoteDeltaApplyCallbacks
   ): { needsFullSync: boolean; killedCount: number; spawnedCount: number } {
+    if (!this.seqGuard.accept(payload.hostEpoch, payload.syncSeq)) {
+      return { needsFullSync: false, killedCount: 0, spawnedCount: 0 };
+    }
+
     const now = performance.now();
     let killedCount = 0;
     let spawnedCount = 0;
 
     for (const kill of payload.kills || []) {
-      const mv = monsters.get(kill.id);
-      if (mv) {
-        callbacks.onExplosion(mv.container.x, mv.container.y);
-        MonsterVisualManager.disposeVisual(mv);
-        monsters.delete(kill.id);
-      } else {
+      const alreadyDeadAndMissing =
+        !monsters.has(kill.id) && this.tombstones.isTombstoned(kill.id, now);
+      if (alreadyDeadAndMissing) continue;
+
+      const mv = this.disposeMonsterEntry(kill.id, monsters, now, callbacks.onExplosion);
+      if (!mv) {
         callbacks.onExplosion(kill.x, kill.y);
       }
-      this.remoteTargets.delete(kill.id);
-      this.localHitGraceUntil.delete(kill.id);
-      this.deferredAuthoritativeHps.delete(kill.id);
       callbacks.onRemoteKill(kill, mv);
       killedCount++;
     }
 
     for (const removedId of payload.removedIds || []) {
-      const mv = monsters.get(removedId);
+      const mv = this.disposeMonsterEntry(removedId, monsters, now, callbacks.onExplosion);
       if (mv) {
-        callbacks.onExplosion(mv.container.x, mv.container.y);
-        MonsterVisualManager.disposeVisual(mv);
-        monsters.delete(removedId);
+        killedCount++;
       }
-      this.remoteTargets.delete(removedId);
-      this.localHitGraceUntil.delete(removedId);
-      this.deferredAuthoritativeHps.delete(removedId);
-      killedCount++;
     }
 
     for (const sp of payload.spawns || []) {
-      if (sp.hp <= 0) continue;
+      if (sp.hp <= 0 || this.tombstones.isTombstoned(sp.id, now)) continue;
       const existing = monsters.get(sp.id);
       if (existing) {
         const m = existing.monster;
@@ -233,9 +278,17 @@ export class MonsterRemoteDeltaApplier {
     let missingUpdateTarget = false;
     for (const tuple of payload.updates || []) {
       const [id, x, y, hp, maxHp, dirCode, targetTerritoryId, shieldHp] = tuple;
+      if (hp <= 0) {
+        const disposed = this.disposeMonsterEntry(id, monsters, now, callbacks.onExplosion);
+        if (disposed) killedCount++;
+        continue;
+      }
+
       const mv = monsters.get(id);
       if (!mv) {
-        missingUpdateTarget = true;
+        if (!this.tombstones.isTombstoned(id, now)) {
+          missingUpdateTarget = true;
+        }
         continue;
       }
 
@@ -247,7 +300,7 @@ export class MonsterRemoteDeltaApplier {
 
       const prevShieldHp = this.applyShieldState(m, shieldHp, undefined, now);
       const graceUntil = this.localHitGraceUntil.get(id) ?? 0;
-      if (hp <= 0 || hp <= m.hp || now >= graceUntil) {
+      if (hp <= m.hp || now >= graceUntil) {
         this.deferredAuthoritativeHps.delete(id);
         if (now >= graceUntil) this.localHitGraceUntil.delete(id);
         this.applyAuthoritativeHp(mv, hp, maxHp, prevShieldHp, shieldHp, callbacks);
@@ -264,7 +317,11 @@ export class MonsterRemoteDeltaApplier {
     const isFinalBatch = totalBatches <= 1 || batchIndex >= totalBatches - 1;
 
     if (isFinalBatch && typeof payload.totalMonsterCount === 'number') {
-      if (monsters.size !== payload.totalMonsterCount) {
+      const localDigest = computeMonsterIdDigest(monsters);
+      const countMatches = localDigest.count === payload.totalMonsterCount;
+      const digestMatches =
+        payload.liveMonsterDigest === undefined || localDigest.digest === payload.liveMonsterDigest;
+      if (!countMatches || !digestMatches) {
         this.countMismatchStreak++;
       } else {
         this.countMismatchStreak = 0;
@@ -272,7 +329,9 @@ export class MonsterRemoteDeltaApplier {
     }
 
     return {
-      needsFullSync: missingUpdateTarget || this.countMismatchStreak >= 2,
+      needsFullSync:
+        missingUpdateTarget ||
+        this.countMismatchStreak >= MONSTER_SYNC_CONFIG.digestMismatchTriggerCount,
       killedCount,
       spawnedCount,
     };

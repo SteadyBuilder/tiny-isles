@@ -15,13 +15,17 @@ import {
 } from '../../../types/game';
 import {
   DungeonPortalSyncPayload,
+  HostHandoverPayload,
+  HostHeartbeatPayload,
   MonsterHitPayload,
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
   MonstersFullSyncPayload,
   ThreatSyncPayload,
+  WorldStateSyncPayload,
 } from '../../../types/monsterSync';
 import { RoomMode } from '../../../types/room';
+import { NetworkPresenceSnapshot } from '../../../lib/contracts/INetworkTransport';
 
 export interface IMultiplayerChannelCallbacks {
   getPlayerId: () => string;
@@ -30,7 +34,12 @@ export interface IMultiplayerChannelCallbacks {
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
   onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
-  onHostStatusChanged?: (isHost: boolean) => void;
+  onHostStatusChanged?: (isHost: boolean, hostEpoch?: number) => void;
+  onPresenceSnapshot?: (snapshot: NetworkPresenceSnapshot) => void;
+  onConnectionResume?: () => void;
+  onRemoteHostHeartbeat?: (payload: HostHeartbeatPayload) => void;
+  onRemoteHostHandover?: (payload: HostHandoverPayload) => void;
+  onRemoteWorldStateSync?: (payload: WorldStateSyncPayload) => void;
   onRemotePlayerMove: (player: Player) => void;
   onRemotePlayerLeave: (playerId: string) => void;
   onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
@@ -73,6 +82,9 @@ export interface IMultiplayerChannelCallbacks {
 }
 
 export const SHARED_CHANNEL_EVENTS = [
+  'host_heartbeat',
+  'host_handover',
+  'world_state_sync',
   'player_move',
   'player_skill_cast',
   'entity_hit',
@@ -108,6 +120,15 @@ export function dispatchSharedChannelEvent(
   callbacks: IMultiplayerChannelCallbacks
 ): void {
   switch (eventName) {
+    case 'host_heartbeat':
+      callbacks.onRemoteHostHeartbeat?.(payload as HostHeartbeatPayload);
+      break;
+    case 'host_handover':
+      callbacks.onRemoteHostHandover?.(payload as HostHandoverPayload);
+      break;
+    case 'world_state_sync':
+      callbacks.onRemoteWorldStateSync?.(payload as WorldStateSyncPayload);
+      break;
     case 'player_move':
       callbacks.onRemotePlayerMove(payload as Player);
       break;
@@ -144,6 +165,8 @@ export function dispatchSharedChannelEvent(
         syncId: p.syncId,
         chunkIndex: p.chunkIndex,
         totalChunks: p.totalChunks,
+        hostEpoch: p.hostEpoch,
+        syncSeq: p.syncSeq,
       });
       break;
     }

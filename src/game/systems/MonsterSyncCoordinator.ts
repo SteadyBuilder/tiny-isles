@@ -15,6 +15,10 @@ import {
   toCompactMonsterTuple,
 } from '../utils/monsterSyncUtils';
 import {
+  MonsterDigestResult,
+  computeMonsterIdDigest,
+} from './MonsterReconciliationHelper';
+import {
   MonsterRemoteDeltaApplier,
   RemoteDeltaApplyCallbacks,
 } from './MonsterRemoteDeltaApplier';
@@ -28,13 +32,32 @@ export type { RemoteDeltaApplyCallbacks };
 export class MonsterSyncCoordinator {
   private lastSyncedSnapshots = new Map<string, SyncTrackedMonsterState>();
   private pendingKills: MonsterKillSyncPayload[] = [];
+  private pendingRemovedIds = new Set<string>();
   private syncSeq = 0;
+  private hostEpoch = 0;
   private remoteApplier = new MonsterRemoteDeltaApplier();
 
   public resetAll(): void {
     this.lastSyncedSnapshots.clear();
     this.pendingKills = [];
+    this.pendingRemovedIds.clear();
     this.remoteApplier.resetAll();
+  }
+
+  public setHostEpoch(epoch: number): void {
+    const normalized = Math.max(0, Math.floor(epoch));
+    if (normalized !== this.hostEpoch) {
+      this.hostEpoch = normalized;
+      this.syncSeq = 0;
+    }
+  }
+
+  public getHostEpoch(): number {
+    return this.hostEpoch;
+  }
+
+  public getLiveMonsterDigest(monsters: ReadonlyMap<string, MonsterVisual>): MonsterDigestResult {
+    return computeMonsterIdDigest(monsters);
   }
 
   public markLocalHit(monsterId: string): void {
@@ -46,7 +69,19 @@ export class MonsterSyncCoordinator {
       this.pendingKills.shift();
     }
     this.pendingKills.push(kill);
+    this.pendingRemovedIds.delete(kill.id);
     this.lastSyncedSnapshots.delete(kill.id);
+  }
+
+  /**
+   * 게스트가 이미 사망·소멸한 유령 몹을 타격했을 때 즉시 제거 신호를 큐에 적재합니다.
+   */
+  public recordGhostRemoval(monsterId: string): void {
+    if (!monsterId) return;
+    if (this.pendingRemovedIds.size < 256) {
+      this.pendingRemovedIds.add(monsterId);
+    }
+    this.lastSyncedSnapshots.delete(monsterId);
   }
 
   public buildFullSyncChunks(
@@ -55,7 +90,6 @@ export class MonsterSyncCoordinator {
     bossWaveCount: number
   ): MonstersFullSyncPayload[] {
     this.lastSyncedSnapshots.clear();
-    this.pendingKills = [];
 
     const snapshots: Monster[] = [];
     for (const mv of monsters.values()) {
@@ -64,7 +98,8 @@ export class MonsterSyncCoordinator {
       snapshots.push(roundMonsterSnapshotCoords(mv.monster));
     }
 
-    const syncId = `fs_${Date.now()}_${++this.syncSeq}`;
+    const seq = ++this.syncSeq;
+    const syncId = `fs_${Date.now()}_${seq}`;
     if (snapshots.length === 0) {
       return [
         {
@@ -74,6 +109,8 @@ export class MonsterSyncCoordinator {
           syncId,
           chunkIndex: 0,
           totalChunks: 1,
+          hostEpoch: this.hostEpoch,
+          syncSeq: seq,
         },
       ];
     }
@@ -86,6 +123,8 @@ export class MonsterSyncCoordinator {
       syncId,
       chunkIndex,
       totalChunks: chunks.length,
+      hostEpoch: this.hostEpoch,
+      syncSeq: seq,
     }));
   }
 
@@ -96,7 +135,7 @@ export class MonsterSyncCoordinator {
   ): MonstersDeltaSyncPayload[] {
     const spawns: Monster[] = [];
     const updates = [];
-    const removedIds: string[] = [];
+    const removedSet = new Set<string>();
 
     for (const [id, mv] of monsters.entries()) {
       const m = mv.monster;
@@ -112,13 +151,27 @@ export class MonsterSyncCoordinator {
     }
 
     for (const prevId of Array.from(this.lastSyncedSnapshots.keys())) {
-      if (!monsters.has(prevId)) {
-        removedIds.push(prevId);
+      const live = monsters.get(prevId);
+      if (!live || live.monster.hp <= 0) {
+        removedSet.add(prevId);
         this.lastSyncedSnapshots.delete(prevId);
       }
     }
 
+    for (const ghostId of this.pendingRemovedIds) {
+      const live = monsters.get(ghostId);
+      if (!live || live.monster.hp <= 0) {
+        removedSet.add(ghostId);
+      }
+    }
+    this.pendingRemovedIds.clear();
+
     const kills = this.pendingKills.splice(0, this.pendingKills.length);
+    for (const kill of kills) {
+      removedSet.delete(kill.id);
+    }
+    const removedIds = Array.from(removedSet);
+
     if (
       spawns.length === 0 &&
       updates.length === 0 &&
@@ -131,7 +184,8 @@ export class MonsterSyncCoordinator {
     const spawnChunks = chunkArray(spawns, MONSTER_SYNC_CONFIG.deltaSpawnChunkSize);
     const updateChunks = chunkArray(updates, MONSTER_SYNC_CONFIG.deltaUpdateChunkSize);
     const totalBatches = Math.max(1, spawnChunks.length, updateChunks.length);
-    const totalMonsterCount = monsters.size;
+    const { count: totalMonsterCount, digest: liveMonsterDigest } = computeMonsterIdDigest(monsters);
+    const seq = ++this.syncSeq;
 
     const batches: MonstersDeltaSyncPayload[] = [];
     for (let i = 0; i < totalBatches; i++) {
@@ -141,10 +195,13 @@ export class MonsterSyncCoordinator {
         kills: i === 0 ? kills : [],
         removedIds: i === 0 ? removedIds : [],
         totalMonsterCount,
+        liveMonsterDigest,
         waveCount,
         bossWaveCount,
         batchIndex: i,
         totalBatches,
+        hostEpoch: this.hostEpoch,
+        syncSeq: seq,
       });
     }
     return batches;
