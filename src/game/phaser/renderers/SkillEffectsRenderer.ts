@@ -145,17 +145,19 @@ export class SkillEffectsRenderer {
 
   private playRangerArrowStorm(ctx: SkillEffectContext): void {
     const { casterX: x, casterY: y, radius, targetPoints } = ctx;
+    const tx = ctx.targetX ?? x;
+    const ty = ctx.targetY ?? y;
     const style = SKILL_FX_STYLE_CONFIG.ranger;
 
-    this.spawnRotatingCircle(x, y, 135, style.primaryHex, 440);
+    this.spawnRotatingCircle(tx, ty, radius * 1.45, style.primaryHex, 440);
 
     const targets =
       targetPoints && targetPoints.length > 0
         ? targetPoints.slice(0, 10)
         : Array.from({ length: 8 }, (_, idx) => {
             const ang = (Math.PI * 2 * idx) / 8;
-            const r = radius * 0.48;
-            return { x: x + Math.cos(ang) * r, y: y + Math.sin(ang) * r };
+            const r = radius * 0.56;
+            return { x: tx + Math.cos(ang) * r, y: ty + Math.sin(ang) * r };
           });
 
     targets.forEach((pt, idx) => {
@@ -182,31 +184,33 @@ export class SkillEffectsRenderer {
     });
 
     this.schedule(style.chargeDurationMs, () => {
-      this.playSpriteAnim('critStarBurstFx', 'crit_star_burst_anim', x, y - 14, 165, style.primaryHex);
+      this.playSpriteAnim('critStarBurstFx', 'crit_star_burst_anim', tx, ty - 14, 165, style.primaryHex);
       ctx.onImpact?.();
     });
   }
 
   private playArchmageMeteorNova(ctx: SkillEffectContext): void {
     const { casterX: x, casterY: y, radius } = ctx;
+    const tx = ctx.targetX ?? x;
+    const ty = ctx.targetY ?? y;
     const style = SKILL_FX_STYLE_CONFIG.archmage;
 
-    this.spawnRotatingCircle(x, y, radius * 1.95, style.primaryHex, 780);
-    this.dropMeteor(x, y, style.chargeDurationMs, style.primaryHex, style.secondaryHex);
+    this.spawnRotatingCircle(tx, ty, radius * 1.95, style.primaryHex, 780);
+    this.dropMeteor(tx, ty, style.chargeDurationMs, style.primaryHex, style.secondaryHex);
 
     this.schedule(style.chargeDurationMs, () => {
-      this.playSpriteAnim('lightningStrikeFx', 'lightning_strike_anim', x, y - 96, 156, style.primaryHex, 0, 280);
-      this.playSpriteAnim('explosionFx2', 'explosion2_anim', x, y - 16, radius * 1.65, 0xffffff);
-      this.playSpriteAnim('frostNovaFx', 'frost_nova_anim', x, y, radius * 2.0, style.primaryHex);
-      this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', x, y, radius * 2.1, style.secondaryHex);
-      this.playSpriteAnim('voidSlashFx', 'void_slash_anim', x, y - 12, radius * 1.35, style.primaryHex);
+      this.playSpriteAnim('lightningStrikeFx', 'lightning_strike_anim', tx, ty - 96, 156, style.primaryHex, 0, 280);
+      this.playSpriteAnim('explosionFx2', 'explosion2_anim', tx, ty - 16, radius * 1.65, 0xffffff);
+      this.playSpriteAnim('frostNovaFx', 'frost_nova_anim', tx, ty, radius * 2.0, style.primaryHex);
+      this.playSpriteAnim('shockwaveRingFx', 'shockwave_ring_anim', tx, ty, radius * 2.1, style.secondaryHex);
+      this.playSpriteAnim('voidSlashFx', 'void_slash_anim', tx, ty - 12, radius * 1.35, style.primaryHex);
       this.playSpriteAnim('healFx', 'heal_anim', x, y - 14, 185, style.primaryHex);
 
       for (let i = 0; i < 6; i++) {
         const ang = (Math.PI * 2 * i) / 6;
         const dist = radius * 0.56;
-        const fx = x + Math.cos(ang) * dist;
-        const fy = y + Math.sin(ang) * dist;
+        const fx = tx + Math.cos(ang) * dist;
+        const fy = ty + Math.sin(ang) * dist;
         this.schedule(i * 30, () => {
           this.playSpriteAnim('fireFx3', 'fire3_anim', fx, fy - 12, 110, 0xffffff);
           this.playSpriteAnim('fireFx2', 'fire2_anim', fx, fy, 92, style.accentHex);
@@ -218,10 +222,10 @@ export class SkillEffectsRenderer {
           const ang = (Math.PI * 2 * i) / 8;
           const dist = radius * 0.92;
           this.projectileSystem.fireProjectile({
-            startX: x,
-            startY: y - 14,
-            targetX: x + Math.cos(ang) * dist,
-            targetY: y + Math.sin(ang) * dist,
+            startX: tx,
+            startY: ty - 14,
+            targetX: tx + Math.cos(ang) * dist,
+            targetY: ty + Math.sin(ang) * dist,
             durationMs: 260,
             tint: i % 2 === 0 ? style.primaryHex : style.secondaryHex,
             size: 48,
@@ -234,7 +238,7 @@ export class SkillEffectsRenderer {
         }
       }
 
-      this.spawnBurstSparks(x, y, style.secondaryHex, style.primaryHex, 22, radius * 0.9);
+      this.spawnBurstSparks(tx, ty, style.secondaryHex, style.primaryHex, 22, radius * 0.9);
       ctx.onImpact?.();
     });
   }

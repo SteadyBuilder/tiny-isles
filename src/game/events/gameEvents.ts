@@ -111,7 +111,9 @@ export interface GameEventPayloads {
   'salvage-item': string; // instanceId
   'equip-recommended-items': void;
   'salvage-inferior-items': void;
-  'cast-active-skill': void;
+  'cast-active-skill': { targetX?: number; targetY?: number } | void;
+  'cancel-skill-targeting': void;
+  'skill-targeting-state-changed': import('../../types/combat').SkillTargetingState;
   'trigger-dash': void;
   'dash-state-updated': DashCooldownState;
   'player-damaged-fx': PlayerDamagedFxPayload;

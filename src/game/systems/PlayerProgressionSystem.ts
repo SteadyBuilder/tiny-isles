@@ -29,6 +29,11 @@ import {
   ComputedProgressionStats,
   computeProgressionStats,
 } from '../utils/progressionStatsUtils';
+import {
+  clampTargetToCastRange,
+  computeEffectiveSkillCastRange,
+  isGroundTargetedClass,
+} from '../utils/skillTargetingUtils';
 import { MonsterVisual } from './MonsterVisualManager';
 import { ProjectileSystem } from './ProjectileSystem';
 
@@ -435,8 +440,24 @@ export class PlayerProgressionSystem {
     return true;
   }
 
-  public castActiveSkill(): void {
-    if (this.skillCooldownRemainingMs > 0 || this.ctx.isPlayerFainted?.()) return;
+  public canCastActiveSkill(): boolean {
+    return this.skillCooldownRemainingMs <= 0 && !this.ctx.isPlayerFainted?.();
+  }
+
+  public getEffectiveSkillRadius(): number {
+    const cls = this.getClassDef();
+    const metaBonuses = this.ctx.getMetaBonuses?.();
+    return cls.skillRadius + (metaBonuses?.bonusSkillRadiusPx ?? 0);
+  }
+
+  public getEffectiveSkillCastRange(): number {
+    const cls = this.getClassDef();
+    const metaBonuses = this.ctx.getMetaBonuses?.();
+    return computeEffectiveSkillCastRange(cls, metaBonuses?.bonusSkillRadiusPx ?? 0);
+  }
+
+  public castActiveSkill(options?: { targetX?: number; targetY?: number }): void {
+    if (!this.canCastActiveSkill()) return;
     const cls = this.getClassDef();
     const stats = this.getComputedStats();
     const cdrRatio = 1 - stats.totalCooldownReductionPercent / 100;
@@ -451,8 +472,26 @@ export class PlayerProgressionSystem {
     this.ctx.showFloatingText(pos.x, pos.y - 58, `${cls.skillIcon} ${cls.skillName}!`, '#38bdf8');
 
     const metaBonuses = this.ctx.getMetaBonuses?.();
-    const effectiveSkillRadius = cls.skillRadius + (metaBonuses?.bonusSkillRadiusPx ?? 0);
+    const effectiveSkillRadius = this.getEffectiveSkillRadius();
+    const effectiveCastRange = this.getEffectiveSkillCastRange();
     const bossDamageBonusRatio = metaBonuses?.bossDamageBonusRatio ?? 0;
+
+    const isGroundSkill = isGroundTargetedClass(cls);
+    const hasExplicitTarget =
+      isGroundSkill &&
+      typeof options?.targetX === 'number' &&
+      typeof options?.targetY === 'number';
+    const clampedTarget = hasExplicitTarget
+      ? clampTargetToCastRange(
+          pos.x,
+          pos.y,
+          options.targetX!,
+          options.targetY!,
+          effectiveCastRange
+        )
+      : null;
+    const centerX = clampedTarget ? clampedTarget.x : pos.x;
+    const centerY = clampedTarget ? clampedTarget.y : pos.y;
 
     const dealSkillHit = (targetId: string, tx: number, ty: number, isBossOrElite: boolean) => {
       const rolled = this.rollDamageWithAffixes(baseSkillDmg);
@@ -476,11 +515,11 @@ export class PlayerProgressionSystem {
     };
 
     const initialCandidates =
-      this.ctx.queryMonstersInRadius?.(pos.x, pos.y, effectiveSkillRadius) ??
+      this.ctx.queryMonstersInRadius?.(centerX, centerY, effectiveSkillRadius) ??
       this.ctx.getMonsterVisuals().values();
     const targetsInRange = Array.from(initialCandidates)
       .filter((mv) => mv.monster.hp > 0)
-      .map((mv) => ({ mv, dist: Math.hypot(mv.monster.x - pos.x, mv.monster.y - pos.y) }))
+      .map((mv) => ({ mv, dist: Math.hypot(mv.monster.x - centerX, mv.monster.y - centerY) }))
       .filter((item) => item.dist <= effectiveSkillRadius)
       .sort((a, b) => a.dist - b.dist);
 
@@ -492,7 +531,9 @@ export class PlayerProgressionSystem {
     }
 
     const executeImpact = () => {
-      const latestPos = this.ctx.getPlayerPosition();
+      const impactPos = hasExplicitTarget
+        ? { x: centerX, y: centerY }
+        : this.ctx.getPlayerPosition();
       if (cls.id === 'ranger') {
         const chosen = targetsInRange.slice(0, 10);
         for (const { mv } of chosen) {
@@ -505,8 +546,8 @@ export class PlayerProgressionSystem {
           );
         }
         this.ctx.tryDamageCampCoreInRadius?.(
-          latestPos.x,
-          latestPos.y,
+          impactPos.x,
+          impactPos.y,
           effectiveSkillRadius,
           baseSkillDmg
         );
@@ -514,11 +555,11 @@ export class PlayerProgressionSystem {
       }
 
       const impactCandidates =
-        this.ctx.queryMonstersInRadius?.(latestPos.x, latestPos.y, effectiveSkillRadius) ??
+        this.ctx.queryMonstersInRadius?.(impactPos.x, impactPos.y, effectiveSkillRadius) ??
         this.ctx.getMonsterVisuals().values();
       for (const mv of impactCandidates) {
         if (mv.monster.hp <= 0) continue;
-        const d = Math.hypot(mv.monster.x - latestPos.x, mv.monster.y - latestPos.y);
+        const d = Math.hypot(mv.monster.x - impactPos.x, mv.monster.y - impactPos.y);
         if (d <= effectiveSkillRadius) {
           dealSkillHit(
             mv.monster.id,
@@ -529,8 +570,8 @@ export class PlayerProgressionSystem {
         }
       }
       this.ctx.tryDamageCampCoreInRadius?.(
-        latestPos.x,
-        latestPos.y,
+        impactPos.x,
+        impactPos.y,
         effectiveSkillRadius,
         baseSkillDmg
       );
@@ -543,6 +584,8 @@ export class PlayerProgressionSystem {
         casterY: pos.y,
         facingDir,
         radius: effectiveSkillRadius,
+        targetX: hasExplicitTarget ? centerX : undefined,
+        targetY: hasExplicitTarget ? centerY : undefined,
         targetPoints: targetsInRange.slice(0, 10).map((t) => ({
           x: t.mv.monster.x,
           y: t.mv.monster.y,
@@ -550,7 +593,7 @@ export class PlayerProgressionSystem {
         onImpact: executeImpact,
       });
     } else {
-      this.ctx.playExplosionAt(pos.x, pos.y);
+      this.ctx.playExplosionAt(centerX, centerY);
       executeImpact();
     }
 

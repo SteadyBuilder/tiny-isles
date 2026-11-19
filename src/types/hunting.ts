@@ -82,6 +82,8 @@ export interface EquippedItemsMap {
   relic: EquipmentItem | null;
 }
 
+export type SkillTargetingMode = 'instant' | 'ground';
+
 export interface PlayerClassDefinition {
   id: PlayerClassId;
   name: string;
@@ -104,6 +106,8 @@ export interface PlayerClassDefinition {
   skillCooldownMs: number;
   skillDamageMultiplier: number;
   skillRadius: number;
+  skillTargetingMode?: SkillTargetingMode;
+  skillCastRange?: number;
   passiveDescription: string;
 }
 

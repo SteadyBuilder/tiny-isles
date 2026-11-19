@@ -4,6 +4,7 @@ import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
 import { MinimapModal } from './components/MinimapModal';
 import { VillageBuildModal } from './components/VillageBuildModal';
+import { SkillTargetingBanner } from './components/SkillTargetingBanner';
 import { TowerPlacementBanner } from './components/TowerPlacementBanner';
 import { MissionHudBanner } from './components/MissionHudBanner';
 import { MissionResultModal } from './components/MissionResultModal';
@@ -288,6 +289,7 @@ export function App() {
       />
 
       <TowerPlacementBanner />
+      <SkillTargetingBanner />
 
       <PlayerProgressionHud
         progression={playerProgression}

@@ -125,6 +125,8 @@ export function createWorldPlayerSystems(
         casterY: Math.round(fxCtx.casterY),
         facingDir: fxCtx.facingDir,
         radius: Math.round(fxCtx.radius),
+        targetX: fxCtx.targetX !== undefined ? Math.round(fxCtx.targetX) : undefined,
+        targetY: fxCtx.targetY !== undefined ? Math.round(fxCtx.targetY) : undefined,
         targetPoints: fxCtx.targetPoints?.slice(0, 10).map((pt) => ({
           x: Math.round(pt.x),
           y: Math.round(pt.y),

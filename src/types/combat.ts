@@ -43,6 +43,8 @@ export interface SkillEffectContext {
   casterY: number;
   facingDir: 'left' | 'right';
   radius: number;
+  targetX?: number;
+  targetY?: number;
   targetPoints?: ReadonlyArray<{ x: number; y: number }>;
   onImpact?: () => void;
 }
@@ -58,5 +60,19 @@ export interface RemotePlayerSkillCastPayload {
   casterY: number;
   facingDir: 'left' | 'right';
   radius: number;
+  targetX?: number;
+  targetY?: number;
   targetPoints?: Array<{ x: number; y: number }>;
+}
+
+/**
+ * 지점 지정형 액티브 스킬 조준 상태 UI 동기화 계약
+ */
+export interface SkillTargetingState {
+  active: boolean;
+  classId?: PlayerClassId;
+  skillName?: string;
+  skillIcon?: string;
+  castRange?: number;
+  impactRadius?: number;
 }

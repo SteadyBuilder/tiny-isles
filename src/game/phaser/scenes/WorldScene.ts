@@ -397,6 +397,7 @@ export class WorldScene extends Phaser.Scene {
       this.controllers.territoryPassive.getCycleProgress()
     );
     this.controllers.playerMovement.update(time, delta);
+    this.controllers.skillTargeting.update();
     this.controllers.viewportCulling.update(time);
     this.resourceEntityRenderer.updateSheepWandering(time, delta, (x, y) =>
       !this.terrainMap.waterBodies.some(
@@ -475,6 +476,7 @@ export class WorldScene extends Phaser.Scene {
     this.unbindWebGLGuard = null;
     this.controllers?.playerMovement?.destroy();
     this.controllers?.towerPlacement?.destroy();
+    this.controllers?.skillTargeting?.destroy();
     this.systems?.playerHealthSystem?.destroy();
     this.systems?.projectileSystem?.destroy();
     this.systems?.towerDefenseSystem?.destroy();

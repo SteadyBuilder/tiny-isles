@@ -119,6 +119,8 @@ export function createWorldMultiplayerSync(
         casterY: payload.casterY,
         facingDir: payload.facingDir,
         radius: payload.radius,
+        targetX: payload.targetX,
+        targetY: payload.targetY,
         targetPoints: payload.targetPoints,
       });
       const cls = PLAYER_CLASS_DEFINITIONS[payload.classId];

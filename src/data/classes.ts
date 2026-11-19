@@ -57,6 +57,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     skillCooldownMs: 7000,
     skillDamageMultiplier: 2.0,
     skillRadius: 150,
+    skillTargetingMode: 'instant',
     passiveDescription: '레벨 10 달성 후 왕국 전직소를 건설하고 방문하여 상위 클래스로 전직할 수 있습니다.',
   },
   guardian: {
@@ -82,6 +83,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     skillCooldownMs: 6500,
     skillDamageMultiplier: 2.8,
     skillRadius: 220,
+    skillTargetingMode: 'instant',
     passiveDescription: '평타가 전방 다수의 적을 동시에 타격하며 최대 체력이 크게 증가합니다.',
   },
   lancer: {
@@ -107,6 +109,7 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     skillCooldownMs: 5500,
     skillDamageMultiplier: 3.2,
     skillRadius: 240,
+    skillTargetingMode: 'instant',
     passiveDescription:
       '긴 사거리로 일직선상의 적을 관통 타격하며 이동속도와 본진 파괴력이 뛰어납니다.',
   },
@@ -129,10 +132,12 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     skillIcon: '🌧️',
     skillSpritePath: '/assets/ui/skills/skill_ranger.png',
     skillDescription:
-      '사거리 내 최대 10마리의 마물에게 동시에 강화 화살을 발사하여 260% 피해를 입힙니다.',
+      '사거리 440px 내 지정 지점(반경 240px)에 화살비를 쏟아 최대 10마리의 마물에게 260% 피해를 입힙니다.',
     skillCooldownMs: 6000,
     skillDamageMultiplier: 2.6,
-    skillRadius: 380,
+    skillRadius: 240,
+    skillTargetingMode: 'ground',
+    skillCastRange: 440,
     passiveDescription:
       '원거리에서 안전하게 고속 연사로 마물과 원거리/마법사 부락을 제압합니다.',
   },
@@ -155,10 +160,12 @@ export const PLAYER_CLASS_DEFINITIONS: Record<PlayerClassId, PlayerClassDefiniti
     skillIcon: '☄️',
     skillSpritePath: '/assets/ui/skills/skill_archmage.png',
     skillDescription:
-      '반경 280px 내의 마물 대군에게 340% 화염 폭발 피해를 입히고 내 체력을 40 회복합니다.',
+      '사거리 400px 내 지정 지점(반경 260px)에 운석을 낙하시켜 340% 화염 폭발 피해를 입히고 내 체력을 40 회복합니다.',
     skillCooldownMs: 7500,
     skillDamageMultiplier: 3.4,
-    skillRadius: 280,
+    skillRadius: 260,
+    skillTargetingMode: 'ground',
+    skillCastRange: 400,
     passiveDescription:
       '마력탄이 적중 시 주변 마물에게 스플래시 폭발 피해를 입혀 100마리 대군 섬멸에 특화됩니다.',
   },

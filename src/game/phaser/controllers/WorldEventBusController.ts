@@ -40,7 +40,8 @@ export interface IWorldEventBusContext {
   salvageItem?: (instanceId: string) => void;
   equipRecommendedItems?: () => void;
   salvageInferiorItems?: () => void;
-  castActiveSkill?: () => void;
+  castActiveSkill?: (options?: { targetX?: number; targetY?: number }) => void;
+  cancelSkillTargeting?: () => void;
   buyPotion?: (potionId: PotionId) => void;
   usePotion?: (potionId: PotionId) => void;
   hireMercenary?: (mercenaryId: MercenaryId) => void;
@@ -155,8 +156,12 @@ export class WorldEventBusController {
       this.ctx.salvageInferiorItems?.();
     });
 
-    this.register('cast-active-skill', () => {
-      this.ctx.castActiveSkill?.();
+    this.register('cast-active-skill', (payload) => {
+      this.ctx.castActiveSkill?.(payload ?? undefined);
+    });
+
+    this.register('cancel-skill-targeting', () => {
+      this.ctx.cancelSkillTargeting?.();
     });
 
     this.register('buy-potion', (potionId) => {

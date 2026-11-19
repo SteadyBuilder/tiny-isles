@@ -9,6 +9,7 @@ import {
 import { BuildingRepairController } from '../controllers/BuildingRepairController';
 import { PlayerInteractionController } from '../controllers/PlayerInteractionController';
 import { PlayerMovementController } from '../controllers/PlayerMovementController';
+import { SkillTargetingController } from '../controllers/SkillTargetingController';
 import { TerritoryActionController } from '../controllers/TerritoryActionController';
 import { TerritoryPassiveSystem } from '../controllers/TerritoryPassiveSystem';
 import { TowerPlacementController } from '../controllers/TowerPlacementController';
@@ -28,6 +29,7 @@ import { WaterRect } from '../../world/MapTerrainGenerator';
 import { isSameInventory } from '../../utils/inventoryUtils';
 import { checkMercenaryGuildProximity } from '../../utils/mercenaryGuildUtils';
 import { checkSanctuaryPlayerHeal } from '../../utils/sanctuaryHealUtils';
+import { isGroundTargetedClass } from '../../utils/skillTargetingUtils';
 import { MetaBonusSummary } from '../../../types/metaProgression';
 import { WorldSystemsBundle } from './WorldSceneSystemsFactory';
 
@@ -71,6 +73,7 @@ export interface WorldControllersBundle {
   playerInteraction: PlayerInteractionController;
   playerMovement: PlayerMovementController;
   towerPlacement: TowerPlacementController;
+  skillTargeting: SkillTargetingController;
   viewportCulling: ViewportCullingController;
   eventBus: WorldEventBusController;
 }
@@ -250,6 +253,18 @@ export function createWorldControllersBundle(
     showFloatingText: (x, y, text, color) => host.effectsRenderer.showFloatingText(x, y, text, color),
   });
 
+  const skillTargeting = new SkillTargetingController({
+    scene: host.scene,
+    getPlayerPosition: () => playerMovement.getPosition(),
+    getClassDef: () => host.systems.playerProgressionSystem.getClassDef(),
+    getEffectiveCastRange: () => host.systems.playerProgressionSystem.getEffectiveSkillCastRange(),
+    getEffectiveImpactRadius: () => host.systems.playerProgressionSystem.getEffectiveSkillRadius(),
+    canCastSkill: () => host.systems.playerProgressionSystem.canCastActiveSkill(),
+    onConfirmCast: (targetX, targetY) => {
+      host.systems.playerProgressionSystem.castActiveSkill({ targetX, targetY });
+    },
+  });
+
   playerMovement = new PlayerMovementController({
     scene: host.scene,
     isSceneAlive: host.isSceneAlive,
@@ -274,7 +289,7 @@ export function createWorldControllersBundle(
       host.resourceEntityRenderer.getEntityInteractionPoint(visual),
     onInteract: () => playerInteraction.tryInteract(),
     onAutoInteract: () => playerInteraction.tryInteract({ autoMode: true }),
-    isPlacementActive: () => towerPlacement.isActive(),
+    isPlacementActive: () => towerPlacement.isActive() || skillTargeting.isBlockingPointer(),
     getAttackRange: (isBoss) => {
       const baseRange = host.systems.playerProgressionSystem.getEffectiveAttackRange();
       return isBoss ? Math.max(baseRange, PLAYER_COMBAT_CONFIG.meleeRangeBoss) : baseRange;
@@ -315,7 +330,10 @@ export function createWorldControllersBundle(
     upgradeVillage: (id) => territoryAction.handleUpgradeVillage(id, true),
     constructBuilding: (id, type, slot, customPos) =>
       territoryAction.handleConstructBuilding(id, type, slot, true, customPos),
-    enterTowerPlacement: (id, type) => towerPlacement.enter(id, type),
+    enterTowerPlacement: (id, type) => {
+      skillTargeting.cancel();
+      towerPlacement.enter(id, type);
+    },
     cancelTowerPlacement: () => towerPlacement.cancel(),
     confirmTowerPlacement: () => {
       towerPlacement.confirm();
@@ -328,7 +346,10 @@ export function createWorldControllersBundle(
     addThreat: (amount) => host.systems.waveSystem.addThreat(amount, true),
     damageTerritoryCore: (id, dmg) =>
       host.systems.coreGemSystem.damageTerritoryCore(id, dmg, '마물 침공 테스트', true),
-    selectPlayerClass: (classId) => host.systems.playerProgressionSystem.selectClass(classId),
+    selectPlayerClass: (classId) => {
+      skillTargeting.cancel();
+      host.systems.playerProgressionSystem.selectClass(classId);
+    },
     equipItem: (instanceId) => host.systems.playerProgressionSystem.equipItem(instanceId),
     unequipSlot: (slot) => host.systems.playerProgressionSystem.unequipSlot(slot),
     salvageItem: (instanceId) => host.systems.playerProgressionSystem.salvageItem(instanceId),
@@ -336,7 +357,21 @@ export function createWorldControllersBundle(
       host.systems.playerProgressionSystem.equipRecommendedItems(),
     salvageInferiorItems: () =>
       host.systems.playerProgressionSystem.salvageInferiorItems(),
-    castActiveSkill: () => host.systems.playerProgressionSystem.castActiveSkill(),
+    castActiveSkill: (options) => {
+      const cls = host.systems.playerProgressionSystem.getClassDef();
+      const hasCoords =
+        typeof options?.targetX === 'number' && typeof options?.targetY === 'number';
+      if (isGroundTargetedClass(cls) && !hasCoords) {
+        if (towerPlacement.isActive()) {
+          towerPlacement.cancel();
+        }
+        skillTargeting.toggle();
+        return;
+      }
+      skillTargeting.cancel();
+      host.systems.playerProgressionSystem.castActiveSkill(options);
+    },
+    cancelSkillTargeting: () => skillTargeting.cancel(),
     buyPotion: (potionId) => host.systems.playerProgressionSystem.buyPotion(potionId),
     usePotion: (potionId) => host.systems.playerProgressionSystem.usePotion(potionId),
     hireMercenary: (mercenaryId) => {
@@ -398,6 +433,7 @@ export function createWorldControllersBundle(
     playerInteraction,
     playerMovement,
     towerPlacement,
+    skillTargeting,
     viewportCulling,
     eventBus,
   };
