@@ -30,6 +30,7 @@ export interface VillageBlueprintCardProps {
   inventory: Inventory;
   isTowerPlacement: boolean;
   isEnabled: boolean;
+  isAlreadyBuilt?: boolean;
   statusText: string;
   shortcutKey?: number;
   onBuild: () => void;
@@ -40,13 +41,18 @@ export const VillageBlueprintCard: React.FC<VillageBlueprintCardProps> = ({
   inventory,
   isTowerPlacement,
   isEnabled,
+  isAlreadyBuilt = false,
   statusText,
   shortcutKey,
   onBuild,
 }) => {
   return (
     <div
-      className="p-2 rounded-lg bg-[#e6cfab] border-2 border-[#b89568] flex flex-col gap-2"
+      className={`p-2 rounded-lg border-2 flex flex-col gap-2 ${
+        isAlreadyBuilt
+          ? 'bg-[#e3d2b6] border-[#c49a52]'
+          : 'bg-[#e6cfab] border-[#b89568]'
+      }`}
       title={bp.description}
     >
       {/* Top row: Sprite + Full Name + Status Pill */}
@@ -84,9 +90,11 @@ export const VillageBlueprintCard: React.FC<VillageBlueprintCardProps> = ({
             </div>
             <span
               className={`px-1.5 py-0.5 rounded text-[9px] font-black shrink-0 border ${
-                isEnabled
-                  ? 'bg-[#dcfce7] text-[#166534] border-[#4f803b]/50'
-                  : 'bg-[#fee2e2] text-[#991b1b] border-[#b91c1c]/40'
+                isAlreadyBuilt
+                  ? 'bg-[#fef3c7] text-[#92400e] border-[#d97706]/60'
+                  : isEnabled
+                    ? 'bg-[#dcfce7] text-[#166534] border-[#4f803b]/50'
+                    : 'bg-[#fee2e2] text-[#991b1b] border-[#b91c1c]/40'
               }`}
             >
               {statusText}
@@ -150,7 +158,7 @@ export const VillageBlueprintCard: React.FC<VillageBlueprintCardProps> = ({
         </div>
 
         <PixelGameButton
-          label={isTowerPlacement ? '외곽 배치' : '건설'}
+          label={isAlreadyBuilt ? '건설됨' : isTowerPlacement ? '외곽 배치' : '건설'}
           iconSrc="/assets/ui/Icons/Tool_Hammer.png"
           variant="blue"
           size="sm"

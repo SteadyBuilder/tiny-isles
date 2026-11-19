@@ -37,6 +37,7 @@ export interface UpgradeCheckResult {
 
 export interface BuildCheckResult {
   canBuild: boolean;
+  alreadyBuilt?: boolean;
   reason?: string;
   slotIndex?: number;
   customPos?: { x: number; y: number };
@@ -82,6 +83,37 @@ export class BuildingSystem {
         b.territoryId === territoryId &&
         !(b.category === 'tower' && b.slotIndex < 0)
     ).length;
+  }
+
+  /**
+   * 해당 영지에 특정 종류의 건물이 현재 몇 채 건설되어 있는지 계산
+   */
+  public static countTerritoryBuildingsByType(
+    territoryId: number,
+    type: ConstructableType,
+    constructedBuildings: ConstructedBuilding[]
+  ): number {
+    return constructedBuildings.filter(
+      (b) => b.territoryId === territoryId && b.type === type && b.hp > 0
+    ).length;
+  }
+
+  /**
+   * 영지당 건설 개수 제한(maxPerTerritory)에 도달했는지 검사
+   */
+  public static hasReachedTerritoryBuildingLimit(
+    territoryId: number,
+    type: ConstructableType,
+    constructedBuildings: ConstructedBuilding[]
+  ): boolean {
+    const bp = getBlueprint(type);
+    if (typeof bp.maxPerTerritory !== 'number' || bp.maxPerTerritory <= 0) {
+      return false;
+    }
+    return (
+      this.countTerritoryBuildingsByType(territoryId, type, constructedBuildings) >=
+      bp.maxPerTerritory
+    );
   }
 
   /**
@@ -195,6 +227,16 @@ export class BuildingSystem {
     customPos?: { x: number; y: number }
   ): BuildCheckResult {
     const bp = getBlueprint(type);
+
+    if (this.hasReachedTerritoryBuildingLimit(territory.id, type, constructedBuildings)) {
+      return {
+        canBuild: false,
+        alreadyBuilt: true,
+        reason: `[건설됨] ${bp.name}은(는) 영지당 최대 ${bp.maxPerTerritory}개만 건설할 수 있습니다.`,
+        blueprint: bp,
+      };
+    }
+
     const isOuterTower = bp.category === 'tower' && Boolean(customPos);
     const occupiedSlots = this.getOccupiedSlotCount(territory.id, constructedBuildings);
     const maxSlots = this.getMaxSlots(territory.villageTier);

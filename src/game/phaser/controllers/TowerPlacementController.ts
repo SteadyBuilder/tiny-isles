@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { ConstructableType, ConstructedBuilding, Inventory, Island } from '../../../types/game';
+import { BuildingSystem } from '../../BuildingSystem';
 import {
   TERRITORY_BUILD_SLOTS,
   TERRITORY_PX,
@@ -78,6 +79,18 @@ export class TowerPlacementController {
       return;
     }
 
+    if (
+      BuildingSystem.hasReachedTerritoryBuildingLimit(
+        territoryId,
+        type,
+        this.ctx.getConstructedBuildings()
+      )
+    ) {
+      const bp = getBlueprint(type);
+      GameEvents.emit('game-alert', `[건설됨] ${bp.name}은(는) 이미 이 영지에 건설되어 있습니다.`);
+      return;
+    }
+
     this.clearVisuals();
     this.active = {
       territoryId,
@@ -112,6 +125,21 @@ export class TowerPlacementController {
     if (!access.allowed) {
       const reason = access.reason || '현재 위치한 마을 영역에서만 건설할 수 있습니다.';
       this.ctx.showFloatingText(selectedPos.x, selectedPos.y - 30, reason, '#f87171');
+      GameEvents.emit('game-alert', reason);
+      this.cancel();
+      return false;
+    }
+
+    if (
+      BuildingSystem.hasReachedTerritoryBuildingLimit(
+        territoryId,
+        type,
+        this.ctx.getConstructedBuildings()
+      )
+    ) {
+      const bp = getBlueprint(type);
+      const reason = `[건설됨] ${bp.name}은(는) 이미 이 영지에 건설되어 있습니다.`;
+      this.ctx.showFloatingText(selectedPos.x, selectedPos.y - 30, reason, '#fbbf24');
       GameEvents.emit('game-alert', reason);
       this.cancel();
       return false;

@@ -265,6 +265,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 18,
     costGold: 6,
     maxHp: 380,
+    maxPerTerritory: 1,
     shortEffect: '4대 클래스(전사·창병·궁수·마법사) 전직 해금 · 건물 접근 시 [E] 전직',
     description:
       '사냥으로 성장한 모험가가 상위 4대 클래스(가디언, 드래곤 랜서, 레인저, 아크메이지)로 전직할 수 있는 성전입니다.',
@@ -280,6 +281,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 14,
     costGold: 4,
     maxHp: 340,
+    maxPerTerritory: 1,
     shortEffect: '금화로 치유 물약 구매 · 건물 접근 시 [E] 상점 열기',
     description:
       '금화를 사용해 소형·중형·대형 치유 물약을 구매할 수 있는 만물 도구 상점입니다.',
@@ -295,6 +297,7 @@ export const CONSTRUCTABLE_BLUEPRINTS: ConstructableBlueprint[] = [
     costStone: 20,
     costGold: 8,
     maxHp: 400,
+    maxPerTerritory: 1,
     shortEffect: '고기·금화로 용병 고용 (최대 4명) · 건물 접근 시 [E] 길드 열기',
     description:
       '양을 도축해 얻은 고기와 금화로 전사·궁수·창병 용병을 고용해 영지와 길드 주변을 방어합니다.',

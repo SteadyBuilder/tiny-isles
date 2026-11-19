@@ -401,7 +401,20 @@ export class TerritoryActionController {
     const constructedBuildings = this.ctx.getConstructedBuildings();
     if (constructedBuildings.some((b) => b.id === cb.id)) return;
 
-    // 동시 건설 경합 체크: 동일 영지의 동일 슬롯(>=0) 또는 근접 자유 배치(-1)
+    // 동시 건설 경합 체크 1: 영지당 건설 개수 제한(예: 전직소/상점/용병길드 1개 제한) 충돌
+    if (BuildingSystem.hasReachedTerritoryBuildingLimit(cb.territoryId, cb.type, constructedBuildings)) {
+      const existingSameType = constructedBuildings.find(
+        (b) => b.territoryId === cb.territoryId && b.type === cb.type && b.hp > 0
+      );
+      if (existingSameType) {
+        if (existingSameType.id.localeCompare(cb.id) <= 0) {
+          return;
+        }
+        this.destroyConstructedBuilding(existingSameType.id, false);
+      }
+    }
+
+    // 동시 건설 경합 체크 2: 동일 영지의 동일 슬롯(>=0) 또는 근접 자유 배치(-1)
     const conflict = constructedBuildings.find((b) => {
       if (b.territoryId !== cb.territoryId) return false;
       if (cb.slotIndex >= 0 && b.slotIndex === cb.slotIndex) return true;

@@ -84,6 +84,9 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
 
   const handleBuild = (type: ConstructableType) => {
     if (!curTerritory) return;
+    if (BuildingSystem.hasReachedTerritoryBuildingLimit(curTerritory.id, type, constructedBuildings)) {
+      return;
+    }
     const bp = blueprints.find((b) => b.type === type);
     if (bp && onSelectTowerPlacement) {
       const canAfford =
@@ -325,20 +328,23 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
               constructedBuildings,
               selectedSlotIndex ?? undefined
             );
-            const isEnabled = isTower ? canAfford : check.canBuild;
-            const statusText = isTower
-              ? canAfford
-                ? '외곽 배치'
-                : '자원 부족'
-              : !hasSlot
-                ? '슬롯 부족'
-                : !canAfford
-                  ? '자원 부족'
-                  : check.canBuild
-                    ? '건설 가능'
-                    : bp.category === 'wall'
-                      ? '4면 완료'
-                      : '슬롯 부족';
+            const isAlreadyBuilt = Boolean(check.alreadyBuilt);
+            const isEnabled = !isAlreadyBuilt && (isTower ? canAfford : check.canBuild);
+            const statusText = isAlreadyBuilt
+              ? '[건설됨]'
+              : isTower
+                ? canAfford
+                  ? '외곽 배치'
+                  : '자원 부족'
+                : !hasSlot
+                  ? '슬롯 부족'
+                  : !canAfford
+                    ? '자원 부족'
+                    : check.canBuild
+                      ? '건설 가능'
+                      : bp.category === 'wall'
+                        ? '4면 완료'
+                        : '슬롯 부족';
 
             return (
               <VillageBlueprintCard
@@ -347,6 +353,7 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
                 inventory={inventory}
                 isTowerPlacement={isTower}
                 isEnabled={isEnabled}
+                isAlreadyBuilt={isAlreadyBuilt}
                 statusText={statusText}
                 shortcutKey={getBlueprintShortcutNumber(index) ?? undefined}
                 onBuild={() => handleBuild(bp.type)}

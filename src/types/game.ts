@@ -141,6 +141,7 @@ export interface ConstructableBlueprint {
   attack?: number;
   range?: number;
   fireRateMs?: number;
+  maxPerTerritory?: number;
   shortEffect: string;
   description: string;
 }
