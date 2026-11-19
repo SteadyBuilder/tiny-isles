@@ -380,6 +380,13 @@ export class MultiplayerSyncController {
     this.watchdog.tick();
   }
 
+  public updateRoomMeta(
+    meta: Partial<import('../../../shared/multiplayerProtocol').ProtocolRoomMeta>,
+    ended?: boolean
+  ): void {
+    this.router.updateRoomMeta(meta, ended);
+  }
+
   public destroy(): void {
     this.stopJoinHelloLoop();
     this.lastSentState = null;

@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import { INSTANCE_ROOM_DEFAULTS, getDifficultyConfig } from '../../../data/missions';
 import { computeMetaBonuses } from '../../../data/metaProgression';
 import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
-import { publicRoomDirectory } from '../../../lib/publicRoomDirectory';
 import { saveRepository } from '../../../lib/repositories/LocalStorageSaveRepository';
 import { storage } from '../../../lib/storage';
 import {
@@ -438,30 +437,23 @@ export class WorldScene extends Phaser.Scene {
   private maybePublishPublicRoomDirectory(time: number): void {
     if (this.roomConfig.mode !== 'coop') return;
     if (!this.systems?.waveSystem.getIsHost()) return;
-    if (time - this.lastDirectoryPublishAt < 3500) return;
+    if (time - this.lastDirectoryPublishAt < 12_000) return;
     this.lastDirectoryPublishAt = time;
 
     const progress = this.missionSystem.getProgressState();
-    const onlineCount = this.systems.multiplayerSync?.getOnlineCount() ?? 1;
-    void publicRoomDirectory.publishHostRoom({
-      roomId: this.roomConfig.roomId,
-      inviteCode: this.roomConfig.inviteCode ?? this.roomConfig.roomId,
-      hostPlayerId: this.playerId,
-      hostName: this.playerName,
-      missionId: this.roomConfig.missionId,
-      missionTitle: progress.title,
-      difficulty: this.roomConfig.difficulty,
-      status: 'playing',
-      currentPlayers: onlineCount,
-      maxPlayers: this.roomConfig.maxPlayers,
-      currentCount: progress.currentCount,
-      targetCount: progress.targetCount,
-      elapsedSec: progress.elapsedSec,
-      timeLimitSec: progress.timeLimitSec,
-      allowDropIn: this.roomConfig.allowDropIn !== false,
-      hostAppVersion: this.roomConfig.hostAppVersion,
-      ended: this.missionSystem.isEnded(),
-    });
+    this.systems.multiplayerSync?.updateRoomMeta(
+      {
+        missionId: this.roomConfig.missionId,
+        missionTitle: progress.title,
+        difficulty: this.roomConfig.difficulty,
+        currentCount: progress.currentCount,
+        targetCount: progress.targetCount,
+        elapsedSec: progress.elapsedSec,
+        timeLimitSec: progress.timeLimitSec,
+        allowDropIn: this.roomConfig.allowDropIn !== false,
+      },
+      this.missionSystem.isEnded()
+    );
   }
 
   public update(time: number, delta: number): void {
@@ -562,8 +554,8 @@ export class WorldScene extends Phaser.Scene {
 
   private cleanupScene(): void {
     if (this.isCleanedUp) return;
-    if (this.roomConfig.mode === 'coop' && this.systems?.waveSystem.getIsHost()) {
-      void publicRoomDirectory.unpublishHostRoom();
+    if (this.roomConfig.mode === 'coop' && this.systems?.waveSystem.getIsHost() && this.missionSystem.isEnded()) {
+      this.systems.multiplayerSync?.updateRoomMeta({}, true);
     }
     GameEvents.off('game-pause-toggled', this.onPauseToggled);
     this.persistence?.flushAndDestroy();

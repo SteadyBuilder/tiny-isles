@@ -1,0 +1,17 @@
+name = "tiny-isles-multiplayer"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[durable_objects]
+bindings = [
+  { name = "GAME_ROOMS", class_name = "GameRoomDO" },
+  { name = "LOBBY_DIRECTORY", class_name = "LobbyDirectoryDO" }
+]
+
+# Cloudflare Workers Free 플랜 호환을 위해 SQLite 백엔드 Durable Objects 마이그레이션 사용
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoomDO", "LobbyDirectoryDO"]
+
+[vars]
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173"

@@ -1,4 +1,5 @@
 import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
+import { ProtocolRoomMeta } from '../../../shared/multiplayerProtocol';
 import { ConstructedBuilding } from '../../../types/game';
 import { RoomMode } from '../../../types/room';
 import {
@@ -6,8 +7,9 @@ import {
   NetworkPresenceSnapshot,
 } from '../../../lib/contracts/INetworkTransport';
 import { serverSync } from '../../../lib/serverSync';
+import { activeRoomTransportStore } from '../../../lib/transports/activeRoomTransportStore';
+import { CloudflareRoomTransport } from '../../../lib/transports/CloudflareRoomTransport';
 import { LocalOfflineTransport } from '../../../lib/transports/LocalOfflineTransport';
-import { SupabaseRoomTransport } from '../../../lib/transports/SupabaseRoomTransport';
 import { getCurrentBuildId } from '../../../lib/versionGuard';
 import { GameEvents } from '../../events/gameEvents';
 import {
@@ -76,6 +78,10 @@ export class MultiplayerChannelRouter {
     this.transport?.updatePresenceBackground?.(isBackground);
   }
 
+  public updateRoomMeta(meta: Partial<ProtocolRoomMeta>, ended?: boolean): void {
+    this.transport?.updateRoomMeta?.(meta, ended);
+  }
+
   private clearLobbyHostGraceTimer(): void {
     if (this.lobbyHostGraceTimer) {
       clearTimeout(this.lobbyHostGraceTimer);
@@ -114,7 +120,7 @@ export class MultiplayerChannelRouter {
     const roomId = this.callbacks.getRoomId?.() || 'default_room';
     const roomMode: RoomMode = this.callbacks.getRoomMode?.() || 'solo';
 
-    // 협동 모드에서는 Presence가 첫 동기화될 때까지 임의 스폰을 막기 위해 false로 시작
+    // 협동 모드에서는 서버 room_state가 첫 동기화될 때까지 임의 스폰을 막기 위해 false로 시작
     this.isHost = roomMode === 'solo';
     this.hostEpoch = 0;
     this.lastHostId = '';
@@ -123,21 +129,29 @@ export class MultiplayerChannelRouter {
     this.lastOnlineCount = -1;
     this.lastMembersSignature = '';
 
+    // 대기실에서 이미 열린 단일 WebSocket 연결이 있으면 끊지 않고 그대로 인계
+    const handedOffTransport =
+      !customTransport && roomMode === 'coop' ? activeRoomTransportStore.take(roomId) : null;
+
     this.transport =
       customTransport ??
-      (roomMode === 'solo' ? new LocalOfflineTransport() : new SupabaseRoomTransport());
+      handedOffTransport ??
+      (roomMode === 'solo' ? new LocalOfflineTransport() : new CloudflareRoomTransport());
 
     if (roomMode === 'coop') {
       this.setupLocalBus(playerId, roomId);
     }
 
     this.bindTransportEvents();
-    this.transport.connect(roomId, playerId, {
-      name: this.callbacks.getPlayerName(),
-      color: this.callbacks.getPlayerColor(),
-      preferredHostId: this.callbacks.getPreferredHostId?.(),
-      appVersion: getCurrentBuildId(),
-    });
+
+    if (!handedOffTransport) {
+      this.transport.connect(roomId, playerId, {
+        name: this.callbacks.getPlayerName(),
+        color: this.callbacks.getPlayerColor(),
+        preferredHostId: this.callbacks.getPreferredHostId?.(),
+        appVersion: getCurrentBuildId(),
+      });
+    }
   }
 
   public emit<T extends object>(
