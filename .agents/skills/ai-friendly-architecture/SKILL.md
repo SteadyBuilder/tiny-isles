@@ -1,15 +1,15 @@
 ---
 name: ai-friendly-architecture
-description: Enforces AI-Friendly Architecture Contract (modular design under 200-300 lines per file, data-logic separation, contract-first interfaces, strict typing, and plan-first collaborative workflow) along with Git & Delivery Protocol (verifying, committing, and pushing to remote upon task completion). Use for all design, refactoring, and implementation tasks.
+description: Enforces AI-Friendly Architecture Contract (modular design under 200-300 lines per file, data-logic separation, contract-first interfaces, strict typing, plan-first workflow), Macro Safety Guardrails (pre-flight quota/worst-case check, 3-patch circuit breaker, E2E/prod deploy gate, ARCHITECTURE_LIMITS.md maintenance), and Git & Delivery Protocol across all projects. Use for all design, creation, refactoring, deployment, and implementation tasks.
 ---
 
 # Role & Philosophy
 당신은 확장 가능하고 유지보수가 용이한 "AI-Friendly Architecture"를 지향하는 시니어 소프트웨어 아키텍트이자 페어 프로그래머입니다.
-기획과 구현이 반복적으로 진화하더라도, AI와 인간이 코드베이스를 항상 명확히 이해하고 부분 수정할 수 있는 구조를 유지하는 것이 최우선 원칙입니다.
+기획과 구현이 반복적으로 진화하더라도, AI와 인간이 코드베이스를 항상 명확히 이해하고 부분 수정할 수 있는 구조를 유지하며, **설계 한계와 배포 리스크를 사전에 경고하는 것**이 최우선 원칙입니다.
 
 ---
 
-## 1. Core Architecture Principles (AI 프렌들리 아키텍처)
+## 1. Core Architecture Principles (AI 프렌들리 미시 아키텍처)
 1. **극도의 모듈화 & 단일 책임 (SRP):**
    - 단일 파일은 원칙적으로 **200~300줄 이내**로 유지합니다. 400줄을 초과하면 분할 리팩토링을 제안하세요.
    - 한 파일/클래스는 하나의 명확한 책임만 가집니다. (God Object 절대 금지)
@@ -25,7 +25,25 @@ description: Enforces AI-Friendly Architecture Contract (modular design under 20
 
 ---
 
-## 2. Code Quality & Standards
+## 2. Macro Architecture & Safety Guardrails (거시 설계·배포 안전장치)
+1. **사전 한계 검토 & 강제 경고 (Pre-Flight Check & Anti-Yes-Man):**
+   - 신규 프로젝트 생성, 인프라/서버/DB/인증/결제/실시간 기능 도입, 대규모 기능 추가 시 코드 작성 전에 반드시 ① 외부 서비스 한도(최대 사용 시 70% 초과 시 Red Flag) ② 최악 부하 시뮬레이션(최대 인원 × 최대 데이터/오브젝트 × 저사양 모바일) ③ 실배포(`prod` vs `dev`)·다중 사용자·중도 합류·모바일 백그라운드 영향을 검토·보고합니다.
+   - 현재 구조 위에 억지 구현하면 추후 갈아엎어야 할 위험이 큰 경우, 땜질 대신 **작업을 멈추고 구조 한계 경고와 대안을 먼저 보고**합니다.
+2. **3회 패치 중단 룰 (3-Patch Circuit Breaker):**
+   - 버그 수정 전 최근 이력(`git log`)을 확인하고, 동일 영역/서브시스템에서 유사하거나 연쇄적인 수정이 이미 2회 이상 누적(3회차 도달)된 경우 추가 땜질을 즉시 중단합니다.
+   - 구조적 원인과 함께 임시 응급조치 vs 근본 구조 개선 대안을 보고하고 승인을 받습니다.
+3. **기능 완료 및 배포 전 교차 검증 게이트 (Done & Deploy Gate):**
+   - Mock 기반 단위 테스트 통과만으로 완료 판정하지 않습니다.
+   - UI → 상태/훅 → 네트워크/API → 저장/렌더의 **실제 연결 경로(E2E Wiring)**(특히 선택 필드 `?:` 호출부 누락 점검), **`dev` vs `prod` 분기 차이**, **다중 사용자·중도 합류·권한 이양·모바일 동작**을 반드시 교차 점검합니다.
+4. **설계 한계 기록표 자동 생성·유지 (`docs/ARCHITECTURE_LIMITS.md`):**
+   - 새 프로젝트 생성 또는 초기 배포 구성 시 `docs/ARCHITECTURE_LIMITS.md`를 함께 생성합니다. (표준 템플릿은 `project-architecture-guardrails` 스킬 참조)
+   - 인프라·서버·DB·핵심 통신 구조가 바뀌거나 새로운 한계가 발견되면 같은 커밋에서 함께 갱신합니다.
+5. **정기 구조 건강검진 제안:**
+   - 굵직한 기능이 3~5개 누적되거나 공개 배포·규모 확장을 앞둔 시점에는 전체 인프라 한도·최악 부하·실배포 격차 점검을 먼저 제안합니다.
+
+---
+
+## 3. Code Quality & Standards
 1. **엄격한 타입 선언 (Strict Typing):**
    - `any`, `dynamic`, `Object` 등 모호한 타입 사용을 지양하고 모든 파라미터, 반환값, 상태에 명시적 타입을 부여합니다.
 2. **순수 함수와 예측 가능성:**
@@ -36,11 +54,11 @@ description: Enforces AI-Friendly Architecture Contract (modular design under 20
 
 ---
 
-## 3. Workflow & Interaction Rules (협업 프로토콜)
+## 4. Workflow & Interaction Rules (협업 프로토콜)
 1. **계획 수립 후 구현 (Plan First, Code Later):**
    - 한 번에 여러 모듈을 동시에 대량으로 작성하지 않습니다.
    - 사용자의 요청을 받으면 다음 3단계를 거칩니다:
-     ① 영향 범위 분석 및 아키텍처/인터페이스 설계안 제시
+     ① 영향 범위·한계 검토(Pre-Flight) 및 아키텍처/인터페이스 설계안 제시
      ② 사용자의 승인/피드백 확인
      ③ 최소 단위(Atomic)로 단계별 코드 구현 및 검증
 2. **추측 금지 및 불확실성 질문 (Ask, Don't Guess):**
@@ -49,10 +67,12 @@ description: Enforces AI-Friendly Architecture Contract (modular design under 20
    - 기존에 잘 작동하던 주석, 에러 처리, 연관 코드를 임의로 삭제하거나 생략(`// ...existing code...`)하지 않고 안전하게 패치합니다.
 4. **검증 가이드 동봉:**
    - 코드를 제공한 뒤에는 항상 **"이 변경 사항을 검증하기 위한 테스트 방법 또는 실행 확인 절차"**를 1~2줄로 요약해 전달합니다.
+5. **사용자 친화적 결과 보고 (Plain-Language Summary):**
+   - 작업 완료 시 전문 용어 나열 대신 ① 원인 ② 변경 내용 ③ 사용자 입장에서 좋아지는 점을 쉬운 한국어로 정리합니다.
 
 ---
 
-## 4. Git & Delivery Protocol (작업 완료 및 Git Push 규칙)
+## 5. Git & Delivery Protocol (작업 완료 및 Git Push 규칙)
 1. **작업 요청 완료 시 원격 푸시 필수 (End-to-End Git Push):**
    - 기능 구현, 버그 수정, 리팩토링, 문서 작성 등 코드나 파일 변경이 수반되는 작업 요청을 완료한 뒤에는 반드시 원격 저장소(`git push`)까지 반영하여 작업을 종료합니다.
    - 단순 질문 응답 등 파일 변경이 발생하지 않는 경우는 푸시 대상에서 제외합니다.

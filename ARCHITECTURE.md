@@ -19,6 +19,10 @@
 - 시스템 간 직접적인 상호 참조(Circular Dependency)나 결합을 엄격히 금지합니다.
 - 시스템 간 통신은 반드시 정의된 이벤트 인터페이스(`src/game/events/gameEvents.ts`)를 통과해야 합니다.
 
+### 4) 거시 설계 한계 및 배포 안전장치 (`docs/ARCHITECTURE_LIMITS.md`)
+- 인프라 한도(Supabase/Vercel 등), 최대 감당 규모(4인·모바일·몬스터 수), 3회 패치 중단 룰 감시 목록, 배포 전 최종 게이트는 [`docs/ARCHITECTURE_LIMITS.md`](docs/ARCHITECTURE_LIMITS.md)에서 관리합니다.
+- 서버·DB·인증·실시간 멀티플레이·대규모 콘텐츠 구조를 변경하기 전에 반드시 해당 문서를 먼저 확인하고, 변경 시 같은 커밋에서 갱신합니다.
+
 ---
 
 ## 2. Feature Extension Protocols (기능 확장 프로토콜)
