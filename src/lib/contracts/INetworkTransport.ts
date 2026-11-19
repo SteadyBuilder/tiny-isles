@@ -7,6 +7,7 @@ export interface NetworkPresenceMeta {
   joinedAt: number;
   isBackground?: boolean;
   claimedEpoch?: number;
+  preferredHostId?: string;
 }
 
 export interface NetworkPresenceSnapshot {

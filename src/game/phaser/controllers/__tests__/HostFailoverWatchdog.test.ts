@@ -197,3 +197,37 @@ test('HostFailoverWatchdog triggers full resync after consecutive heartbeat mons
   });
   assert.equal(guest.getDigestMismatchCount(), 1);
 });
+
+test('HostFailoverWatchdog.recordPeerActivity refreshes silence timer only for current host', () => {
+  const guest = createHarness('p2');
+  guest.watchdog.updatePresenceSnapshot({
+    isHost: false,
+    hostId: 'p1',
+    hostEpoch: 1,
+    onlineCount: 4,
+    members: makeMembers(),
+  });
+
+  // Advance close to failover timeout, then receive player_move from non-host peer p3 -> must NOT reset
+  guest.advance(HOST_SYNC_CONFIG.failoverTimeoutMs - 500);
+  guest.watchdog.recordPeerActivity('p3');
+  guest.advance(600);
+  guest.watchdog.tick();
+  assert.deepEqual(guest.claimedEpochs, [2]);
+
+  // Fresh guest where current host p1 sends player_move -> MUST refresh silence timer and prevent false failover
+  const guest2 = createHarness('p2');
+  guest2.watchdog.updatePresenceSnapshot({
+    isHost: false,
+    hostId: 'p1',
+    hostEpoch: 1,
+    onlineCount: 4,
+    members: makeMembers(),
+  });
+  guest2.advance(HOST_SYNC_CONFIG.failoverTimeoutMs - 500);
+  guest2.watchdog.recordPeerActivity('p1');
+  guest2.advance(600);
+  guest2.watchdog.tick();
+  assert.deepEqual(guest2.claimedEpochs, []);
+});
+

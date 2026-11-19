@@ -104,6 +104,11 @@ export class HostFailoverWatchdog {
     this.lastHostActivityAt = nowMs;
   }
 
+  public recordPeerActivity(playerId: string, nowMs = this.now()): void {
+    if (this.isHost || !playerId || playerId !== this.currentHostId) return;
+    this.lastHostActivityAt = nowMs;
+  }
+
   public handleHostHeartbeat(payload: HostHeartbeatPayload, nowMs = this.now()): void {
     if (this.destroyed || this.isHost || !this.deps.isCoopMode()) return;
     if (payload.hostEpoch < this.currentHostEpoch) return;

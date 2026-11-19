@@ -60,13 +60,20 @@ export function toCompactMonsterTuple(m: Monster): CompactMonsterTuple {
 }
 
 export function roundMonsterSnapshotCoords(m: Monster): Monster {
-  return {
+  const rounded: Monster = {
     ...m,
     x: Math.round(m.x),
     y: Math.round(m.y),
     hp: Math.round(m.hp),
     maxHp: Math.round(m.maxHp),
   };
+  if (typeof m.homeX === 'number' && Number.isFinite(m.homeX)) {
+    rounded.homeX = Math.round(m.homeX);
+  }
+  if (typeof m.homeY === 'number' && Number.isFinite(m.homeY)) {
+    rounded.homeY = Math.round(m.homeY);
+  }
+  return rounded;
 }
 
 export function chunkArray<T>(items: ReadonlyArray<T>, chunkSize: number): T[][] {

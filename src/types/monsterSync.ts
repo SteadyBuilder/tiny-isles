@@ -67,6 +67,11 @@ export interface MonstersDeltaSyncPayload {
   liveMonsterDigest?: number;
 }
 
+export interface MonstersRepairRequestPayload {
+  ids: string[];
+  requesterId?: string;
+}
+
 export interface HostHeartbeatPayload {
   hostId: string;
   hostEpoch: number;

@@ -33,7 +33,8 @@ export class MonsterSyncCoordinator {
   private lastSyncedSnapshots = new Map<string, SyncTrackedMonsterState>();
   private pendingKills: MonsterKillSyncPayload[] = [];
   private pendingRemovedIds = new Set<string>();
-  private syncSeq = 0;
+  private fullSyncSeq = 0;
+  private deltaSyncSeq = 0;
   private hostEpoch = 0;
   private remoteApplier = new MonsterRemoteDeltaApplier();
 
@@ -44,11 +45,16 @@ export class MonsterSyncCoordinator {
     this.remoteApplier.resetAll();
   }
 
+  public resetSequenceGuard(): void {
+    this.remoteApplier.resetSequenceGuard();
+  }
+
   public setHostEpoch(epoch: number): void {
     const normalized = Math.max(0, Math.floor(epoch));
     if (normalized !== this.hostEpoch) {
       this.hostEpoch = normalized;
-      this.syncSeq = 0;
+      this.fullSyncSeq = 0;
+      this.deltaSyncSeq = 0;
     }
   }
 
@@ -98,7 +104,7 @@ export class MonsterSyncCoordinator {
       snapshots.push(roundMonsterSnapshotCoords(mv.monster));
     }
 
-    const seq = ++this.syncSeq;
+    const seq = ++this.fullSyncSeq;
     const syncId = `fs_${Date.now()}_${seq}`;
     if (snapshots.length === 0) {
       return [
@@ -126,6 +132,57 @@ export class MonsterSyncCoordinator {
       hostEpoch: this.hostEpoch,
       syncSeq: seq,
     }));
+  }
+
+  /**
+   * 게스트가 누락한 특정 몬스터 ID 목록만 단건 스폰/제거 델타로 즉시 회신합니다.
+   * 전체 동기화 폭주 없이 보이지 않는 공격 몬스터나 누락 몹을 ~150ms 내 복구합니다.
+   */
+  public buildRepairDeltaPayload(
+    monsters: Map<string, MonsterVisual>,
+    requestedIds: ReadonlyArray<string>,
+    waveCount: number,
+    bossWaveCount: number
+  ): MonstersDeltaSyncPayload | null {
+    if (!Array.isArray(requestedIds) || requestedIds.length === 0) return null;
+
+    const uniqueIds = Array.from(new Set(requestedIds.filter((id) => typeof id === 'string' && id.length > 0))).slice(
+      0,
+      MONSTER_SYNC_CONFIG.repairMaxBatchIds
+    );
+    if (uniqueIds.length === 0) return null;
+
+    const spawns: Monster[] = [];
+    const removedIds: string[] = [];
+
+    for (const id of uniqueIds) {
+      const mv = monsters.get(id);
+      if (mv && mv.monster.hp > 0) {
+        spawns.push(roundMonsterSnapshotCoords(mv.monster));
+        this.lastSyncedSnapshots.set(id, createSyncTrackedState(mv.monster));
+      } else {
+        removedIds.push(id);
+      }
+    }
+
+    if (spawns.length === 0 && removedIds.length === 0) return null;
+
+    const { count: totalMonsterCount, digest: liveMonsterDigest } = computeMonsterIdDigest(monsters);
+    const seq = ++this.deltaSyncSeq;
+    return {
+      spawns,
+      updates: [],
+      kills: [],
+      removedIds,
+      totalMonsterCount,
+      liveMonsterDigest,
+      waveCount,
+      bossWaveCount,
+      batchIndex: 0,
+      totalBatches: 1,
+      hostEpoch: this.hostEpoch,
+      syncSeq: seq,
+    };
   }
 
   public buildDeltaBatches(
@@ -185,7 +242,7 @@ export class MonsterSyncCoordinator {
     const updateChunks = chunkArray(updates, MONSTER_SYNC_CONFIG.deltaUpdateChunkSize);
     const totalBatches = Math.max(1, spawnChunks.length, updateChunks.length);
     const { count: totalMonsterCount, digest: liveMonsterDigest } = computeMonsterIdDigest(monsters);
-    const seq = ++this.syncSeq;
+    const seq = ++this.deltaSyncSeq;
 
     const batches: MonstersDeltaSyncPayload[] = [];
     for (let i = 0; i < totalBatches; i++) {
@@ -218,7 +275,13 @@ export class MonsterSyncCoordinator {
     monsters: Map<string, MonsterVisual>,
     payload: MonstersDeltaSyncPayload,
     callbacks: RemoteDeltaApplyCallbacks
-  ): { needsFullSync: boolean; killedCount: number; spawnedCount: number } {
+  ): {
+    needsFullSync: boolean;
+    digestMismatch: boolean;
+    missingIds: string[];
+    killedCount: number;
+    spawnedCount: number;
+  } {
     return this.remoteApplier.applyDeltaSync(scene, monsters, payload, callbacks);
   }
 

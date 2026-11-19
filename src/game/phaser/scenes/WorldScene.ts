@@ -222,6 +222,7 @@ export class WorldScene extends Phaser.Scene {
       getPlayerColor: () => this.playerColor,
       getRoomId: () => this.roomConfig.roomId,
       getRoomMode: () => this.roomConfig.mode,
+      getPreferredHostId: () => this.roomConfig.hostPlayerId,
       onCoreDestroyed: () => this.missionSystem?.failByCoreDestroyed(),
       getPlayerPosition: () => this.controllers?.playerMovement.getPosition() ?? getTerritoryCorePos(0, 0),
       getPlayerDirection: () => this.controllers?.playerMovement.getDirection() ?? 'right',

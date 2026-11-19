@@ -8,6 +8,7 @@ import type {
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
   MonstersFullSyncPayload,
+  MonstersRepairRequestPayload,
   ThreatSyncPayload,
 } from './monsterSync';
 import type { MissionDifficultyConfig } from './room';
@@ -51,6 +52,7 @@ export interface IWaveSystemContext {
   broadcastMonstersSync?: (payload: MonstersFullSyncPayload) => void;
   broadcastMonstersDeltaSync?: (payload: MonstersDeltaSyncPayload) => void;
   requestMonstersSync?: () => void;
+  requestMonstersRepair?: (payload: MonstersRepairRequestPayload) => void;
   broadcastMonsterHit?: (payload: MonsterHitPayload) => void;
   broadcastMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   broadcastThreatAdded?: (amount: number) => void;

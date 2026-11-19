@@ -3,7 +3,11 @@ import test from 'node:test';
 import type Phaser from 'phaser';
 import { MONSTER_SYNC_CONFIG, WORLD_CLOCK_CONFIG } from '../../../data/worldRules';
 import type { Monster } from '../../../types/game';
-import type { MonstersDeltaSyncPayload, MonstersFullSyncPayload } from '../../../types/monsterSync';
+import type {
+  MonstersDeltaSyncPayload,
+  MonstersFullSyncPayload,
+  MonstersRepairRequestPayload,
+} from '../../../types/monsterSync';
 import type { MonsterVisual } from '../MonsterVisualManager';
 import { WaveNetworkSyncBridge } from '../WaveNetworkSyncBridge';
 
@@ -47,6 +51,7 @@ function createBridge(opts?: { isHost?: boolean; hasActiveInvaders?: boolean; no
   let nowMs = 10_000;
   const fullSyncs: MonstersFullSyncPayload[] = [];
   const deltaSyncs: MonstersDeltaSyncPayload[] = [];
+  const repairRequests: MonstersRepairRequestPayload[] = [];
   const waveSyncCalls: Array<{ waveCount: number; bossWaveCount: number }> = [];
   let syncRequests = 0;
 
@@ -58,6 +63,7 @@ function createBridge(opts?: { isHost?: boolean; hasActiveInvaders?: boolean; no
     broadcastFullSync: (p) => fullSyncs.push(p),
     broadcastDeltaSync: (p) => deltaSyncs.push(p),
     requestMonstersSync: () => { syncRequests += 1; },
+    requestMonstersRepair: (p) => repairRequests.push(p),
     getNow: opts?.now ?? (() => nowMs),
   });
 
@@ -65,6 +71,7 @@ function createBridge(opts?: { isHost?: boolean; hasActiveInvaders?: boolean; no
     bridge,
     fullSyncs,
     deltaSyncs,
+    repairRequests,
     waveSyncCalls,
     getSyncRequests: () => syncRequests,
     setHost: (v: boolean) => { host = v; },
@@ -223,3 +230,90 @@ test('broadcastFullMonstersSync paces multi-chunk sends and cancels pending chun
 
   ctx.bridge.destroy();
 });
+
+test('Root Cause #2: in-flight multi-chunk full sync is never aborted by concurrent requests, defers deltas, and runs coalesced follow-up', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ctx = createBridge({ isHost: true });
+  ctx.bridge.setOnlineCount(4);
+  const monsters = new Map<string, MonsterVisual>();
+  for (let i = 0; i < 250; i++) {
+    monsters.set(`m_${i}`, makeVisual(makeMonster(`m_${i}`)));
+  }
+
+  // Start initial 3-chunk full sync
+  ctx.bridge.broadcastFullMonstersSync(monsters, true, false);
+  assert.equal(ctx.bridge.isStreamingFullSync(), true);
+  assert.equal(ctx.fullSyncs.length, 1);
+  const firstSyncId = ctx.fullSyncs[0].syncId;
+
+  // Concurrent forced sync (another peer joins) & delta flush while streaming
+  monsters.get('m_0')!.monster.hp = 50;
+  ctx.bridge.flushDeltaSyncNow(monsters);
+  assert.equal(ctx.deltaSyncs.length, 0); // Deferred during full-sync stream
+
+  ctx.advanceTime(150);
+  ctx.bridge.broadcastFullMonstersSync(monsters, true, false);
+  ctx.bridge.handleRemoteSyncRequest(monsters);
+  // Must NOT abort or restart chunk 0 immediately
+  assert.equal(ctx.fullSyncs.length, 1);
+
+  // Advance through chunks 1 and 2 of first stream
+  t.mock.timers.tick(MONSTER_SYNC_CONFIG.fullSyncChunkPaceMs * 2);
+  assert.equal(ctx.fullSyncs.length, 3);
+  assert.deepEqual(
+    ctx.fullSyncs.map((p) => [p.syncId, p.chunkIndex]),
+    [
+      [firstSyncId, 0],
+      [firstSyncId, 1],
+      [firstSyncId, 2],
+    ]
+  );
+  // Deferred delta flushed immediately after final chunk
+  assert.equal(ctx.deltaSyncs.length, 1);
+
+  // Coalesced single follow-up full sync starts after fullSyncFollowUpDelayMs
+  t.mock.timers.tick(MONSTER_SYNC_CONFIG.fullSyncFollowUpDelayMs);
+  assert.equal(ctx.fullSyncs.length, 4);
+  assert.notEqual(ctx.fullSyncs[3].syncId, firstSyncId);
+  assert.equal(ctx.fullSyncs[3].chunkIndex, 0);
+
+  // Finish follow-up stream cleanly
+  t.mock.timers.tick(MONSTER_SYNC_CONFIG.fullSyncChunkPaceMs * 2);
+  assert.equal(ctx.fullSyncs.length, 6);
+  assert.equal(ctx.bridge.isStreamingFullSync(), false);
+  ctx.bridge.destroy();
+});
+
+test('Root Cause #5: queueMissingMonsterRepair batches IDs, falls back to full sync above threshold, and host replies with targeted repair delta', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const guest = createBridge({ isHost: false });
+
+  guest.bridge.queueMissingMonsterRepair(['m_near_1', 'm_near_2']);
+  guest.bridge.queueMissingMonsterRepair(['m_near_2', 'm_near_3']);
+  assert.equal(guest.repairRequests.length, 0);
+
+  t.mock.timers.tick(MONSTER_SYNC_CONFIG.repairRequestDebounceMs);
+  assert.equal(guest.repairRequests.length, 1);
+  assert.deepEqual(guest.repairRequests[0].ids, ['m_near_1', 'm_near_2', 'm_near_3']);
+
+  // Above fallback threshold -> falls back to full sync request instead of flooding repairs
+  const manyIds = Array.from(
+    { length: MONSTER_SYNC_CONFIG.repairFallbackFullSyncThreshold + 2 },
+    (_, i) => `m_bulk_${i}`
+  );
+  guest.advanceTime(MONSTER_SYNC_CONFIG.guestSyncRequestThrottleMs);
+  guest.bridge.queueMissingMonsterRepair(manyIds);
+  assert.equal(guest.getSyncRequests(), 1);
+  guest.bridge.destroy();
+
+  // Host handles repair request with single targeted delta packet
+  const host = createBridge({ isHost: true });
+  const hostMonsters = new Map([['m_near_1', makeVisual(makeMonster('m_near_1', 80))]]);
+  host.bridge.handleRemoteRepairRequest(hostMonsters, ['m_near_1', 'm_dead_ghost']);
+  assert.equal(host.deltaSyncs.length, 1);
+  assert.equal(host.deltaSyncs[0].spawns.length, 1);
+  assert.equal(host.deltaSyncs[0].spawns[0].id, 'm_near_1');
+  assert.deepEqual(host.deltaSyncs[0].removedIds, ['m_dead_ghost']);
+  host.bridge.destroy();
+});
+

@@ -86,18 +86,25 @@ export class MonsterTombstoneTracker {
 
 /**
  * hostEpoch 및 단조 증가 syncSeq 기반으로 구 호스트·역순 도착 패킷을 필터링합니다.
- * 동일 syncSeq를 공유하는 멀티 배치 델타(batchIndex 0..N-1)는 모두 통과시킵니다.
+ * 전체 동기화(full)와 델타 동기화(delta)의 시퀀스 레인을 완전히 분리하여
+ * 다중 청크 전체 동기화 도중 도착한 델타 패킷이 나머지 전체 청크를 차단하지 않도록 보장합니다.
  */
 export class SyncSequenceGuard {
   private lastHostEpoch = -1;
-  private lastSyncSeq = -1;
+  private lastFullSyncSeq = -1;
+  private lastDeltaSyncSeq = -1;
 
   public reset(): void {
     this.lastHostEpoch = -1;
-    this.lastSyncSeq = -1;
+    this.lastFullSyncSeq = -1;
+    this.lastDeltaSyncSeq = -1;
   }
 
-  public canAccept(hostEpoch?: number, syncSeq?: number): boolean {
+  private canAcceptInLane(
+    lane: 'full' | 'delta',
+    hostEpoch?: number,
+    syncSeq?: number
+  ): boolean {
     const hasEpoch = typeof hostEpoch === 'number' && Number.isFinite(hostEpoch);
     const hasSeq = typeof syncSeq === 'number' && Number.isFinite(syncSeq);
 
@@ -110,32 +117,70 @@ export class SyncSequenceGuard {
       }
     }
 
-    if (hasSeq && this.lastSyncSeq >= 0 && syncSeq < this.lastSyncSeq) {
+    const lastSeq = lane === 'full' ? this.lastFullSyncSeq : this.lastDeltaSyncSeq;
+    if (hasSeq && lastSeq >= 0 && syncSeq < lastSeq) {
       return false;
     }
     return true;
   }
 
-  public commit(hostEpoch?: number, syncSeq?: number): void {
+  private commitInLane(
+    lane: 'full' | 'delta',
+    hostEpoch?: number,
+    syncSeq?: number
+  ): void {
     const hasEpoch = typeof hostEpoch === 'number' && Number.isFinite(hostEpoch);
     const hasSeq = typeof syncSeq === 'number' && Number.isFinite(syncSeq);
 
     if (hasEpoch && hostEpoch > this.lastHostEpoch) {
       this.lastHostEpoch = hostEpoch;
-      this.lastSyncSeq = hasSeq ? syncSeq : -1;
+      this.lastFullSyncSeq = lane === 'full' && hasSeq ? syncSeq : -1;
+      this.lastDeltaSyncSeq = lane === 'delta' && hasSeq ? syncSeq : -1;
       return;
     }
 
-    if (hasSeq && syncSeq > this.lastSyncSeq) {
-      this.lastSyncSeq = syncSeq;
+    if (hasSeq) {
+      if (lane === 'full' && syncSeq > this.lastFullSyncSeq) {
+        this.lastFullSyncSeq = syncSeq;
+      } else if (lane === 'delta' && syncSeq > this.lastDeltaSyncSeq) {
+        this.lastDeltaSyncSeq = syncSeq;
+      }
     }
   }
 
-  public accept(hostEpoch?: number, syncSeq?: number): boolean {
-    if (!this.canAccept(hostEpoch, syncSeq)) {
+  public canAcceptFullSync(hostEpoch?: number, syncSeq?: number): boolean {
+    return this.canAcceptInLane('full', hostEpoch, syncSeq);
+  }
+
+  public commitFullSync(hostEpoch?: number, syncSeq?: number): void {
+    this.commitInLane('full', hostEpoch, syncSeq);
+  }
+
+  public canAcceptDelta(hostEpoch?: number, syncSeq?: number): boolean {
+    return this.canAcceptInLane('delta', hostEpoch, syncSeq);
+  }
+
+  public commitDelta(hostEpoch?: number, syncSeq?: number): void {
+    this.commitInLane('delta', hostEpoch, syncSeq);
+  }
+
+  public acceptDelta(hostEpoch?: number, syncSeq?: number): boolean {
+    if (!this.canAcceptDelta(hostEpoch, syncSeq)) {
       return false;
     }
-    this.commit(hostEpoch, syncSeq);
+    this.commitDelta(hostEpoch, syncSeq);
     return true;
+  }
+
+  public canAccept(hostEpoch?: number, syncSeq?: number): boolean {
+    return this.canAcceptDelta(hostEpoch, syncSeq);
+  }
+
+  public commit(hostEpoch?: number, syncSeq?: number): void {
+    this.commitDelta(hostEpoch, syncSeq);
+  }
+
+  public accept(hostEpoch?: number, syncSeq?: number): boolean {
+    return this.acceptDelta(hostEpoch, syncSeq);
   }
 }

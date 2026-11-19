@@ -5,6 +5,7 @@ import {
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
   MonstersFullSyncPayload,
+  MonstersRepairRequestPayload,
   ThreatSyncPayload,
 } from '../../types/monsterSync';
 import { IWaveSystemContext } from '../../types/waveSystem';
@@ -38,6 +39,7 @@ export class WaveSystem {
   private monsters = new Map<string, MonsterVisual>();
   private isHost: boolean;
   private onlineCount = 1;
+  private hasHadCoopSession = false;
 
   private waveState: WaveState = {
     threatPercent: 0,
@@ -98,6 +100,7 @@ export class WaveSystem {
       broadcastFullSync: (payload) => this.ctx.broadcastMonstersSync?.(payload),
       broadcastDeltaSync: (payload) => this.ctx.broadcastMonstersDeltaSync?.(payload),
       requestMonstersSync: () => this.ctx.requestMonstersSync?.(),
+      requestMonstersRepair: (payload) => this.ctx.requestMonstersRepair?.(payload),
     });
 
     this.combatAI = createWaveCombatAI({
@@ -153,11 +156,25 @@ export class WaveSystem {
       this.syncBridge.onEnterHostMode(!prev);
       return;
     }
-    // 방장 -> 게스트 전환 시 로컬 몬스터를 일괄 삭제하지 않고 유지한 뒤,
-    // 새 호스트의 전체 동기화 수신 시 자연 보정(Reconcile)하여 화면 깜빡임 및 유실을 방지합니다.
+    // 입장 경합으로 단독 임시 스폰된 미동기화 몹만 즉시 소거하고,
+    // 실제 협동 진행 중 방장->게스트 전환 시에는 새 호스트 전체 동기화로 자연 보정합니다.
+    if (prev && !this.hasHadCoopSession && this.monsters.size > 0) {
+      for (const mv of this.monsters.values()) MonsterVisualManager.disposeVisual(mv);
+      this.monsters.clear();
+      this.combatAI.pruneStaleMonsterState(new Set());
+      this.emitWaveState();
+    }
     this.dungeonSpawner.clearTimersAndPortal(false);
     this.threatTracker.resetGuestTransientState();
     this.syncBridge.onEnterGuestMode();
+  }
+
+  public handleHostIdentityChanged(isHost: boolean, hostEpoch: number): void {
+    this.syncBridge.onHostIdentityChanged(isHost, hostEpoch);
+  }
+
+  public handleConnectionResumed(): void {
+    this.syncBridge.onConnectionResumed();
   }
 
   public setHostEpoch(hostEpoch: number): void {
@@ -189,6 +206,7 @@ export class WaveSystem {
 
   public setOnlineCount(count: number): void {
     const next = Math.max(1, count);
+    if (next > 1) this.hasHadCoopSession = true;
     if (next === this.onlineCount) return;
     this.onlineCount = next;
     this.syncBridge.setOnlineCount(next);
@@ -246,6 +264,9 @@ export class WaveSystem {
   }
 
   public handleRemoteMonstersSyncRequest(): void { this.syncBridge.handleRemoteSyncRequest(this.monsters); }
+  public handleRemoteMonstersRepairRequest(payload: MonstersRepairRequestPayload): void {
+    this.syncBridge.handleRemoteRepairRequest(this.monsters, payload?.ids ?? []);
+  }
   public broadcastFullMonstersSync(force = false, fromGuestRequest = false): void {
     this.syncBridge.broadcastFullMonstersSync(this.monsters, force, fromGuestRequest);
   }
@@ -345,6 +366,7 @@ export class WaveSystem {
 
   public applyRemoteMonstersSync(payload: MonstersFullSyncPayload): void {
     this.syncBridge.applyRemoteFullSync(payload, (monsters) => {
+      this.hasHadCoopSession = true;
       this.spawner.applyRemoteSync(monsters);
       this.combatAI.pruneStaleMonsterState(new Set(this.monsters.keys()));
       this.ctx.onMonstersChanged?.();
@@ -367,6 +389,9 @@ export class WaveSystem {
 
   public handleRemoteMonsterPlayerAttack(payload: MonsterPlayerAttackPayload): void {
     if (this.isHost) return;
+    if (payload.monsterId && !this.monsters.has(payload.monsterId)) {
+      this.syncBridge.queueMissingMonsterRepair([payload.monsterId]);
+    }
     executeRemoteMonsterPlayerAttack(payload, {
       getLocalPlayerId: () => this.ctx.getLocalPlayerId(),
       getLocalPlayerPosition: () => this.ctx.getLocalPlayerPosition(),

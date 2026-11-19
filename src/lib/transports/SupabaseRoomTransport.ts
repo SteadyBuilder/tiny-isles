@@ -40,13 +40,16 @@ export class SupabaseRoomTransport implements INetworkTransport {
   private roomId = '';
   private localPlayerId = '';
   private baseMeta: Omit<NetworkPresenceMeta, 'joinedAt'> = { name: '수호자', color: 'blue' };
+  private preferredHostId = '';
   private currentJoinedAt = 0;
   private isBackground = false;
   private claimedEpoch = 0;
+  private highestObservedEpoch = 0;
+  private hasCorrectedInitialJoinSkew = false;
   private isHost = true;
   private onlineCount = 1;
   private connectionEpoch = 0;
-  private wasEverConnected = false;
+  private isReconnectingSession = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
@@ -71,11 +74,18 @@ export class SupabaseRoomTransport implements INetworkTransport {
     this.roomId = roomId;
     this.localPlayerId = playerId;
     this.baseMeta = { name: meta.name, color: meta.color };
+    this.preferredHostId = meta.preferredHostId ?? '';
     this.isBackground =
       typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    this.claimedEpoch = 0;
+    // 로비에서 확정된 방장은 초기 claimedEpoch=1로 시작해 기기 시계 오차와 무관하게 방장 권한을 안정적으로 유지
+    this.claimedEpoch =
+      !this.isBackground && this.preferredHostId !== '' && this.preferredHostId === playerId
+        ? 1
+        : 0;
+    this.highestObservedEpoch = this.claimedEpoch;
+    this.hasCorrectedInitialJoinSkew = false;
     this.currentJoinedAt = 0;
-    this.wasEverConnected = false;
+    this.isReconnectingSession = false;
     this.reconnectAttempt = 0;
     this.status = 'connecting';
 
@@ -144,6 +154,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
 
   private reconnectNow(): void {
     if (this.disposed || !this.roomId || !this.localPlayerId) return;
+    this.isReconnectingSession = true;
     this.clearReconnectTimer();
     this.cleanupChannel();
     const epoch = ++this.connectionEpoch;
@@ -177,8 +188,54 @@ export class SupabaseRoomTransport implements INetworkTransport {
       .on('presence', { event: 'sync' }, () => {
         if (epoch !== this.connectionEpoch) return;
         const rawState = channel.presenceState() as Record<string, PresenceRawEntry[]>;
+        const otherKeys = Object.keys(rawState).filter((id) => id !== playerId);
+
+        // SUBSCRIBED 시점에 presenceState가 비어있어 기기 시계 오차로 joinedAt이 앞섰던 게스트/재접속자를 자동 보정
+        if (!this.hasCorrectedInitialJoinSkew && otherKeys.length > 0) {
+          this.hasCorrectedInitialJoinSkew = true;
+          const isLobbyGuest =
+            Boolean(this.preferredHostId) && this.preferredHostId !== playerId;
+          if (isLobbyGuest || this.isReconnectingSession) {
+            const othersPresence: Record<string, PresenceRawEntry[]> = {};
+            for (const key of otherKeys) {
+              othersPresence[key] = rawState[key];
+            }
+            const nextMonotonic = computeMonotonicJoinedAt(othersPresence, Date.now());
+            let shouldRetrack = false;
+            if (this.currentJoinedAt < nextMonotonic) {
+              this.currentJoinedAt = nextMonotonic;
+              shouldRetrack = true;
+            }
+            if (this.isReconnectingSession && this.claimedEpoch > 0) {
+              this.claimedEpoch = 0;
+              shouldRetrack = true;
+            }
+            if (shouldRetrack) {
+              void this.trackPresenceState();
+            }
+          }
+        }
+
+        const maxPresentEpoch = computeMaxClaimedEpoch(rawState);
+        if (maxPresentEpoch > this.highestObservedEpoch) {
+          this.highestObservedEpoch = maxPresentEpoch;
+        }
+
         const { isHost, hostId, onlineCount } = electHostFromPresence(rawState, playerId);
-        const hostEpoch = computeMaxClaimedEpoch(rawState);
+
+        // 상위 에폭 방장이 이탈해 새 방장으로 승계된 경우 에폭이 역행(1->0)하지 않도록 단조 승격
+        if (
+          isHost &&
+          !this.isBackground &&
+          this.highestObservedEpoch > 0 &&
+          this.claimedEpoch < this.highestObservedEpoch
+        ) {
+          this.claimedEpoch = this.highestObservedEpoch + 1;
+          this.highestObservedEpoch = this.claimedEpoch;
+          void this.trackPresenceState();
+        }
+
+        const hostEpoch = Math.max(maxPresentEpoch, isHost ? this.claimedEpoch : 0);
         this.isHost = isHost;
         this.onlineCount = onlineCount;
 
@@ -221,16 +278,22 @@ export class SupabaseRoomTransport implements INetworkTransport {
           this.clearReconnectTimer();
           this.reconnectAttempt = 0;
           this.status = 'connected';
+          this.hasCorrectedInitialJoinSkew = false;
           const currentPresence = channel.presenceState() as Record<string, PresenceEntryMeta[]>;
-          this.currentJoinedAt = computeMonotonicJoinedAt(currentPresence, Date.now());
-          if (this.wasEverConnected && Object.keys(currentPresence).some((id) => id !== playerId)) {
+          const isLobbyGuest =
+            Boolean(this.preferredHostId) && this.preferredHostId !== playerId;
+          const baseJoinClock = isLobbyGuest ? Date.now() + 10_000 : Date.now();
+          this.currentJoinedAt = computeMonotonicJoinedAt(currentPresence, baseJoinClock);
+          if (
+            this.isReconnectingSession &&
+            Object.keys(currentPresence).some((id) => id !== playerId)
+          ) {
             this.claimedEpoch = 0;
           }
           await this.trackPresenceState();
-          if (this.wasEverConnected) {
+          if (this.isReconnectingSession) {
             this.resumeHandlers.forEach((h) => h());
           }
-          this.wasEverConnected = true;
           return;
         }
         if (subStatus === 'CHANNEL_ERROR' || subStatus === 'TIMED_OUT' || subStatus === 'CLOSED') {
@@ -259,7 +322,13 @@ export class SupabaseRoomTransport implements INetworkTransport {
 
   public claimHostAuthority(nextEpoch: number): void {
     this.isBackground = false;
-    this.claimedEpoch = Math.max(this.claimedEpoch, Math.max(1, Math.floor(nextEpoch)));
+    const monotonicNext = Math.max(
+      this.claimedEpoch,
+      this.highestObservedEpoch + 1,
+      Math.max(1, Math.floor(nextEpoch))
+    );
+    this.claimedEpoch = monotonicNext;
+    this.highestObservedEpoch = Math.max(this.highestObservedEpoch, monotonicNext);
     void this.trackPresenceState();
   }
 

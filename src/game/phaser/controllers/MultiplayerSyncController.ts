@@ -25,6 +25,7 @@ import {
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
   MonstersFullSyncPayload,
+  MonstersRepairRequestPayload,
   ThreatSyncPayload,
   WorldStateSyncPayload,
 } from '../../../types/monsterSync';
@@ -40,6 +41,7 @@ export interface IMultiplayerSyncContext {
   getPlayerColor: () => PlayerColor;
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
+  getPreferredHostId?: () => string | undefined;
   isLocalPlayerFainted?: () => boolean;
   getLocalPlayerHp?: () => { hp: number; maxHp: number };
   getLiveMonsterDigest?: () => { count: number; digest: number };
@@ -51,6 +53,8 @@ export interface IMultiplayerSyncContext {
   };
   onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
   onHostStatusChanged?: (isHost: boolean, hostEpoch?: number) => void;
+  onHostIdentityChanged?: (hostId: string, isHost: boolean, hostEpoch: number) => void;
+  onConnectionResumed?: () => void;
   onSyncResyncRequested?: () => void;
   onRemoteWorldStateSync?: (payload: WorldStateSyncPayload) => void;
   onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
@@ -64,6 +68,7 @@ export interface IMultiplayerSyncContext {
   onRemoteMonstersSync: (payload: MonstersFullSyncPayload) => void;
   onRemoteMonstersDeltaSync?: (payload: MonstersDeltaSyncPayload) => void;
   onRemoteMonstersSyncRequest?: () => void;
+  onRemoteMonstersRepairRequest?: (payload: MonstersRepairRequestPayload) => void;
   onRemoteMonsterHit: (payload: MonsterHitPayload) => void;
   onRemoteMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   onRemoteThreatAdded?: (amount: number) => void;
@@ -132,7 +137,10 @@ export class MultiplayerSyncController {
       onUpdatePresenceBackground: (isBackground) =>
         this.router.updatePresenceBackground(isBackground),
       onDigestMismatchDetected: () => this.ctx.onSyncResyncRequested?.(),
-      onResumeResyncNeeded: () => this.ctx.onSyncResyncRequested?.(),
+      onResumeResyncNeeded: () => {
+        this.ctx.onConnectionResumed?.();
+        this.ctx.onSyncResyncRequested?.();
+      },
     });
     this.router = new MultiplayerChannelRouter({
       getPlayerId: () => this.ctx.getPlayerId(),
@@ -140,18 +148,26 @@ export class MultiplayerSyncController {
       getPlayerColor: () => this.ctx.getPlayerColor(),
       getRoomId: () => this.ctx.getRoomId?.() || 'default_room',
       getRoomMode: () => this.ctx.getRoomMode?.() || 'solo',
+      getPreferredHostId: () => this.ctx.getPreferredHostId?.(),
       onOnlineCountChanged: (count, hasNewPeer) => this.ctx.onOnlineCountChanged(count, hasNewPeer),
       onHostStatusChanged: (isHost, hostEpoch) => this.ctx.onHostStatusChanged?.(isHost, hostEpoch),
+      onHostIdentityChanged: (hostId, isHost, hostEpoch) =>
+        this.ctx.onHostIdentityChanged?.(hostId, isHost, hostEpoch),
       onPresenceSnapshot: (snapshot) => this.watchdog.updatePresenceSnapshot(snapshot),
-      onConnectionResume: () => this.ctx.onSyncResyncRequested?.(),
+      onConnectionResume: () => {
+        this.ctx.onConnectionResumed?.();
+        this.ctx.onSyncResyncRequested?.();
+      },
       onRemoteHostHeartbeat: (payload) => this.watchdog.handleHostHeartbeat(payload),
       onRemoteHostHandover: (payload) => this.watchdog.handleHostHandover(payload),
       onRemoteWorldStateSync: (payload) => {
         this.watchdog.recordHostActivity(payload.hostEpoch);
         this.ctx.onRemoteWorldStateSync?.(payload);
       },
-      onRemotePlayerMove: (player) =>
-        this.remoteRenderer.updatePlayer(player, this.ctx.getPlayerId()),
+      onRemotePlayerMove: (player) => {
+        this.watchdog.recordPeerActivity(player.id);
+        this.remoteRenderer.updatePlayer(player, this.ctx.getPlayerId());
+      },
       onRemotePlayerLeave: (playerId) => this.remoteRenderer.removePlayer(playerId),
       onRemotePlayerSkillCast: (payload) => this.ctx.onRemotePlayerSkillCast?.(payload),
       onRemoteEntityHit: (entityId, damage, hitByName) =>
@@ -175,30 +191,48 @@ export class MultiplayerSyncController {
         this.ctx.onRemoteMonstersDeltaSync?.(payload);
       },
       onRemoteMonstersSyncRequest: () => this.ctx.onRemoteMonstersSyncRequest?.(),
+      onRemoteMonstersRepairRequest: (payload) =>
+        this.ctx.onRemoteMonstersRepairRequest?.(payload),
       onRemoteMonsterHit: (payload) => this.ctx.onRemoteMonsterHit(payload),
-      onRemoteMonsterPlayerAttack: (payload) => this.ctx.onRemoteMonsterPlayerAttack?.(payload),
+      onRemoteMonsterPlayerAttack: (payload) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteMonsterPlayerAttack?.(payload);
+      },
       onRemoteThreatAdded: (amount) => this.ctx.onRemoteThreatAdded?.(amount),
       onRemoteThreatSync: (payload) => {
         this.watchdog.recordHostActivity();
         this.ctx.onRemoteThreatSync?.(payload);
       },
-      onRemoteDungeonPortalSync: (portal) => this.ctx.onRemoteDungeonPortalSync?.(portal),
+      onRemoteDungeonPortalSync: (portal) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteDungeonPortalSync?.(portal);
+      },
       onRemoteCampStructureHit: (payload) => this.ctx.onRemoteCampStructureHit?.(payload),
       onRemoteCampCoreHit: (payload) => this.ctx.onRemoteCampCoreHit?.(payload),
-      onRemoteCampStructureHpSync: (payload) => this.ctx.onRemoteCampStructureHpSync?.(payload),
-      onRemoteCampCoreSync: (payload) => this.ctx.onRemoteCampCoreSync?.(payload),
+      onRemoteCampStructureHpSync: (payload) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteCampStructureHpSync?.(payload);
+      },
+      onRemoteCampCoreSync: (payload) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteCampCoreSync?.(payload);
+      },
       onRemoteCampFullSync: (payload) => {
         this.watchdog.recordHostActivity();
         this.ctx.onRemoteCampFullSync?.(payload);
       },
       onRemoteTerritoryLost: (territoryId, reason) =>
         this.ctx.onRemoteTerritoryLost(territoryId, reason),
-      onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
-        this.ctx.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta),
+      onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta);
+      },
       onRemoteBuildingDestroyed: (buildingId) =>
         this.ctx.onRemoteBuildingDestroyed?.(buildingId),
-      onRemoteCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) =>
-        this.ctx.onRemoteCoreHpSync?.(territoryId, coreHp, coreMaxHp, damageDelta),
+      onRemoteCoreHpSync: (territoryId, coreHp, coreMaxHp, damageDelta) => {
+        this.watchdog.recordHostActivity();
+        this.ctx.onRemoteCoreHpSync?.(territoryId, coreHp, coreMaxHp, damageDelta);
+      },
       onRemoteRepairTerritoryRequest: (territoryId) =>
         this.ctx.onRemoteRepairTerritoryRequest?.(territoryId),
       onRemoteWorldDefenseFailed: (resetAt, attackerName) =>
@@ -359,6 +393,13 @@ export class MultiplayerSyncController {
 
   public requestMonstersSync(): void {
     this.router.emit('monsters_sync_request', 'monsters_sync_request', {
+      requesterId: this.ctx.getPlayerId(),
+    });
+  }
+
+  public requestMonstersRepair(payload: MonstersRepairRequestPayload): void {
+    this.router.emit('monsters_repair_request', 'monsters_repair_request', {
+      ids: payload.ids,
       requesterId: this.ctx.getPlayerId(),
     });
   }

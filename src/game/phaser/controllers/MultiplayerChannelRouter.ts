@@ -1,6 +1,10 @@
+import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
 import { ConstructedBuilding } from '../../../types/game';
 import { RoomMode } from '../../../types/room';
-import { INetworkTransport } from '../../../lib/contracts/INetworkTransport';
+import {
+  INetworkTransport,
+  NetworkPresenceSnapshot,
+} from '../../../lib/contracts/INetworkTransport';
 import { serverSync } from '../../../lib/serverSync';
 import { LocalOfflineTransport } from '../../../lib/transports/LocalOfflineTransport';
 import { SupabaseRoomTransport } from '../../../lib/transports/SupabaseRoomTransport';
@@ -31,7 +35,10 @@ export class MultiplayerChannelRouter {
   private unsubscribers: Array<() => void> = [];
   private isHost = true;
   private hostEpoch = 0;
+  private lastHostId = '';
   private presenceResolved = false;
+  private lobbyHostGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  private deferredInitialSnapshot: NetworkPresenceSnapshot | null = null;
   private knownMemberIds = new Set<string>();
   private lastOnlineCount = -1;
   private lastMembersSignature = '';
@@ -64,8 +71,17 @@ export class MultiplayerChannelRouter {
     this.transport?.updatePresenceBackground?.(isBackground);
   }
 
+  private clearLobbyHostGraceTimer(): void {
+    if (this.lobbyHostGraceTimer) {
+      clearTimeout(this.lobbyHostGraceTimer);
+      this.lobbyHostGraceTimer = null;
+    }
+    this.deferredInitialSnapshot = null;
+  }
+
   public connect(customTransport?: INetworkTransport): void {
     serverSync.clearEventCaches();
+    this.clearLobbyHostGraceTimer();
     const playerId = this.callbacks.getPlayerId();
     const roomId = this.callbacks.getRoomId?.() || 'default_room';
     const roomMode: RoomMode = this.callbacks.getRoomMode?.() || 'solo';
@@ -73,6 +89,7 @@ export class MultiplayerChannelRouter {
     // 협동 모드에서는 Presence가 첫 동기화될 때까지 임의 스폰을 막기 위해 false로 시작
     this.isHost = roomMode === 'solo';
     this.hostEpoch = 0;
+    this.lastHostId = '';
     this.presenceResolved = roomMode === 'solo';
     this.knownMemberIds.clear();
     this.lastOnlineCount = -1;
@@ -90,6 +107,7 @@ export class MultiplayerChannelRouter {
     this.transport.connect(roomId, playerId, {
       name: this.callbacks.getPlayerName(),
       color: this.callbacks.getPlayerColor(),
+      preferredHostId: this.callbacks.getPreferredHostId?.(),
     });
   }
 
@@ -113,6 +131,7 @@ export class MultiplayerChannelRouter {
   }
 
   public destroy(): void {
+    this.clearLobbyHostGraceTimer();
     for (const unsub of this.unsubscribers) {
       unsub();
     }
@@ -131,6 +150,61 @@ export class MultiplayerChannelRouter {
     }
   }
 
+  private applyPresenceSnapshot(snapshot: NetworkPresenceSnapshot): void {
+    const hostResolutionChanged = !this.presenceResolved || this.isHost !== snapshot.isHost;
+    const hostIdentityChanged =
+      this.presenceResolved &&
+      this.lastHostId !== '' &&
+      snapshot.hostId !== '' &&
+      this.lastHostId !== snapshot.hostId;
+    const hostEpochChanged = this.hostEpoch !== snapshot.hostEpoch;
+    const becameHost = hostResolutionChanged && snapshot.isHost;
+    this.presenceResolved = true;
+    this.isHost = snapshot.isHost;
+    this.hostEpoch = snapshot.hostEpoch;
+    this.lastHostId = snapshot.hostId;
+
+    const localPlayerId = this.callbacks.getPlayerId();
+    let hasNewPeer = false;
+    const nextKnown = new Set<string>();
+    const signatureParts: string[] = [];
+    for (const member of snapshot.members) {
+      nextKnown.add(member.playerId);
+      if (member.playerId !== localPlayerId && !this.knownMemberIds.has(member.playerId)) {
+        hasNewPeer = true;
+      }
+      signatureParts.push(
+        `${member.playerId}:${member.name}:${member.color}:${member.isHost ? 1 : 0}:${member.isBackground ? 1 : 0}`
+      );
+    }
+    this.knownMemberIds = nextKnown;
+
+    this.callbacks.onPresenceSnapshot?.(snapshot);
+
+    if (hostResolutionChanged || (snapshot.isHost && hostEpochChanged)) {
+      this.callbacks.onHostStatusChanged?.(snapshot.isHost, snapshot.hostEpoch);
+    } else if (hostIdentityChanged) {
+      this.callbacks.onHostIdentityChanged?.(
+        snapshot.hostId,
+        snapshot.isHost,
+        snapshot.hostEpoch
+      );
+    }
+    const shouldSyncPeers = hasNewPeer || (becameHost && snapshot.onlineCount > 1);
+    this.callbacks.onOnlineCountChanged(snapshot.onlineCount, shouldSyncPeers);
+
+    if (snapshot.onlineCount !== this.lastOnlineCount) {
+      this.lastOnlineCount = snapshot.onlineCount;
+      GameEvents.emit('online-count-changed', snapshot.onlineCount);
+    }
+    signatureParts.sort();
+    const membersSignature = signatureParts.join('|');
+    if (membersSignature !== this.lastMembersSignature) {
+      this.lastMembersSignature = membersSignature;
+      GameEvents.emit('room-members-updated', snapshot.members);
+    }
+  }
+
   private bindTransportEvents(): void {
     const t = this.transport;
     if (!t) return;
@@ -144,46 +218,37 @@ export class MultiplayerChannelRouter {
 
     this.unsubscribers.push(
       t.onPresenceSync((snapshot) => {
-        const hostResolutionChanged = !this.presenceResolved || this.isHost !== snapshot.isHost;
-        const hostEpochChanged = this.hostEpoch !== snapshot.hostEpoch;
-        const becameHost = hostResolutionChanged && snapshot.isHost;
-        this.presenceResolved = true;
-        this.isHost = snapshot.isHost;
-        this.hostEpoch = snapshot.hostEpoch;
-
+        const roomMode: RoomMode = this.callbacks.getRoomMode?.() || 'solo';
         const localPlayerId = this.callbacks.getPlayerId();
-        let hasNewPeer = false;
-        const nextKnown = new Set<string>();
-        const signatureParts: string[] = [];
-        for (const member of snapshot.members) {
-          nextKnown.add(member.playerId);
-          if (member.playerId !== localPlayerId && !this.knownMemberIds.has(member.playerId)) {
-            hasNewPeer = true;
+        const preferredHostId = this.callbacks.getPreferredHostId?.();
+        const waitingForLobbyHost =
+          roomMode === 'coop' &&
+          !this.presenceResolved &&
+          Boolean(preferredHostId) &&
+          preferredHostId !== localPlayerId &&
+          snapshot.isHost &&
+          !snapshot.members.some((m) => m.playerId === preferredHostId);
+
+        // 게스트 폰이 로비 방장보다 먼저 WorldScene에 입장한 경우 임시 방장 스폰을 방지하기 위해 짧게 대기
+        if (waitingForLobbyHost) {
+          this.deferredInitialSnapshot = snapshot;
+          if (!this.lobbyHostGraceTimer) {
+            this.lobbyHostGraceTimer = setTimeout(() => {
+              this.lobbyHostGraceTimer = null;
+              const pending = this.deferredInitialSnapshot;
+              this.deferredInitialSnapshot = null;
+              if (pending && !this.presenceResolved) {
+                this.applyPresenceSnapshot(pending);
+              }
+            }, HOST_SYNC_CONFIG.initialLobbyHostGraceMs);
           }
-          signatureParts.push(
-            `${member.playerId}:${member.name}:${member.color}:${member.isHost ? 1 : 0}:${member.isBackground ? 1 : 0}`
-          );
+          return;
         }
-        this.knownMemberIds = nextKnown;
 
-        this.callbacks.onPresenceSnapshot?.(snapshot);
-
-        if (hostResolutionChanged || (snapshot.isHost && hostEpochChanged)) {
-          this.callbacks.onHostStatusChanged?.(snapshot.isHost, snapshot.hostEpoch);
+        if (this.lobbyHostGraceTimer) {
+          this.clearLobbyHostGraceTimer();
         }
-        const shouldSyncPeers = hasNewPeer || (becameHost && snapshot.onlineCount > 1);
-        this.callbacks.onOnlineCountChanged(snapshot.onlineCount, shouldSyncPeers);
-
-        if (snapshot.onlineCount !== this.lastOnlineCount) {
-          this.lastOnlineCount = snapshot.onlineCount;
-          GameEvents.emit('online-count-changed', snapshot.onlineCount);
-        }
-        signatureParts.sort();
-        const membersSignature = signatureParts.join('|');
-        if (membersSignature !== this.lastMembersSignature) {
-          this.lastMembersSignature = membersSignature;
-          GameEvents.emit('room-members-updated', snapshot.members);
-        }
+        this.applyPresenceSnapshot(snapshot);
       }),
       t.onPlayerLeave((playerId) => {
         this.knownMemberIds.delete(playerId);

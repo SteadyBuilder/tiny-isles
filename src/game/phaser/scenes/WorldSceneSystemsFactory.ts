@@ -49,6 +49,7 @@ export interface IWorldSystemsHost {
   getPlayerColor: () => PlayerColor;
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
+  getPreferredHostId?: () => string | undefined;
   onCoreDestroyed?: () => void;
   getPlayerPosition: () => { x: number; y: number };
   getPlayerDirection?: () => 'left' | 'right';
@@ -238,6 +239,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
       broadcastMonstersDeltaSync: (payload) =>
         multiplayerSync?.broadcastMonstersDeltaSync(payload),
       requestMonstersSync: () => multiplayerSync?.requestMonstersSync(),
+      requestMonstersRepair: (payload) => multiplayerSync?.requestMonstersRepair(payload),
       broadcastMonsterHit: (payload) => multiplayerSync?.broadcastMonsterHit(payload),
       broadcastMonsterPlayerAttack: (payload) =>
         multiplayerSync?.broadcastMonsterPlayerAttack(payload),

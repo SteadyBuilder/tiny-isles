@@ -21,6 +21,7 @@ import {
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
   MonstersFullSyncPayload,
+  MonstersRepairRequestPayload,
   ThreatSyncPayload,
   WorldStateSyncPayload,
 } from '../../../types/monsterSync';
@@ -33,8 +34,10 @@ export interface IMultiplayerChannelCallbacks {
   getPlayerColor: () => PlayerColor;
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
+  getPreferredHostId?: () => string | undefined;
   onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
   onHostStatusChanged?: (isHost: boolean, hostEpoch?: number) => void;
+  onHostIdentityChanged?: (hostId: string, isHost: boolean, hostEpoch: number) => void;
   onPresenceSnapshot?: (snapshot: NetworkPresenceSnapshot) => void;
   onConnectionResume?: () => void;
   onRemoteHostHeartbeat?: (payload: HostHeartbeatPayload) => void;
@@ -53,6 +56,7 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteMonstersSync: (payload: MonstersFullSyncPayload) => void;
   onRemoteMonstersDeltaSync?: (payload: MonstersDeltaSyncPayload) => void;
   onRemoteMonstersSyncRequest?: () => void;
+  onRemoteMonstersRepairRequest?: (payload: MonstersRepairRequestPayload) => void;
   onRemoteMonsterHit: (payload: MonsterHitPayload) => void;
   onRemoteMonsterPlayerAttack?: (payload: MonsterPlayerAttackPayload) => void;
   onRemoteThreatAdded?: (amount: number) => void;
@@ -95,6 +99,7 @@ export const SHARED_CHANNEL_EVENTS = [
   'monsters_sync',
   'monsters_delta_sync',
   'monsters_sync_request',
+  'monsters_repair_request',
   'monster_hit',
   'monster_player_attack',
   'threat_added',
@@ -176,6 +181,14 @@ export function dispatchSharedChannelEvent(
     case 'monsters_sync_request':
       callbacks.onRemoteMonstersSyncRequest?.();
       break;
+    case 'monsters_repair_request': {
+      const p = payload as Partial<MonstersRepairRequestPayload>;
+      callbacks.onRemoteMonstersRepairRequest?.({
+        ids: Array.isArray(p.ids) ? p.ids : [],
+        requesterId: p.requesterId,
+      });
+      break;
+    }
     case 'monster_hit':
       callbacks.onRemoteMonsterHit(payload as MonsterHitPayload);
       break;

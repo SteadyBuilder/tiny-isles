@@ -56,6 +56,12 @@ export class MonsterRemoteDeltaApplier {
     this.clearTransientSyncState();
   }
 
+  public resetSequenceGuard(): void {
+    this.incomingFullSyncBatches.clear();
+    this.seqGuard.reset();
+    this.countMismatchStreak = 0;
+  }
+
   private clearTransientSyncState(): void {
     this.remoteTargets.clear();
     this.localHitGraceUntil.clear();
@@ -154,20 +160,42 @@ export class MonsterRemoteDeltaApplier {
     }
   }
 
+  private pruneOlderFullSyncBatches(hostEpoch?: number, syncSeq?: number): void {
+    for (const [id, entry] of this.incomingFullSyncBatches.entries()) {
+      const olderEpoch =
+        typeof hostEpoch === 'number' &&
+        typeof entry.hostEpoch === 'number' &&
+        entry.hostEpoch < hostEpoch;
+      const sameOrUnknownEpoch =
+        hostEpoch === undefined ||
+        entry.hostEpoch === undefined ||
+        entry.hostEpoch === hostEpoch;
+      const olderSeq =
+        sameOrUnknownEpoch &&
+        typeof syncSeq === 'number' &&
+        typeof entry.syncSeq === 'number' &&
+        entry.syncSeq <= syncSeq;
+      if (olderEpoch || olderSeq) {
+        this.incomingFullSyncBatches.delete(id);
+      }
+    }
+  }
+
   public receiveFullSyncChunk(
     payload: MonstersFullSyncPayload
   ): { ready: boolean; monsters: Monster[] } {
     const now = performance.now();
     this.pruneExpiredFullSyncBatches(now);
 
-    if (!this.seqGuard.canAccept(payload.hostEpoch, payload.syncSeq)) {
+    if (!this.seqGuard.canAcceptFullSync(payload.hostEpoch, payload.syncSeq)) {
       return { ready: false, monsters: [] };
     }
 
     const total = payload.totalChunks ?? 1;
     if (total <= 1 || !payload.syncId) {
       const liveMonsters = (payload.monsters || []).filter((m) => m.hp > 0);
-      this.seqGuard.commit(payload.hostEpoch, payload.syncSeq);
+      this.seqGuard.commitFullSync(payload.hostEpoch, payload.syncSeq);
+      this.pruneOlderFullSyncBatches(payload.hostEpoch, payload.syncSeq);
       this.clearTransientSyncState();
       this.tombstones.prune(now);
       for (const m of liveMonsters) this.tombstones.revive(m.id);
@@ -210,7 +238,8 @@ export class MonsterRemoteDeltaApplier {
         if (m.hp > 0) merged.push(m);
       }
     }
-    this.seqGuard.commit(batch.hostEpoch, batch.syncSeq);
+    this.seqGuard.commitFullSync(batch.hostEpoch, batch.syncSeq);
+    this.pruneOlderFullSyncBatches(batch.hostEpoch, batch.syncSeq);
     this.clearTransientSyncState();
     this.tombstones.prune(now);
     for (const m of merged) this.tombstones.revive(m.id);
@@ -222,9 +251,21 @@ export class MonsterRemoteDeltaApplier {
     monsters: Map<string, MonsterVisual>,
     payload: MonstersDeltaSyncPayload,
     callbacks: RemoteDeltaApplyCallbacks
-  ): { needsFullSync: boolean; killedCount: number; spawnedCount: number } {
-    if (!this.seqGuard.accept(payload.hostEpoch, payload.syncSeq)) {
-      return { needsFullSync: false, killedCount: 0, spawnedCount: 0 };
+  ): {
+    needsFullSync: boolean;
+    digestMismatch: boolean;
+    missingIds: string[];
+    killedCount: number;
+    spawnedCount: number;
+  } {
+    if (!this.seqGuard.acceptDelta(payload.hostEpoch, payload.syncSeq)) {
+      return {
+        needsFullSync: false,
+        digestMismatch: false,
+        missingIds: [],
+        killedCount: 0,
+        spawnedCount: 0,
+      };
     }
 
     const now = performance.now();
@@ -275,7 +316,7 @@ export class MonsterRemoteDeltaApplier {
       this.remoteTargets.delete(sp.id);
     }
 
-    let missingUpdateTarget = false;
+    const missingIdSet = new Set<string>();
     for (const tuple of payload.updates || []) {
       const [id, x, y, hp, maxHp, dirCode, targetTerritoryId, shieldHp] = tuple;
       if (hp <= 0) {
@@ -287,7 +328,7 @@ export class MonsterRemoteDeltaApplier {
       const mv = monsters.get(id);
       if (!mv) {
         if (!this.tombstones.isTombstoned(id, now)) {
-          missingUpdateTarget = true;
+          missingIdSet.add(id);
         }
         continue;
       }
@@ -328,10 +369,13 @@ export class MonsterRemoteDeltaApplier {
       }
     }
 
+    const missingIds = Array.from(missingIdSet);
+    const digestMismatch =
+      this.countMismatchStreak >= MONSTER_SYNC_CONFIG.digestMismatchTriggerCount;
     return {
-      needsFullSync:
-        missingUpdateTarget ||
-        this.countMismatchStreak >= MONSTER_SYNC_CONFIG.digestMismatchTriggerCount,
+      needsFullSync: missingIds.length > 0 || digestMismatch,
+      digestMismatch,
+      missingIds,
       killedCount,
       spawnedCount,
     };

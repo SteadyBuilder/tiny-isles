@@ -26,6 +26,7 @@ export interface IWorldMultiplayerHost {
   getPlayerColor: () => PlayerColor;
   getRoomId?: () => string;
   getRoomMode?: () => RoomMode;
+  getPreferredHostId?: () => string | undefined;
   getIslands?: () => Island[];
   getConstructedBuildings?: () => ConstructedBuilding[];
   applySyncedWorldState?: (
@@ -122,6 +123,7 @@ export function createWorldMultiplayerSync(
     getPlayerColor: host.getPlayerColor,
     getRoomId: host.getRoomId,
     getRoomMode: host.getRoomMode,
+    getPreferredHostId: host.getPreferredHostId,
     isLocalPlayerFainted: () => playerHealthSystem.isFainted(),
     getLocalPlayerHp: () => playerHealthSystem.getState(),
     getLiveMonsterDigest: () => waveSystem.getLiveMonsterDigest(),
@@ -154,6 +156,12 @@ export function createWorldMultiplayerSync(
         fieldMonsterSystem.resetForGuest();
         monsterCampSystem.resetGuestGarrisonState();
       }
+    },
+    onHostIdentityChanged: (_hostId, isHost, hostEpoch) => {
+      waveSystem.handleHostIdentityChanged(isHost, hostEpoch);
+    },
+    onConnectionResumed: () => {
+      waveSystem.handleConnectionResumed();
     },
     onSyncResyncRequested: () => {
       if (!waveSystem.getIsHost()) {
@@ -229,6 +237,7 @@ export function createWorldMultiplayerSync(
         broadcastAuthoritativeWorldSnapshot();
       }
     },
+    onRemoteMonstersRepairRequest: (payload) => waveSystem.handleRemoteMonstersRepairRequest(payload),
     onRemoteMonsterHit: (payload) => {
       if (waveSystem.getIsHost()) {
         waveSystem.damageMonster(

@@ -255,7 +255,12 @@ export function useRoomLobbyState(
   const handleStartCoopMatch = useCallback(() => {
     const transport = lobbyTransportRef.current;
     lobbyTransportRef.current = null;
-    transport?.emit('room_start', { roomConfig });
+    const startedRoomConfig: RoomConfig = {
+      ...roomConfig,
+      hostPlayerId: playerId,
+    };
+    setRoomConfig(startedRoomConfig);
+    transport?.emit('room_start', { roomConfig: startedRoomConfig });
     if (transport) {
       setTimeout(() => {
         transport.disconnect();
@@ -265,7 +270,7 @@ export function useRoomLobbyState(
     setMissionProgress(null);
     setMissionResult(null);
     setSessionStatus('playing');
-  }, [roomConfig]);
+  }, [playerId, roomConfig]);
 
   const handleLeaveToLobby = useCallback(() => {
     disconnectLobbyTransport();
