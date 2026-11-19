@@ -144,13 +144,9 @@ export function createWorldMultiplayerSync(
       GameEvents.emit('wave-spawned', {
         isBossWave,
         waveNumber: waveSystem.getWaveState().waveCount,
+        kind: isBossWave ? 'boss' : 'regular',
+        directionLabel: '외곽 영지 경계',
       });
-      GameEvents.emit(
-        'game-alert',
-        isBossWave
-          ? '👹 외곽 영지에서 보스 군단 침공이 시작되었습니다!'
-          : '🧟 외곽 영지 경계에서 마물 웨이브가 진입했습니다!'
-      );
     },
     onRemoteWaveSummonRequest: (isBossWave, isEarlySummon) =>
       waveSystem.handleRemoteWaveSummonRequest(isBossWave, isEarlySummon),

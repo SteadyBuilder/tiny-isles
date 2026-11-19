@@ -31,6 +31,9 @@ export interface SpawnWaveParams {
 export interface SpawnWaveResult {
   firstTerritoryName: string;
   spawnedBossName: string;
+  bossTitle?: string;
+  bossSpriteKey?: string;
+  bossTintHex?: number;
   bossDirectionLabel: string;
   scalingLabel: string;
 }
@@ -111,6 +114,9 @@ export class WaveSpawner {
 
     // 60분 주기 보스몬스터 출현 (src/data/waves.ts BOSS_MONSTER_TEMPLATES 기반 + 접속자 수 스케일링)
     let spawnedBossName = '';
+    let bossTitle: string | undefined;
+    let bossSpriteKey: string | undefined;
+    let bossTintHex: number | undefined;
     let bossDirectionLabel = '';
     if (params.isBossWave) {
       const bossSpawn = pickRandomMapEdgeSpawn(islands);
@@ -122,6 +128,9 @@ export class WaveSpawner {
         const bossAttack = Math.round(bossTemplate.attack * scaling.attackMultiplier * diffAtk);
         const bossCore = getTerritoryCorePos(bossSpawn.territory.gridX, bossSpawn.territory.gridY);
         spawnedBossName = bossTemplate.name;
+        bossTitle = bossTemplate.title;
+        bossSpriteKey = bossTemplate.spriteKey;
+        bossTintHex = bossTemplate.tintHex;
         bossDirectionLabel = bossSpawn.directionLabel;
         firstTerritoryName = bossSpawn.territory.name;
 
@@ -153,6 +162,9 @@ export class WaveSpawner {
     return {
       firstTerritoryName,
       spawnedBossName,
+      bossTitle,
+      bossSpriteKey,
+      bossTintHex,
       bossDirectionLabel,
       scalingLabel: scaling.label,
     };

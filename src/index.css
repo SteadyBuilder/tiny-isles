@@ -405,3 +405,43 @@ html, body {
 .wood-modal-scroll::-webkit-scrollbar-thumb:hover {
   background: #6b4120;
 }
+
+@keyframes spriteStripRun {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes waveBannerIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes waveBannerOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+}
+
+.animate-wave-banner-in {
+  animation: waveBannerIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-wave-banner-out {
+  animation: waveBannerOut 0.42s ease-in forwards;
+}
+

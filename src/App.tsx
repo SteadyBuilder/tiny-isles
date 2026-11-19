@@ -17,6 +17,7 @@ import { HudHelpModal } from './components/HudHelpModal';
 import { SoundModal } from './components/SoundModal';
 import { CombatDamageOverlay } from './components/CombatDamageOverlay';
 import { WaveInvasionOverlay } from './components/WaveInvasionOverlay';
+import { WaveAnnouncementBanner } from './components/WaveAnnouncementBanner';
 import { LobbyScreen } from './components/lobby/LobbyScreen';
 import { RoomWaitingModal } from './components/lobby/RoomWaitingModal';
 import { MetaProgressionModal } from './components/lobby/MetaProgressionModal';
@@ -368,6 +369,7 @@ export function App() {
 
       <MissionResultModal result={missionResult} onReturnToLobby={handleLeaveToLobby} />
       <WaveInvasionOverlay />
+      <WaveAnnouncementBanner />
       <CombatDamageOverlay />
     </div>
   );

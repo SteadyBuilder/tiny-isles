@@ -77,7 +77,19 @@ export interface GameEventPayloads {
   'add-threat': number; // percent
   'threat-orb-fx': ThreatOrbFxPayload;
   'wave-state-updated': WaveState;
-  'wave-spawned': { isBossWave: boolean; waveNumber: number };
+  'wave-spawned': {
+    isBossWave: boolean;
+    waveNumber: number;
+    kind?: 'regular' | 'boss' | 'dungeon';
+    bossName?: string;
+    bossTitle?: string;
+    bossSpriteKey?: string;
+    bossTintHex?: number;
+    directionLabel?: string;
+    scalingLabel?: string;
+    isEarlySummon?: boolean;
+    totalSpawns?: number;
+  };
   'monster-killed': { monsterId: string; monsterType: string; killer: string };
 
   // 사냥 특화 모드: 개인 성장, 전직, 장비 인벤토리, 몬스터 부락, 던전 게이트

@@ -166,6 +166,7 @@ export function getRegularMonsterTemplates(waveNum: number): MonsterTemplate[] {
 
 export interface BossMonsterTemplate extends MonsterTemplate {
   templateId: string;
+  title: string;
   spriteKey: string;
   tintHex: number;
   scale: number;
@@ -179,6 +180,7 @@ export function getBossMonsterTemplate(bossWaveCount: number): BossMonsterTempla
   const atkTierMult = 1 + Math.max(0, bossWaveCount - 1) * 0.18;
   return {
     templateId: tmpl.id,
+    title: tmpl.title,
     type: tmpl.type,
     role: tmpl.role,
     name: `${tmpl.name} (${bossWaveCount}차 보스)`,

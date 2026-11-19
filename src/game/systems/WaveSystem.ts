@@ -270,7 +270,13 @@ export class WaveSystem {
       });
       if (!dng) return;
       const dngMsg = `🌀 [${dng.scalingLabel}] ${dng.directionLabel}에 심연의 던전 게이트가 열렸습니다! 마물 ${dng.totalSpawns}마리와 수문장이 중앙 마을로 총진격합니다!${bonusSuffix}`;
-      this.announceWaveSpawn(dngMsg, true, isLocalTrigger, false);
+      this.announceWaveSpawn(dngMsg, true, isLocalTrigger, false, {
+        kind: 'dungeon',
+        directionLabel: dng.directionLabel,
+        scalingLabel: dng.scalingLabel,
+        isEarlySummon,
+        totalSpawns: dng.totalSpawns,
+      });
       return;
     }
 
@@ -283,17 +289,42 @@ export class WaveSystem {
     const alertMsg = isBossWave
       ? `👹 [${result.scalingLabel}] ${bossOrigin}에서 보스 '${result.spawnedBossName}' 군단이 동·서·남·북으로 침공합니다!${bonusSuffix}`
       : `🧟 [${result.scalingLabel}] 지도 외곽(동·서·남·북)에서 마물 웨이브가 진격을 시작했습니다!${bonusSuffix}`;
-    this.announceWaveSpawn(alertMsg, isBossWave, isLocalTrigger, true);
+    this.announceWaveSpawn(alertMsg, isBossWave, isLocalTrigger, true, {
+      kind: isBossWave ? 'boss' : 'regular',
+      bossName: result.spawnedBossName || undefined,
+      bossTitle: result.bossTitle,
+      bossSpriteKey: result.bossSpriteKey,
+      bossTintHex: result.bossTintHex,
+      directionLabel: isBossWave ? bossOrigin : '동·서·남·북 외곽',
+      scalingLabel: result.scalingLabel,
+      isEarlySummon,
+    });
   }
 
-  private announceWaveSpawn(msg: string, isBossSound: boolean, isLocalTrigger: boolean, flushDelta: boolean): void {
+  private announceWaveSpawn(
+    msg: string,
+    isBossSound: boolean,
+    isLocalTrigger: boolean,
+    flushDelta: boolean,
+    bannerMeta?: {
+      kind: 'regular' | 'boss' | 'dungeon';
+      bossName?: string;
+      bossTitle?: string;
+      bossSpriteKey?: string;
+      bossTintHex?: number;
+      directionLabel?: string;
+      scalingLabel?: string;
+      isEarlySummon?: boolean;
+      totalSpawns?: number;
+    }
+  ): void {
     this.waveState.lastWaveMessage = msg;
     if (isBossSound) sound.playBossRoar();
     else sound.playWaveHorn();
-    GameEvents.emit('game-alert', msg);
     GameEvents.emit('wave-spawned', {
       isBossWave: isBossSound,
       waveNumber: this.threatTracker.getWaveCount(),
+      ...bannerMeta,
     });
     this.emitWaveState();
     if (isLocalTrigger) this.ctx.broadcastWaveSpawn?.(isBossSound);
