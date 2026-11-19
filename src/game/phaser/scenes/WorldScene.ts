@@ -126,7 +126,11 @@ export class WorldScene extends Phaser.Scene {
 
   public create(): void {
     this.input.addPointer(2);
-    this.missionSystem = new MissionSystem(this.roomConfig);
+    this.missionSystem = new MissionSystem(this.roomConfig, {
+      isHost: () => this.systems?.waveSystem.getIsHost() ?? true,
+      onBroadcastProgress: (payload) =>
+        this.systems?.multiplayerSync?.broadcastMissionProgressSync(payload),
+    });
 
     this.persistence = new WorldPersistenceController({
       isSceneAlive: () => this.isSceneAlive(),
@@ -240,6 +244,8 @@ export class WorldScene extends Phaser.Scene {
       getIslands: () => this.islands,
       getTerrainMap: () => this.terrainMap,
       getConstructedBuildings: () => this.constructedBuildings,
+      getMissionSyncSnapshot: () => this.missionSystem.getSyncSnapshot(),
+      applyRemoteMissionProgressSync: (payload) => this.missionSystem.applyRemoteSync(payload),
       getInventory: () => this.inventory,
       spendResources: (wood, stone, gold) => this.spendResources(wood, stone, gold),
       applySyncedWorldState: (updatedIslands, updatedBuildings) => {

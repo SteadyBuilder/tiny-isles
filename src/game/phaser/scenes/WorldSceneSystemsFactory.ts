@@ -69,6 +69,8 @@ export interface IWorldSystemsHost {
   getIslands: () => Island[];
   getTerrainMap: () => WorldTerrainMap;
   getConstructedBuildings: () => ConstructedBuilding[];
+  getMissionSyncSnapshot?: () => Omit<import('../../../types/monsterSync').MissionProgressSyncPayload, 'hostEpoch'>;
+  applyRemoteMissionProgressSync?: (payload: import('../../../types/monsterSync').MissionProgressSyncPayload) => void;
   getInventory: () => Inventory;
   spendResources: (wood: number, stone: number, gold: number) => void;
   applySyncedWorldState: (

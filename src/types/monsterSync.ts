@@ -159,3 +159,14 @@ export interface ThreatSyncPayload {
 export interface DungeonPortalSyncPayload {
   portal: DungeonPortalState | null;
 }
+
+export interface MissionProgressSyncPayload {
+  hostEpoch: number;
+  elapsedSec: number;
+  currentCount: number;
+  targetCount: number;
+  completed?: boolean;
+  failed?: boolean;
+  reason?: string;
+}
+

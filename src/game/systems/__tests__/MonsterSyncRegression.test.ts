@@ -309,3 +309,80 @@ test('Stage 2: electHostFromPresence prioritizes preferredHostId in foreground r
   assert.equal(failoverElection.hostId, 'guest_fast_phone');
 });
 
+test('Stage 3: MissionSystem synchronizes host elapsedSec, currentCount, and victory outcome across coop peers without timer drift', async () => {
+  const { MissionSystem } = await import('../MissionSystem');
+  const { INSTANCE_ROOM_DEFAULTS } = await import('../../../data/missions');
+
+  const broadcasts: Array<{
+    elapsedSec: number;
+    currentCount: number;
+    targetCount: number;
+    completed?: boolean;
+    failed?: boolean;
+  }> = [];
+
+  const coopConfig = {
+    roomId: 'ROOM42',
+    mode: 'coop' as const,
+    missionId: INSTANCE_ROOM_DEFAULTS.defaultMissionId,
+    difficulty: 'normal' as const,
+    maxPlayers: 4,
+    hostPlayerId: 'host_1',
+  };
+
+  const hostMission = new MissionSystem(coopConfig, {
+    isHost: () => true,
+    onBroadcastProgress: (p) => broadcasts.push(p),
+  });
+
+  const guestMission = new MissionSystem(coopConfig, {
+    isHost: () => false,
+  });
+
+  const baseWaveState = {
+    threatPercent: 0,
+    warningThreshold: 80,
+    wavesUntilBoss: 3,
+    waveCount: 0,
+    bossWaveCount: 0,
+    activeMonstersCount: 0,
+    countdownSecondsRemaining: null,
+    nextWaveIsBoss: false,
+    activeBoss: null,
+    lastWaveMessage: null,
+    onlineScaleLabel: '4인+ 총력전',
+    activeGarrisonCount: 0,
+  };
+
+  // Host advances 25 seconds, guest only advanced 12 seconds due to late load
+  hostMission.update(25_000, baseWaveState, []);
+  guestMission.update(12_000, baseWaveState, []);
+  assert.equal(hostMission.getProgressState().elapsedSec, 25);
+  assert.equal(guestMission.getProgressState().elapsedSec, 12);
+  assert.ok(broadcasts.length >= 1);
+
+  // Guest receives host sync -> timer and count snap to host authority (25s)
+  const latest = broadcasts[broadcasts.length - 1];
+  guestMission.applyRemoteSync({ ...latest, hostEpoch: 1 });
+  assert.equal(guestMission.getProgressState().elapsedSec, 25);
+
+  // Host completes goal (e.g. camp conquest target reached) -> broadcasts completed: true
+  const targetCount = hostMission.getMission().goal.targetCount;
+  hostMission.setCampConqueredCount(targetCount);
+  hostMission.update(
+    1000,
+    { ...baseWaveState, bossWaveCount: targetCount, waveCount: targetCount },
+    []
+  );
+  assert.equal(hostMission.isEnded(), true);
+
+  const finalSync = broadcasts[broadcasts.length - 1];
+  assert.equal(finalSync.completed, true);
+
+  guestMission.applyRemoteSync({ ...finalSync, hostEpoch: 1 });
+  assert.equal(guestMission.isEnded(), true);
+  assert.equal(guestMission.getProgressState().completed, true);
+  assert.equal(guestMission.getProgressState().currentCount, targetCount);
+});
+
+

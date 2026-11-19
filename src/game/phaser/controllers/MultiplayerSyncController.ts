@@ -23,6 +23,7 @@ import {
   HostHeartbeatPayload,
   HostWelcomePayload,
   JoinHelloPayload,
+  MissionProgressSyncPayload,
   MonsterHitPayload,
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
@@ -61,6 +62,7 @@ export interface IMultiplayerSyncContext {
   onRemoteJoinHello?: (payload: JoinHelloPayload) => void;
   onRemoteHostWelcome?: (payload: HostWelcomePayload) => void;
   onRemoteWorldStateSync?: (payload: WorldStateSyncPayload) => void;
+  onRemoteMissionProgressSync?: (payload: MissionProgressSyncPayload) => void;
   onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteEntityRespawned?: (entity: Entity) => void;
@@ -188,6 +190,11 @@ export class MultiplayerSyncController {
         this.markHostConfirmed(undefined, payload.hostEpoch);
         this.watchdog.recordHostActivity(payload.hostEpoch);
         this.ctx.onRemoteWorldStateSync?.(payload);
+      },
+      onRemoteMissionProgressSync: (payload) => {
+        this.markHostConfirmed(undefined, payload.hostEpoch);
+        this.watchdog.recordHostActivity(payload.hostEpoch);
+        this.ctx.onRemoteMissionProgressSync?.(payload);
       },
       onRemotePlayerMove: (player) => {
         this.watchdog.recordPeerActivity(player.id);
@@ -585,5 +592,14 @@ export class MultiplayerSyncController {
 
   public broadcastWorldStateSync(payload: WorldStateSyncPayload): void {
     this.router.emit('world_state_sync', 'world_state_sync', payload);
+  }
+
+  public broadcastMissionProgressSync(
+    payload: Omit<MissionProgressSyncPayload, 'hostEpoch'>
+  ): void {
+    this.router.emit('mission_progress_sync', 'mission_progress_sync', {
+      ...payload,
+      hostEpoch: this.router.getHostEpoch(),
+    });
   }
 }

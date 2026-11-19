@@ -3,6 +3,7 @@ import { PLAYER_CLASS_DEFINITIONS } from '../../../data/classes';
 import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
 import { sound } from '../../../lib/sound';
 import { ConstructedBuilding, Island, PlayerAction, PlayerColor } from '../../../types/game';
+import { MissionProgressSyncPayload } from '../../../types/monsterSync';
 import { RoomMode } from '../../../types/room';
 import { GameEvents } from '../../events/gameEvents';
 import {
@@ -30,6 +31,8 @@ export interface IWorldMultiplayerHost {
   getPreferredHostId?: () => string | undefined;
   getIslands?: () => Island[];
   getConstructedBuildings?: () => ConstructedBuilding[];
+  getMissionSyncSnapshot?: () => Omit<MissionProgressSyncPayload, 'hostEpoch'>;
+  applyRemoteMissionProgressSync?: (payload: MissionProgressSyncPayload) => void;
   applySyncedWorldState?: (
     updatedIslands: Island[],
     updatedBuildings: ConstructedBuilding[]
@@ -129,6 +132,14 @@ export function createWorldMultiplayerSync(
     );
   };
 
+  const broadcastMissionSnapshot = () => {
+    if (!waveSystem.getIsHost()) return;
+    const snap = host.getMissionSyncSnapshot?.();
+    if (snap) {
+      sync.broadcastMissionProgressSync(snap);
+    }
+  };
+
   const broadcastFullRoomState = (force: boolean, targetPlayerId?: string) => {
     if (!waveSystem.getIsHost()) return;
     sync.broadcastHostWelcome(targetPlayerId);
@@ -141,6 +152,7 @@ export function createWorldMultiplayerSync(
       nextWaveIsBoss: ws.nextWaveIsBoss,
     });
     sync.broadcastDungeonPortalSync(waveSystem.getDungeonPortalState());
+    broadcastMissionSnapshot();
     broadcastAuthoritativeWorldSnapshot(force);
     waveSystem.broadcastFullMonstersSync(force, Boolean(targetPlayerId));
     monsterCampSystem.broadcastFullCampSync(force);
@@ -220,6 +232,10 @@ export function createWorldMultiplayerSync(
         host.applySyncedWorldState(result.islands, result.constructedBuildings);
       }
     },
+    onRemoteMissionProgressSync: (payload) => {
+      if (waveSystem.getIsHost()) return;
+      host.applyRemoteMissionProgressSync?.(payload);
+    },
     onRemotePlayerSkillCast: (payload) => {
       if (!payload || payload.casterId === host.getPlayerId()) return;
       host.skillEffectsRenderer.playClassSkill({
@@ -282,6 +298,7 @@ export function createWorldMultiplayerSync(
           nextWaveIsBoss: ws.nextWaveIsBoss,
         });
         sync.broadcastDungeonPortalSync(waveSystem.getDungeonPortalState());
+        broadcastMissionSnapshot();
         broadcastAuthoritativeWorldSnapshot();
       }
     },

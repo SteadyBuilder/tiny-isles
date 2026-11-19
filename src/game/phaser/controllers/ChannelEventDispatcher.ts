@@ -19,6 +19,7 @@ import {
   HostHeartbeatPayload,
   HostWelcomePayload,
   JoinHelloPayload,
+  MissionProgressSyncPayload,
   MonsterHitPayload,
   MonsterPlayerAttackPayload,
   MonstersDeltaSyncPayload,
@@ -47,6 +48,7 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteHostHeartbeat?: (payload: HostHeartbeatPayload) => void;
   onRemoteHostHandover?: (payload: HostHandoverPayload) => void;
   onRemoteWorldStateSync?: (payload: WorldStateSyncPayload) => void;
+  onRemoteMissionProgressSync?: (payload: MissionProgressSyncPayload) => void;
   onRemotePlayerMove: (player: Player) => void;
   onRemotePlayerLeave: (playerId: string) => void;
   onRemotePlayerSkillCast?: (payload: RemotePlayerSkillCastPayload) => void;
@@ -95,6 +97,7 @@ export const SHARED_CHANNEL_EVENTS = [
   'host_heartbeat',
   'host_handover',
   'world_state_sync',
+  'mission_progress_sync',
   'player_move',
   'player_skill_cast',
   'entity_hit',
@@ -145,6 +148,9 @@ export function dispatchSharedChannelEvent(
       break;
     case 'world_state_sync':
       callbacks.onRemoteWorldStateSync?.(payload as WorldStateSyncPayload);
+      break;
+    case 'mission_progress_sync':
+      callbacks.onRemoteMissionProgressSync?.(payload as MissionProgressSyncPayload);
       break;
     case 'player_move':
       callbacks.onRemotePlayerMove(payload as Player);
