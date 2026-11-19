@@ -372,6 +372,11 @@ export function useRoomLobbyState(
     });
   }, []);
 
+  const handleApplyMetaProgression = useCallback((nextMeta: MetaProgressionState) => {
+    saveRepository.saveMetaProgression(nextMeta);
+    setMeta(nextMeta);
+  }, []);
+
   return {
     sessionStatus,
     roomConfig,
@@ -394,5 +399,6 @@ export function useRoomLobbyState(
     handleSelectOrUnlockCostume,
     handleSelectOrUnlockAura,
     handleResetTraits,
+    handleApplyMetaProgression,
   };
 }

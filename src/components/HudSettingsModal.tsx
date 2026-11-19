@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { AUTH_PROVIDER_MAP } from '../data/authProviders';
+import { AuthUserSummary } from '../types/auth';
 import { PlayerColor } from '../types/game';
 import { sound, SoundSettings } from '../lib/sound';
 import { GameEvents } from '../game/events/gameEvents';
@@ -24,6 +26,8 @@ interface HudSettingsModalProps {
   onToggleSound: () => void;
   onOpenSoundModal: () => void;
   onOpenHelp: () => void;
+  authUser?: AuthUserSummary | null;
+  onOpenAccountModal?: () => void;
   isTestMenuVisible?: boolean;
   onToggleTestMenu?: () => void;
   hasSubModalOpen?: boolean;
@@ -43,6 +47,8 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
   onToggleSound,
   onOpenSoundModal,
   onOpenHelp,
+  authUser = null,
+  onOpenAccountModal,
   isTestMenuVisible = false,
   onToggleTestMenu,
   hasSubModalOpen = false,
@@ -151,6 +157,41 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Social Account Linking & Cloud Save Sheet */}
+        {onOpenAccountModal && (
+          <div className="ts-paper-sheet p-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-black text-[#3a200f]">계정 연동 & 클라우드 저장</span>
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-black border ${
+                  authUser
+                    ? 'bg-[#dcfce7] text-[#166534] border-[#16a34a]'
+                    : 'bg-[#fef3c7] text-[#92400e] border-[#d97706]'
+                }`}
+              >
+                {authUser && authUser.providers.length > 0
+                  ? authUser.providers.map((p) => AUTH_PROVIDER_MAP[p].shortLabel).join(' · ')
+                  : '게스트 모드'}
+              </span>
+            </div>
+            <p className="text-[10px] font-bold text-[#6e4625]">
+              {authUser
+                ? '구글/카카오 계정으로 진행 데이터가 자동 백업됩니다.'
+                : '구글 또는 카카오톡을 연동해 기존 진행 정보를 안전하게 이어가세요.'}
+            </p>
+            <PixelGameButton
+              label={authUser ? '연동 계정 & 동기화 관리' : '구글 / 카카오톡 계정 연동하기'}
+              variant="blue"
+              size="sm"
+              fullWidth
+              onClick={() => {
+                onClose();
+                onOpenAccountModal();
+              }}
+            />
+          </div>
+        )}
 
         {/* Audio & Volume Sheet */}
         <div className="ts-paper-sheet p-2 space-y-2">

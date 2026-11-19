@@ -23,6 +23,8 @@ import { WaveAnnouncementBanner } from './components/WaveAnnouncementBanner';
 import { LobbyScreen } from './components/lobby/LobbyScreen';
 import { RoomWaitingModal } from './components/lobby/RoomWaitingModal';
 import { MetaProgressionModal } from './components/lobby/MetaProgressionModal';
+import { AccountLinkModal } from './components/account/AccountLinkModal';
+import { AccountConflictModal } from './components/account/AccountConflictModal';
 import { PixelGameButton } from './components/ui/PixelGameButton';
 import { WoodModalFrame } from './components/ui/WoodModalFrame';
 import { ConstructableType } from './types/game';
@@ -30,6 +32,7 @@ import { GameEvents } from './game/events/gameEvents';
 import { sound, SoundSettings } from './lib/sound';
 import { useGameShellState } from './hooks/useGameShellState';
 import { useRoomLobbyState } from './hooks/useRoomLobbyState';
+import { useAccountSync } from './hooks/useAccountSync';
 
 export function App() {
   const {
@@ -78,6 +81,7 @@ export function App() {
     handleShowAlert,
     handleUpdateName,
     handleUpdateColor,
+    handleApplyProfile,
     handleUpdateInventory,
     handleUnlockedCountChange,
     handleMobileAction,
@@ -109,7 +113,16 @@ export function App() {
     handleSelectOrUnlockCostume,
     handleSelectOrUnlockAura,
     handleResetTraits,
+    handleApplyMetaProgression,
   } = useRoomLobbyState(playerId, profile.name, profile.color);
+
+  const accountSync = useAccountSync({
+    guestPlayerId: playerId,
+    profile,
+    meta,
+    onApplyProfile: handleApplyProfile,
+    onApplyMeta: handleApplyMetaProgression,
+  });
 
   const handleLeaveToLobby = () => {
     leaveRoomToLobby();
@@ -117,6 +130,7 @@ export function App() {
   };
 
   const [showLobbySettings, setShowLobbySettings] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const [showLobbySound, setShowLobbySound] = useState(false);
   const [showLobbyHelp, setShowLobbyHelp] = useState(false);
   const [soundSettings, setSoundSettings] = useState<SoundSettings>(() => sound.getSettings());
@@ -139,10 +153,15 @@ export function App() {
           playerName={profile.name}
           playerColor={profile.color}
           meta={meta}
+          authUser={accountSync.user}
           onStartSolo={handleStartSolo}
           onCreateCoopRoom={handleCreateCoopRoom}
           onJoinCoopRoom={handleJoinCoopRoom}
           onOpenMetaModal={() => setShowMetaModal(true)}
+          onOpenAccountModal={() => {
+            accountSync.clearMessages();
+            setShowAccountModal(true);
+          }}
           onOpenSettingsModal={() => setShowLobbySettings(true)}
           onOpenHelpModal={() => setShowLobbyHelp(true)}
         />
@@ -180,6 +199,33 @@ export function App() {
           onToggleSound={() => sound.toggleMute()}
           onOpenSoundModal={() => setShowLobbySound(true)}
           onOpenHelp={() => setShowLobbyHelp(true)}
+          authUser={accountSync.user}
+          onOpenAccountModal={() => {
+            accountSync.clearMessages();
+            setShowAccountModal(true);
+          }}
+          hasSubModalOpen={showAccountModal || showLobbySound || showLobbyHelp}
+        />
+
+        <AccountLinkModal
+          isOpen={showAccountModal}
+          onClose={() => setShowAccountModal(false)}
+          playerName={profile.name}
+          meta={meta}
+          user={accountSync.user}
+          syncStatus={accountSync.syncStatus}
+          lastSyncedAt={accountSync.lastSyncedAt}
+          errorMessage={accountSync.errorMessage}
+          statusMessage={accountSync.statusMessage}
+          onConnectProvider={accountSync.connectProvider}
+          onSyncNow={accountSync.syncNow}
+          onSignOut={accountSync.signOut}
+        />
+
+        <AccountConflictModal
+          conflict={accountSync.conflict}
+          isBusy={accountSync.syncStatus === 'syncing'}
+          onResolve={accountSync.resolveConflict}
         />
 
         <SoundModal isOpen={showLobbySound} onClose={() => setShowLobbySound(false)} />

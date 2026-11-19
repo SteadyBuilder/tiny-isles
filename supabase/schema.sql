@@ -183,3 +183,39 @@ begin
 end;
 $$;
 
+-- ========================================================
+-- 6. 소셜 계정 연동 및 클라우드 세이브 (Google / Kakao OAuth)
+-- ========================================================
+create table if not exists public.user_accounts (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  profile jsonb not null default '{"name": "수호자", "color": "blue"}'::jsonb,
+  meta_progression jsonb not null default '{}'::jsonb,
+  legacy_guest_id text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.user_accounts enable row level security;
+
+drop policy if exists "본인 계정 세이브 조회 허용" on public.user_accounts;
+create policy "본인 계정 세이브 조회 허용"
+  on public.user_accounts for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "본인 계정 세이브 등록 허용" on public.user_accounts;
+create policy "본인 계정 세이브 등록 허용"
+  on public.user_accounts for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "본인 계정 세이브 갱신 허용" on public.user_accounts;
+create policy "본인 계정 세이브 갱신 허용"
+  on public.user_accounts for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "본인 계정 세이브 삭제 허용" on public.user_accounts;
+create policy "본인 계정 세이브 삭제 허용"
+  on public.user_accounts for delete
+  using (auth.uid() = user_id);
+
+

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { AUTH_PROVIDER_MAP } from '../../data/authProviders';
 import { COSMETIC_TITLES, COSTUME_DEFINITIONS } from '../../data/metaProgression';
 import { sound, SoundSettings } from '../../lib/sound';
+import { AuthUserSummary } from '../../types/auth';
 import { PlayerColor } from '../../types/game';
 import { MetaProgressionState, RoomDifficultyId } from '../../types/room';
 import { PixelGameButton } from '../ui/PixelGameButton';
@@ -14,10 +16,12 @@ interface LobbyScreenProps {
   playerName: string;
   playerColor: PlayerColor;
   meta: MetaProgressionState;
+  authUser: AuthUserSummary | null;
   onStartSolo: (missionId: string, difficulty: RoomDifficultyId) => void;
   onCreateCoopRoom: (missionId: string, difficulty: RoomDifficultyId) => void;
   onJoinCoopRoom: (inviteCode: string) => void;
   onOpenMetaModal: () => void;
+  onOpenAccountModal: () => void;
   onOpenSettingsModal: () => void;
   onOpenHelpModal: () => void;
 }
@@ -26,10 +30,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   playerName,
   playerColor,
   meta,
+  authUser,
   onStartSolo,
   onCreateCoopRoom,
   onJoinCoopRoom,
   onOpenMetaModal,
+  onOpenAccountModal,
   onOpenSettingsModal,
   onOpenHelpModal,
 }) => {
@@ -119,8 +125,16 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         </div>
       </div>
 
-      {/* Bottom-Left: Guardian Profile Wood Plate */}
-      <div className="fixed bottom-3 left-3 sm:bottom-5 sm:left-5 z-20 flex items-center gap-1.5 sm:gap-2 ts-wood-bar pr-2 pl-1.5 sm:pr-3 sm:pl-2 py-0.5 sm:py-1 max-w-[calc(100vw-10.25rem)] sm:max-w-none">
+      {/* Bottom-Left: Guardian Profile Wood Plate (Click to open Account Link Modal) */}
+      <button
+        type="button"
+        onClick={() => {
+          sound.playClick();
+          onOpenAccountModal();
+        }}
+        title="계정 연동 및 클라우드 저장 관리"
+        className="fixed bottom-3 left-3 sm:bottom-5 sm:left-5 z-20 flex items-center gap-1.5 sm:gap-2 ts-wood-bar pr-2.5 pl-1.5 sm:pr-3.5 sm:pl-2 py-0.5 sm:py-1 max-w-[calc(100vw-10.25rem)] sm:max-w-none text-left transition hover:brightness-110 active:scale-[0.98] cursor-pointer"
+      >
         <img
           src={avatarSrc}
           alt={playerName}
@@ -137,9 +151,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             <span>✨ {meta.points}P</span>
             <span className="opacity-70">·</span>
             <span>클리어 {meta.totalClears}회</span>
+            <span className="opacity-70">·</span>
+            <span className={authUser ? 'text-[#86efac]' : 'text-[#fde68a]'}>
+              {authUser && authUser.providers.length > 0
+                ? `${authUser.providers.map((p) => AUTH_PROVIDER_MAP[p].shortLabel).join('+')} 연동`
+                : '계정 연동 ↗'}
+            </span>
           </div>
         </div>
-      </div>
+      </button>
 
       {/* Bottom-Right: Pixel Audio / Guide / Settings Controls + Version Stamp */}
       <div className="fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-20 flex flex-col items-end gap-1.5">

@@ -5,7 +5,7 @@ import { INITIAL_POTION_INVENTORY } from '../data/potions';
 import { PLAYER_COMBAT_CONFIG, THREAT_WAVE_CONFIG } from '../data/worldRules';
 import { getInitialConstructedBuildings, INITIAL_ISLANDS } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
-import { storage } from '../lib/storage';
+import { SavedProfile, storage } from '../lib/storage';
 import { canBuildInTerritory } from '../game/territoryAccessRules';
 import { isSameInventory } from '../game/utils/inventoryUtils';
 import { hasBlockingModifier, isEditableDomTarget } from '../game/utils/keyboardInputUtils';
@@ -222,6 +222,11 @@ export function useGameShellState() {
     });
   };
 
+  const handleApplyProfile = useCallback((nextProfile: SavedProfile) => {
+    storage.saveProfile(nextProfile);
+    setProfile(nextProfile);
+  }, []);
+
   const handleUpdateInventory = (updater: (prev: Inventory) => Inventory) => {
     setInventory((prev) => {
       const next = updater(prev);
@@ -388,6 +393,7 @@ export function useGameShellState() {
     handleShowAlert,
     handleUpdateName,
     handleUpdateColor,
+    handleApplyProfile,
     handleUpdateInventory,
     handleUnlockedCountChange,
     handleMobileAction,
