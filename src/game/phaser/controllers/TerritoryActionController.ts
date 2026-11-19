@@ -69,6 +69,7 @@ export interface ITerritoryActionContext {
  */
 export class TerritoryActionController {
   private ctx: ITerritoryActionContext;
+  private localBuiltCosts = new Map<string, { wood: number; stone: number; gold: number }>();
 
   constructor(ctx: ITerritoryActionContext) {
     this.ctx = ctx;
@@ -78,7 +79,11 @@ export class TerritoryActionController {
    * 마을 발전 처리:
    * 점령지(0) -> 개척마을(1) -> 중소마을(2) -> 큰마을(3) -> 소도시(4) -> 중소도시(5) -> 대도시(6)
    */
-  public handleUpgradeVillage(territoryId: number, isLocalTrigger = true): boolean {
+  public handleUpgradeVillage(
+    territoryId: number,
+    isLocalTrigger = true,
+    targetTier?: VillageTier
+  ): boolean {
     const isl = this.ctx.getIslands().find((i) => i.id === territoryId);
     if (!isl || !isl.unlocked) return false;
 
@@ -115,6 +120,12 @@ export class TerritoryActionController {
       }
       nextTier = check.nextTier;
       this.ctx.spendInventory(check.costWood, check.costStone, check.costGold);
+    } else if (typeof targetTier === 'number') {
+      // 동시 승급/중복 패킷 경합 시 2단계 점프 방지 (멱등 적용)
+      if (targetTier <= isl.villageTier || targetTier > 6) {
+        return false;
+      }
+      nextTier = targetTier;
     }
 
     const nextCfg = VILLAGE_TIER_CONFIGS[nextTier];
@@ -224,6 +235,11 @@ export class TerritoryActionController {
     );
 
     if (isLocal) {
+      this.localBuiltCosts.set(newBuilding.id, {
+        wood: bp.costWood,
+        stone: bp.costStone,
+        gold: bp.costGold,
+      });
       this.ctx.broadcastBuildingConstructed(newBuilding);
       this.ctx.emitThreatOrb?.(newBuilding.x, newBuilding.y, THREAT_WAVE_CONFIG.buildThreatGain);
       this.ctx.addThreat(THREAT_WAVE_CONFIG.buildThreatGain);
@@ -401,6 +417,19 @@ export class TerritoryActionController {
     const constructedBuildings = this.ctx.getConstructedBuildings();
     if (constructedBuildings.some((b) => b.id === cb.id)) return;
 
+    const refundIfLocalDisplaced = (victim: ConstructedBuilding): void => {
+      const cost = this.localBuiltCosts.get(victim.id);
+      if (!cost) return;
+      this.localBuiltCosts.delete(victim.id);
+      this.ctx.spendInventory(-cost.wood, -cost.stone, -cost.gold);
+      this.ctx.showFloatingText(
+        victim.x,
+        victim.y - 50,
+        `♻️ 동시 건설 충돌 환급 (+🪵${cost.wood} +🪨${cost.stone} +🪙${cost.gold})`,
+        '#fde047'
+      );
+    };
+
     // 동시 건설 경합 체크 1: 영지당 건설 개수 제한(예: 전직소/상점/용병길드 1개 제한) 충돌
     if (BuildingSystem.hasReachedTerritoryBuildingLimit(cb.territoryId, cb.type, constructedBuildings)) {
       const existingSameType = constructedBuildings.find(
@@ -410,6 +439,7 @@ export class TerritoryActionController {
         if (existingSameType.id.localeCompare(cb.id) <= 0) {
           return;
         }
+        refundIfLocalDisplaced(existingSameType);
         this.destroyConstructedBuilding(existingSameType.id, false);
       }
     }
@@ -429,6 +459,7 @@ export class TerritoryActionController {
       if (conflict.id.localeCompare(cb.id) <= 0) {
         return;
       }
+      refundIfLocalDisplaced(conflict);
       this.destroyConstructedBuilding(conflict.id, false);
     }
 

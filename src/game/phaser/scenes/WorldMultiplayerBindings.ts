@@ -46,7 +46,7 @@ export interface IWorldMultiplayerHost {
     action: PlayerAction;
   };
   unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean, ownerId?: string) => void;
-  upgradeVillageRemotely: (territoryId: number) => void;
+  upgradeVillageRemotely: (territoryId: number, targetTier?: import('../../../types/game').VillageTier) => void;
   onRemoteBuildingConstructed: (cb: ConstructedBuilding) => void;
   onRemoteBuildingHpSync?: (
     buildingId: string,
@@ -355,7 +355,9 @@ export function createWorldMultiplayerSync(
       markPeerCombatActive(ownerId);
       host.unlockIslandLocally(islandId, unlockedBy, false, ownerId);
     },
-    onRemoteVillageUpgraded: (territoryId) => host.upgradeVillageRemotely(territoryId),
+    onRemoteVillageUpgraded: (territoryId, targetTier) =>
+      host.upgradeVillageRemotely(territoryId, targetTier),
+    onRemotePlayerActive: (peerId) => markPeerCombatActive(peerId),
     onRemoteBuildingConstructed: host.onRemoteBuildingConstructed,
     onRemoteWaveSpawned: (isBossWave) => {
       sound.playBreak();

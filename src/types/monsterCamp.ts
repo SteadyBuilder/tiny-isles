@@ -16,6 +16,7 @@ export interface IMonsterCampContext {
   getDifficultyConfig?: () => MissionDifficultyConfig;
   getIslands: () => Island[];
   getMonsters: () => Map<string, import('../game/systems/MonsterVisualManager').MonsterVisual>;
+  getActivePlayerPositions?: () => Array<{ x: number; y: number }>;
   fortification?: CampFortificationSystem;
   addResources: (wood: number, stone: number, gold: number) => void;
   addThreat: (amount: number) => void;

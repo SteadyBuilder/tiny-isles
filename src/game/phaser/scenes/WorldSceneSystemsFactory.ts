@@ -87,7 +87,7 @@ export interface IWorldSystemsHost {
   saveWorldState: (immediate?: boolean) => void;
   emitWorldStateToReact: (immediate?: boolean) => void;
   unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean, ownerId?: string) => void;
-  upgradeVillageRemotely: (territoryId: number) => void;
+  upgradeVillageRemotely: (territoryId: number, targetTier?: import('../../../types/game').VillageTier) => void;
   onRemoteBuildingConstructed: (cb: ConstructedBuilding) => void;
   onRemoteBuildingHpSync?: (
     buildingId: string,
@@ -309,6 +309,15 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getDifficultyConfig: host.getDifficultyConfig,
     getIslands: host.getIslands,
     getMonsters: () => waveSystem.getMonsterVisuals(),
+    getActivePlayerPositions: () => {
+      const localState = host.getLocalPlayerState();
+      const localPos = { x: localState.x, y: localState.y };
+      const targets = multiplayerSync?.getActivePlayers(
+        localPos,
+        playerHealthSystem.isFainted()
+      );
+      return targets && targets.length > 0 ? targets : [localPos];
+    },
     fortification: campFortification,
     addResources: host.addResources,
     addThreat: (amount) => waveSystem.addThreat(amount, true),

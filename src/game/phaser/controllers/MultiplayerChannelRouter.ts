@@ -1,4 +1,4 @@
-import { HOST_SYNC_CONFIG } from '../../../data/worldRules';
+import { HOST_SYNC_CONFIG, PLAYER_SYNC_CONFIG } from '../../../data/worldRules';
 import { ProtocolRoomMeta } from '../../../shared/multiplayerProtocol';
 import { ConstructedBuilding } from '../../../types/game';
 import { RoomMode } from '../../../types/room';
@@ -12,6 +12,7 @@ import { CloudflareRoomTransport } from '../../../lib/transports/CloudflareRoomT
 import { LocalOfflineTransport } from '../../../lib/transports/LocalOfflineTransport';
 import { getCurrentBuildId } from '../../../lib/versionGuard';
 import { GameEvents } from '../../events/gameEvents';
+import { NetworkBatchQueue } from '../../systems/NetworkBatchQueue';
 import {
   IMultiplayerChannelCallbacks,
   SHARED_CHANNEL_EVENTS,
@@ -45,9 +46,23 @@ export class MultiplayerChannelRouter {
   private knownMemberIds = new Set<string>();
   private lastOnlineCount = -1;
   private lastMembersSignature = '';
+  private batchQueue: NetworkBatchQueue;
 
   constructor(callbacks: IMultiplayerChannelCallbacks) {
     this.callbacks = callbacks;
+    this.batchQueue = new NetworkBatchQueue({
+      flushIntervalMs: PLAYER_SYNC_CONFIG.eventBatchFlushMs,
+      onFlush: (events) => {
+        if (!this.transport) return;
+        if (this.transport.emitBatch) {
+          this.transport.emitBatch(events);
+        } else {
+          for (const item of events) {
+            this.transport.emit(item.event, item.payload);
+          }
+        }
+      },
+    });
   }
 
   public getIsHost(): boolean {
@@ -173,7 +188,32 @@ export class MultiplayerChannelRouter {
     this.transport?.emit(remoteEvent, { ...remotePayload, eventId });
   }
 
+  public emitBatched<T extends object>(
+    localType: string,
+    remoteEvent: string,
+    localPayload: T,
+    remotePayload: object = localPayload,
+    coalesceKey?: string
+  ): void {
+    const playerId = this.callbacks.getPlayerId();
+    const eventId = serverSync.createEventId(remoteEvent, playerId);
+    if (this.localBus && this.hasLocalBusPeer) {
+      this.localBus.postMessage({
+        type: localType,
+        senderId: playerId,
+        eventId,
+        payload: localPayload,
+      });
+    }
+    this.batchQueue.enqueue(
+      remoteEvent,
+      { ...(remotePayload as Record<string, unknown>), eventId },
+      coalesceKey
+    );
+  }
+
   public destroy(): void {
+    this.batchQueue.destroy();
     this.clearLobbyHostGraceTimer();
     for (const unsub of this.unsubscribers) {
       unsub();

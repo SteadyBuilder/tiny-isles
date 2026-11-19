@@ -118,7 +118,7 @@ export class FieldMonsterSystem {
           x: hx,
           y: hy,
           ring: m.campRing ?? 1,
-          zone: 'mid_field',
+          zone: m.fieldZone ?? 'mid_field',
           memberIds: [],
           respawnTimerMs: null,
         };
@@ -310,6 +310,7 @@ export class FieldMonsterSystem {
           isCampMonster: false,
           isFieldMonster: true,
           campRing: ring,
+          fieldZone: zone,
           homeX: centerX,
           homeY: centerY,
           patrolRadiusPx: FIELD_MONSTER_CONFIG.patrolRadiusPx,

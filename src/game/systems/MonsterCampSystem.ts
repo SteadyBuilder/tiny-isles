@@ -1,4 +1,4 @@
-import { CAMP_RING_TEMPLATES } from '../../data/monsterCamps';
+import { CAMP_PROXIMITY_SPAWN_CONFIG, CAMP_RING_TEMPLATES } from '../../data/monsterCamps';
 import {
   CampCoreHitPayload,
   CampCoreSyncPayload,
@@ -31,6 +31,7 @@ export type { CampVisualNode, IMonsterCampContext };
 export class MonsterCampSystem {
   private ctx: IMonsterCampContext;
   private campNodes = new Map<number, CampVisualNode>();
+  private spawnedCampIds = new Set<number>();
   private syncCoordinator = new CampSyncCoordinator();
   private respawnAccumMs = 0;
   private onlineCount = 1;
@@ -84,6 +85,7 @@ export class MonsterCampSystem {
     if (!this.ctx.isHuntingMode()) return;
 
     this.syncCoordinator.clearAll();
+    this.spawnedCampIds.clear();
     const scaling = this.getDifficultyMultipliers();
     this.appliedHpMult = scaling.hpMult;
     this.appliedAtkMult = scaling.atkMult;
@@ -97,7 +99,7 @@ export class MonsterCampSystem {
       hostAuthoritative,
       onSpawnFortification: (campState, hp, atk) =>
         this.ctx.fortification?.spawnForCamp(campState, hp, atk, false),
-      onSpawnGarrison: (campState) => this.spawnCampGarrison(campState),
+      onSpawnGarrison: (campState) => this.maybeSpawnCampGarrisonIfNearPlayer(campState),
     });
 
     this.ctx.fortification?.refreshWallColliders();
@@ -109,25 +111,58 @@ export class MonsterCampSystem {
     if (!this.ctx.isHuntingMode() || !this.isHost() || this.garrisonsInitialized) return;
     if (this.campNodes.size === 0) return;
 
-    const hasMigratedCampMonsters = Array.from(this.ctx.getMonsters().values()).some(
-      (mv) => mv.monster.isCampMonster && mv.monster.hp > 0
-    );
-    if (!hasMigratedCampMonsters) {
-      for (const node of this.campNodes.values()) {
-        if (!node.camp.destroyed) {
-          this.spawnCampGarrison(node.camp);
-        }
+    for (const mv of this.ctx.getMonsters().values()) {
+      if (mv.monster.isCampMonster && mv.monster.hp > 0 && mv.monster.campTerritoryId !== undefined) {
+        this.spawnedCampIds.add(mv.monster.campTerritoryId);
       }
     }
+
+    this.activateNearbyCampGarrisons();
     this.garrisonsInitialized = true;
   }
 
   public resetGuestGarrisonState(): void {
     this.garrisonsInitialized = false;
+    this.spawnedCampIds.clear();
     this.syncCoordinator.clearAll();
   }
 
+  private isAnyPlayerNearCamp(camp: MonsterCampState): boolean {
+    const players = this.ctx.getActivePlayerPositions?.();
+    if (!players || players.length === 0) {
+      return camp.ring <= 1;
+    }
+    const node = this.campNodes.get(camp.territoryId);
+    if (!node) return false;
+    const radiusSq =
+      CAMP_PROXIMITY_SPAWN_CONFIG.activationRadiusPx *
+      CAMP_PROXIMITY_SPAWN_CONFIG.activationRadiusPx;
+    for (const p of players) {
+      const dx = p.x - node.container.x;
+      const dy = p.y - node.container.y;
+      if (dx * dx + dy * dy <= radiusSq) return true;
+    }
+    return false;
+  }
+
+  private maybeSpawnCampGarrisonIfNearPlayer(camp: MonsterCampState): void {
+    if (camp.destroyed || this.spawnedCampIds.has(camp.territoryId)) return;
+    if (!this.isAnyPlayerNearCamp(camp)) return;
+    this.spawnCampGarrison(camp);
+  }
+
+  private activateNearbyCampGarrisons(): void {
+    if (!this.isHost()) return;
+    for (const node of this.campNodes.values()) {
+      if (node.camp.destroyed || this.spawnedCampIds.has(node.camp.territoryId)) continue;
+      if (this.isAnyPlayerNearCamp(node.camp)) {
+        this.spawnCampGarrison(node.camp);
+      }
+    }
+  }
+
   private spawnCampGarrison(camp: MonsterCampState): void {
+    this.spawnedCampIds.add(camp.territoryId);
     spawnCampGarrisonMonsters({
       scene: this.ctx.scene,
       camp,
@@ -367,6 +402,8 @@ export class MonsterCampSystem {
     if (this.respawnAccumMs < 1000) return;
     this.respawnAccumMs -= 1000;
 
+    this.activateNearbyCampGarrisons();
+
     const anyChanged = tickDestroyedCampRespawns({
       campNodes: this.campNodes,
       islands: this.ctx.getIslands(),
@@ -374,7 +411,8 @@ export class MonsterCampSystem {
       getScaling: () => this.getDifficultyMultipliers(),
       onRebuildCamp: (camp, hpMult, atkMult) => {
         this.ctx.fortification?.spawnForCamp(camp, hpMult, atkMult);
-        this.spawnCampGarrison(camp);
+        this.spawnedCampIds.delete(camp.territoryId);
+        this.maybeSpawnCampGarrisonIfNearPlayer(camp);
       },
       onCampRespawned: (camp) => {
         this.ctx.broadcastCampCoreSync?.(

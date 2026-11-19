@@ -131,24 +131,9 @@ export class RemotePlayerRenderer {
     if (posChanged) {
       visual.lastTargetX = data.x;
       visual.lastTargetY = data.y;
-      scene.tweens.killTweensOf(visual.container);
       if (serverSync.shouldSnapTeleport(visual.container.x, visual.container.y, data.x, data.y, 280)) {
         visual.container.setPosition(data.x, data.y);
         setDepthIfChanged(visual.container, ySortDepth(data.y, 24));
-      } else {
-        scene.tweens.add({
-          targets: visual.container,
-          x: data.x,
-          y: data.y,
-          duration: 145,
-          ease: 'Linear',
-          onUpdate: () => {
-            setDepthIfChanged(visual.container, ySortDepth(visual.container.y, 24));
-          },
-          onComplete: () => {
-            setDepthIfChanged(visual.container, ySortDepth(visual.container.y, 24));
-          },
-        });
       }
     }
 
@@ -179,6 +164,31 @@ export class RemotePlayerRenderer {
       if (scene.anims.exists(animKey)) {
         visual.sprite.play(animKey, true);
       }
+    }
+  }
+
+  /**
+   * 프레임 기반 지수 감쇠 선형 보간(Lerp) - 매 패킷 Tween 객체 할당/파괴로 인한 모바일 GC 잔끊김 제거
+   */
+  public update(deltaMs: number): void {
+    if (this.remotePlayers.size === 0) return;
+    const dtSec = Math.min(0.1, Math.max(0.001, deltaMs / 1000));
+    const lerpFactor = 1 - Math.exp(-12 * dtSec);
+
+    for (const visual of this.remotePlayers.values()) {
+      const dx = visual.lastTargetX - visual.container.x;
+      const dy = visual.lastTargetY - visual.container.y;
+      if (Math.abs(dx) < 0.35 && Math.abs(dy) < 0.35) {
+        if (dx !== 0 || dy !== 0) {
+          visual.container.setPosition(visual.lastTargetX, visual.lastTargetY);
+          setDepthIfChanged(visual.container, ySortDepth(visual.lastTargetY, 24));
+        }
+        continue;
+      }
+      const nextX = visual.container.x + dx * lerpFactor;
+      const nextY = visual.container.y + dy * lerpFactor;
+      visual.container.setPosition(nextX, nextY);
+      setDepthIfChanged(visual.container, ySortDepth(nextY, 24));
     }
   }
 

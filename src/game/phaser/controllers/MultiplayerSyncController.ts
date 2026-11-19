@@ -67,7 +67,8 @@ export interface IMultiplayerSyncContext {
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteEntityRespawned?: (entity: Entity) => void;
   onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
-  onRemoteVillageUpgraded: (territoryId: number) => void;
+  onRemoteVillageUpgraded: (territoryId: number, targetTier?: VillageTier) => void;
+  onRemotePlayerActive?: (playerId: string) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
   onRemoteWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
@@ -126,6 +127,7 @@ export class MultiplayerSyncController {
   private lastBroadcastTime = 0;
   private lastHeartbeatTime = 0;
   private lastSentState: LastSentMoveSnapshot | null = null;
+  private lastRemoteMovePos = new Map<string, { x: number; y: number }>();
   private hasConfirmedHostSession = false;
   private joinHelloTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -198,17 +200,29 @@ export class MultiplayerSyncController {
       },
       onRemotePlayerMove: (player) => {
         this.watchdog.recordPeerActivity(player.id);
+        const prevPos = this.lastRemoteMovePos.get(player.id);
+        const moved =
+          !prevPos ||
+          Math.abs(prevPos.x - player.x) >= 4 ||
+          Math.abs(prevPos.y - player.y) >= 4;
+        if (moved) {
+          this.lastRemoteMovePos.set(player.id, { x: player.x, y: player.y });
+          this.ctx.onRemotePlayerActive?.(player.id);
+        }
         this.remoteRenderer.updatePlayer(player, this.ctx.getPlayerId());
       },
-      onRemotePlayerLeave: (playerId) => this.remoteRenderer.removePlayer(playerId),
+      onRemotePlayerLeave: (playerId) => {
+        this.lastRemoteMovePos.delete(playerId);
+        this.remoteRenderer.removePlayer(playerId);
+      },
       onRemotePlayerSkillCast: (payload) => this.ctx.onRemotePlayerSkillCast?.(payload),
       onRemoteEntityHit: (entityId, damage, hitByName) =>
         this.ctx.onRemoteEntityHit(entityId, damage, hitByName),
       onRemoteEntityRespawned: (entity) => this.ctx.onRemoteEntityRespawned?.(entity),
       onRemoteIslandUnlocked: (islandId, unlockedBy, ownerId) =>
         this.ctx.onRemoteIslandUnlocked(islandId, unlockedBy, ownerId),
-      onRemoteVillageUpgraded: (territoryId) =>
-        this.ctx.onRemoteVillageUpgraded(territoryId),
+      onRemoteVillageUpgraded: (territoryId, targetTier) =>
+        this.ctx.onRemoteVillageUpgraded(territoryId, targetTier),
       onRemoteBuildingConstructed: (building) =>
         this.ctx.onRemoteBuildingConstructed(building),
       onRemoteWaveSpawned: (isBossWave) => this.ctx.onRemoteWaveSpawned(isBossWave),
@@ -258,7 +272,10 @@ export class MultiplayerSyncController {
       onRemoteTerritoryLost: (territoryId, reason) =>
         this.ctx.onRemoteTerritoryLost(territoryId, reason),
       onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) => {
-        this.watchdog.recordHostActivity();
+        // 게스트 개별 수리(damageDelta 미포함)가 호스트 생존 신호로 오인되지 않도록 전투 피해 시에만 기록
+        if (typeof damageDelta === 'number' && damageDelta > 0) {
+          this.watchdog.recordHostActivity();
+        }
         this.ctx.onRemoteBuildingHpSync?.(buildingId, hp, maxHp, damageDelta);
       },
       onRemoteBuildingDestroyed: (buildingId) =>
@@ -376,8 +393,9 @@ export class MultiplayerSyncController {
     this.startJoinHelloLoop();
   }
 
-  public update(): void {
+  public update(deltaMs = 16): void {
     this.watchdog.tick();
+    this.remoteRenderer.update(deltaMs);
   }
 
   public updateRoomMeta(
@@ -467,7 +485,7 @@ export class MultiplayerSyncController {
 
   public broadcastHit(entityId: string, damage: number): void {
     const payload = { entityId, damage, hitBy: this.ctx.getPlayerName() };
-    this.router.emit('hit', 'entity_hit', payload);
+    this.router.emitBatched('hit', 'entity_hit', payload);
   }
 
   public broadcastUnlock(islandId: number, unlockedBy: string, ownerId?: string): void {
@@ -512,15 +530,15 @@ export class MultiplayerSyncController {
   }
 
   public broadcastMonsterHit(payload: MonsterHitPayload): void {
-    this.router.emit('monster_hit', 'monster_hit', payload);
+    this.router.emitBatched('monster_hit', 'monster_hit', payload);
   }
 
   public broadcastMonsterPlayerAttack(payload: MonsterPlayerAttackPayload): void {
-    this.router.emit('monster_player_attack', 'monster_player_attack', payload);
+    this.router.emitBatched('monster_player_attack', 'monster_player_attack', payload);
   }
 
   public broadcastThreatAdded(amount: number): void {
-    this.router.emit('threat_added', 'threat_added', { amount });
+    this.router.emitBatched('threat_added', 'threat_added', { amount });
   }
 
   public broadcastThreatSync(payload: ThreatSyncPayload): void {
@@ -532,19 +550,31 @@ export class MultiplayerSyncController {
   }
 
   public broadcastCampStructureHit(payload: CampStructureHitPayload): void {
-    this.router.emit('camp_structure_hit', 'camp_structure_hit', payload);
+    this.router.emitBatched('camp_structure_hit', 'camp_structure_hit', payload);
   }
 
   public broadcastCampCoreHit(payload: CampCoreHitPayload): void {
-    this.router.emit('camp_core_hit', 'camp_core_hit', payload);
+    this.router.emitBatched('camp_core_hit', 'camp_core_hit', payload);
   }
 
   public broadcastCampStructureHpSync(payload: CampStructureHpSyncPayload): void {
-    this.router.emit('camp_structure_hp_sync', 'camp_structure_hp_sync', payload);
+    this.router.emitBatched(
+      'camp_structure_hp_sync',
+      'camp_structure_hp_sync',
+      payload,
+      payload,
+      `camp_struct_${payload.structureId}`
+    );
   }
 
   public broadcastCampCoreSync(payload: CampCoreSyncPayload): void {
-    this.router.emit('camp_core_sync', 'camp_core_sync', payload);
+    this.router.emitBatched(
+      'camp_core_sync',
+      'camp_core_sync',
+      payload,
+      payload,
+      `camp_core_${payload.territoryId}`
+    );
   }
 
   public broadcastCampFullSync(payload: CampFullSyncPayload): void {
@@ -564,12 +594,19 @@ export class MultiplayerSyncController {
     maxHp: number,
     damageDelta?: number
   ): void {
-    this.router.emit('building_hp_sync', 'building_hp_sync', {
+    const payload = {
       buildingId,
       hp,
       maxHp,
       damageDelta,
-    });
+    };
+    this.router.emitBatched(
+      'building_hp_sync',
+      'building_hp_sync',
+      payload,
+      payload,
+      `bld_hp_${buildingId}`
+    );
   }
 
   public broadcastBuildingDestroyed(buildingId: string): void {

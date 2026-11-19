@@ -286,8 +286,8 @@ export class WorldScene extends Phaser.Scene {
         this.persistence.emitWorldStateToReact(immediate),
       unlockIslandLocally: (id, by, local, ownerId) =>
         this.controllers.territoryAction.unlockIslandLocally(id, by, local, ownerId),
-      upgradeVillageRemotely: (id) =>
-        this.controllers.territoryAction.handleUpgradeVillage(id, false),
+      upgradeVillageRemotely: (id, targetTier) =>
+        this.controllers.territoryAction.handleUpgradeVillage(id, false, targetTier),
       onRemoteBuildingConstructed: (cb) =>
         this.controllers?.territoryAction.handleRemoteBuildingConstructed(cb),
       onRemoteBuildingHpSync: (buildingId, hp, maxHp, damageDelta) =>
@@ -490,7 +490,7 @@ export class WorldScene extends Phaser.Scene {
       campTargets: this.systems.monsterCampSystem.getActiveCampTargets(),
       dungeonPortal: this.systems.waveSystem.getDungeonPortalState(),
     });
-    this.systems.multiplayerSync?.update();
+    this.systems.multiplayerSync?.update(clampedDelta);
     this.systems.multiplayerSync?.maybeBroadcastPlayerMove(time);
     this.maybePublishPublicRoomDirectory(time);
     this.minimapEmitter?.update(time);

@@ -55,7 +55,7 @@ export interface IMultiplayerChannelCallbacks {
   onRemoteEntityHit: (entityId: string, damage: number, hitByName: string) => void;
   onRemoteEntityRespawned?: (entity: Entity) => void;
   onRemoteIslandUnlocked: (islandId: number, unlockedBy: string, ownerId?: string) => void;
-  onRemoteVillageUpgraded: (territoryId: number) => void;
+  onRemoteVillageUpgraded: (territoryId: number, targetTier?: import('../../../types/game').VillageTier) => void;
   onRemoteBuildingConstructed: (building: ConstructedBuilding) => void;
   onRemoteWaveSpawned: (isBossWave: boolean) => void;
   onRemoteWaveSummonRequest?: (isBossWave: boolean, isEarlySummon: boolean) => void;
@@ -168,9 +168,11 @@ export function dispatchSharedChannelEvent(
       callbacks.onRemoteIslandUnlocked(p.islandId, p.unlockedBy, p.ownerId);
       break;
     }
-    case 'village_upgraded':
-      callbacks.onRemoteVillageUpgraded((payload as { territoryId: number }).territoryId);
+    case 'village_upgraded': {
+      const p = payload as { territoryId: number; tier?: import('../../../types/game').VillageTier };
+      callbacks.onRemoteVillageUpgraded(p.territoryId, p.tier);
       break;
+    }
     case 'wave_spawned':
       callbacks.onRemoteWaveSpawned((payload as { isBossWave: boolean }).isBossWave);
       break;

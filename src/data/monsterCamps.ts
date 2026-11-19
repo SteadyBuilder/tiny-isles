@@ -54,6 +54,18 @@ export function computeCampRing(gridX: number, gridY: number): 1 | 2 | 3 | 4 {
 /**
  * 몬스터 부락 링(1~4)별 본진 내구도(3배), 주둔 병과(3배), 방어 타워·방어벽·외곽 순찰 설정
  */
+/**
+ * 사냥 모드 모바일 4인 부하 제어 (구역별 지연 스폰 & 동시 활성 몬스터 상한)
+ */
+export const CAMP_PROXIMITY_SPAWN_CONFIG = {
+  /** 플레이어(로컬 + 원격 팀원)가 이 반경(px) 이내로 접근한 부락만 주둔병을 지연 스폰 */
+  activationRadiusPx: 1850,
+  /** 맵 전체 부락 주둔병 동시 활성 상한 (초과 배율은 체력·경험치로 환산 보정) */
+  maxActiveCampMonsters: 240,
+  /** 단일 부락당 최대 스폰 마릿수 상한 */
+  maxMonstersPerCamp: 24,
+} as const;
+
 export const CAMP_RING_TEMPLATES: Record<1 | 2 | 3 | 4, CampRingTemplate> = {
   1: {
     ring: 1,

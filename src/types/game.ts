@@ -234,6 +234,7 @@ export interface Monster {
   isFieldMonster?: boolean;
   campTerritoryId?: number;
   campRing?: 1 | 2 | 3 | 4;
+  fieldZone?: 'near_village' | 'mid_field' | 'near_camp';
   homeX?: number;
   homeY?: number;
   patrolRadiusPx?: number;

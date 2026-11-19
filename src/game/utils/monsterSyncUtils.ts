@@ -83,7 +83,9 @@ export function roundMonsterSnapshotCoords(m: Monster): Monster {
   if (m.eliteTier) rounded.eliteTier = m.eliteTier;
   if (m.isCampMonster) rounded.isCampMonster = true;
   if (m.isFieldMonster) rounded.isFieldMonster = true;
+  if (typeof m.campTerritoryId === 'number') rounded.campTerritoryId = m.campTerritoryId;
   if (m.campRing) rounded.campRing = m.campRing;
+  if (m.fieldZone) rounded.fieldZone = m.fieldZone;
   if (typeof m.homeX === 'number' && Number.isFinite(m.homeX)) {
     rounded.homeX = Math.round(m.homeX);
   }
