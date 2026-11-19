@@ -28,6 +28,7 @@ interface BroadcastEnvelope {
 interface PresenceRawEntry extends PresenceEntryMeta {
   name?: string;
   color?: 'blue' | 'red';
+  appVersion?: string;
 }
 
 /**
@@ -73,7 +74,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
     const epoch = ++this.connectionEpoch;
     this.roomId = roomId;
     this.localPlayerId = playerId;
-    this.baseMeta = { name: meta.name, color: meta.color };
+    this.baseMeta = { name: meta.name, color: meta.color, appVersion: meta.appVersion };
     this.preferredHostId = meta.preferredHostId ?? '';
     this.isBackground =
       typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -198,6 +199,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
               joinedAt: this.currentJoinedAt || Date.now(),
               isBackground: this.isBackground,
               claimedEpoch: this.claimedEpoch,
+              appVersion: this.baseMeta.appVersion,
             },
           ];
         }
@@ -231,6 +233,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
                   joinedAt: this.currentJoinedAt,
                   isBackground: this.isBackground,
                   claimedEpoch: this.claimedEpoch,
+                  appVersion: this.baseMeta.appVersion,
                 },
               ];
               void this.trackPresenceState();
@@ -276,6 +279,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
               typeof latest?.joinedAt === 'number' ? latest.joinedAt : Number.MAX_SAFE_INTEGER,
             isBackground: latest?.isBackground === true,
             claimedEpoch: typeof latest?.claimedEpoch === 'number' ? latest.claimedEpoch : 0,
+            appVersion: typeof latest?.appVersion === 'string' ? latest.appVersion : undefined,
           };
         });
         members.sort((a, b) => a.joinedAt - b.joinedAt || a.playerId.localeCompare(b.playerId));
@@ -337,6 +341,7 @@ export class SupabaseRoomTransport implements INetworkTransport {
         joinedAt: this.currentJoinedAt || Date.now(),
         isBackground: this.isBackground,
         claimedEpoch: this.claimedEpoch,
+        appVersion: this.baseMeta.appVersion,
       });
       if (result === 'timed out' || result === 'error') {
         this.scheduleReconnect();

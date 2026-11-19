@@ -13,6 +13,11 @@ import { INSTANCE_ROOM_DEFAULTS } from '../data/missions';
 import { GameEvents } from '../game/events/gameEvents';
 import { saveRepository } from '../lib/repositories/LocalStorageSaveRepository';
 import { SupabaseRoomTransport } from '../lib/transports/SupabaseRoomTransport';
+import {
+  getCurrentBuildId,
+  isVersionMismatch,
+  triggerCacheBustingReload,
+} from '../lib/versionGuard';
 import { shouldTriggerSoloPauseOnEscape } from './useEscapeToClose';
 import { PlayerColor } from '../types/game';
 import {
@@ -268,6 +273,7 @@ export function useRoomLobbyState(
     const startedRoomConfig: RoomConfig = {
       ...roomConfig,
       hostPlayerId: playerId,
+      hostAppVersion: getCurrentBuildId(),
     };
     setRoomConfig(startedRoomConfig);
     if (transport) {

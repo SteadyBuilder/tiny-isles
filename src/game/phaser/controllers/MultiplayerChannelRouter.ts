@@ -8,6 +8,7 @@ import {
 import { serverSync } from '../../../lib/serverSync';
 import { LocalOfflineTransport } from '../../../lib/transports/LocalOfflineTransport';
 import { SupabaseRoomTransport } from '../../../lib/transports/SupabaseRoomTransport';
+import { getCurrentBuildId } from '../../../lib/versionGuard';
 import { GameEvents } from '../../events/gameEvents';
 import {
   IMultiplayerChannelCallbacks,
@@ -131,6 +132,7 @@ export class MultiplayerChannelRouter {
       name: this.callbacks.getPlayerName(),
       color: this.callbacks.getPlayerColor(),
       preferredHostId: this.callbacks.getPreferredHostId?.(),
+      appVersion: getCurrentBuildId(),
     });
   }
 

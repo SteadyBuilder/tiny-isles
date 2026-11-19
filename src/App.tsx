@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PhaserGame } from './game/PhaserGame';
 import { HUD } from './components/HUD';
 import { MobileControls } from './components/MobileControls';
@@ -25,14 +25,17 @@ import { RoomWaitingModal } from './components/lobby/RoomWaitingModal';
 import { MetaProgressionModal } from './components/lobby/MetaProgressionModal';
 import { AccountLinkModal } from './components/account/AccountLinkModal';
 import { AccountConflictModal } from './components/account/AccountConflictModal';
+import { AppUpdateOverlay } from './components/ui/AppUpdateOverlay';
 import { PixelGameButton } from './components/ui/PixelGameButton';
 import { WoodModalFrame } from './components/ui/WoodModalFrame';
 import { ConstructableType } from './types/game';
 import { GameEvents } from './game/events/gameEvents';
+import { analyzeRoomVersionCompatibility } from './lib/roomVersionUtils';
 import { sound, SoundSettings } from './lib/sound';
 import { useGameShellState } from './hooks/useGameShellState';
 import { useRoomLobbyState } from './hooks/useRoomLobbyState';
 import { useAccountSync } from './hooks/useAccountSync';
+import { useAppVersionGuard } from './hooks/useAppVersionGuard';
 
 export function App() {
   const {
@@ -124,6 +127,26 @@ export function App() {
     onApplyMeta: handleApplyMetaProgression,
   });
 
+  const versionGuard = useAppVersionGuard(sessionStatus);
+
+  const roomVersionCompatibility = useMemo(
+    () =>
+      analyzeRoomVersionCompatibility({
+        members: waitingMembers,
+        localPlayerId: playerId,
+        localBuildId: versionGuard.currentBuildId,
+        latestServerBuildId: versionGuard.latestBuildId,
+      }),
+    [playerId, versionGuard.currentBuildId, versionGuard.latestBuildId, waitingMembers]
+  );
+
+  // 대기실 참여자 중 버전이 다른 멤버가 감지되면 즉시 서버 최신 버전을 재확인해 구버전 쪽이 자동 갱신되도록 유도
+  useEffect(() => {
+    if (sessionStatus === 'waiting' && roomVersionCompatibility.hasMemberMismatch) {
+      void versionGuard.checkNow({ forceCheck: true });
+    }
+  }, [roomVersionCompatibility.hasMemberMismatch, sessionStatus, versionGuard.checkNow]);
+
   const handleLeaveToLobby = () => {
     leaveRoomToLobby();
     resetSessionShellState();
@@ -149,6 +172,13 @@ export function App() {
   if (sessionStatus === 'lobby' || sessionStatus === 'waiting') {
     return (
       <>
+        <AppUpdateOverlay
+          isUpdating={versionGuard.isUpdating}
+          updateAvailable={versionGuard.updateAvailable}
+          sessionStatus={sessionStatus}
+          onApplyUpdateNow={versionGuard.applyUpdateNow}
+        />
+
         <LobbyScreen
           playerName={profile.name}
           playerColor={profile.color}
@@ -171,6 +201,8 @@ export function App() {
             roomConfig={roomConfig}
             members={waitingMembers}
             isHost={isLobbyHost}
+            versionCompatibility={roomVersionCompatibility}
+            onForceUpdate={versionGuard.applyUpdateNow}
             onStartMatch={handleStartCoopMatch}
             onLeaveRoom={handleLeaveToLobby}
           />
@@ -426,6 +458,12 @@ export function App() {
       <WaveInvasionOverlay />
       <WaveAnnouncementBanner />
       <CombatDamageOverlay />
+      <AppUpdateOverlay
+        isUpdating={versionGuard.isUpdating}
+        updateAvailable={versionGuard.updateAvailable}
+        sessionStatus={sessionStatus}
+        onApplyUpdateNow={versionGuard.applyUpdateNow}
+      />
     </div>
   );
 }

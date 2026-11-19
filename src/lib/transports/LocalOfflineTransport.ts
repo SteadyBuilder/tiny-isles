@@ -35,6 +35,7 @@ export class LocalOfflineTransport implements INetworkTransport {
           joinedAt: Date.now(),
           isBackground: false,
           claimedEpoch: 0,
+          appVersion: meta.appVersion,
         },
       ],
     };

@@ -54,6 +54,7 @@ export interface RoomConfig {
   maxPlayers: number;
   hostPlayerId: string;
   inviteCode?: string;
+  hostAppVersion?: string;
 }
 
 export interface RoomMember {
@@ -64,6 +65,7 @@ export interface RoomMember {
   joinedAt: number;
   isBackground?: boolean;
   claimedEpoch?: number;
+  appVersion?: string;
 }
 
 export type RoomSessionStatus = 'lobby' | 'waiting' | 'playing' | 'paused' | 'ended';

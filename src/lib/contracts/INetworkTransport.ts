@@ -8,6 +8,7 @@ export interface NetworkPresenceMeta {
   isBackground?: boolean;
   claimedEpoch?: number;
   preferredHostId?: string;
+  appVersion?: string;
 }
 
 export interface NetworkPresenceSnapshot {
