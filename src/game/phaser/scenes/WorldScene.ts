@@ -245,7 +245,13 @@ export class WorldScene extends Phaser.Scene {
         this.controllers?.playerMovement.playCastVisual(durationMs),
       onPlayerClassVisualChanged: (classId) =>
         this.controllers?.playerMovement.setPlayerClassVisual(classId),
-      getLocalPlayerState: () => this.controllers.playerMovement.getState(),
+      getLocalPlayerState: () => {
+        if (this.controllers?.playerMovement) {
+          return this.controllers.playerMovement.getState();
+        }
+        const core = getTerritoryCorePos(0, 0);
+        return { x: core.x, y: core.y, direction: 'right', action: 'idle' };
+      },
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,
       getTerrainMap: () => this.terrainMap,
@@ -383,7 +389,8 @@ export class WorldScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupScene());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanupScene());
 
-    // 5. Notify React & Initialize Instance Mission
+    // 5. All systems & controllers ready -> attach multiplayer transport & notify React
+    this.systems.multiplayerSync.setup();
     GameEvents.on('game-pause-toggled', this.onPauseToggled);
     GameEvents.emit('scene-ready', this);
     GameEvents.emit('inventory-updated', this.inventory);

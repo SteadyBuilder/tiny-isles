@@ -312,8 +312,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     getIslands: host.getIslands,
     getMonsters: () => waveSystem.getMonsterVisuals(),
     getActivePlayerPositions: () => {
-      const localState = host.getLocalPlayerState();
-      const localPos = { x: localState.x, y: localState.y };
+      const localPos = host.getPlayerPosition();
       const targets = multiplayerSync?.getActivePlayers(
         localPos,
         playerHealthSystem.isFainted()
@@ -456,8 +455,7 @@ export function createWorldSystemsBundle(host: IWorldSystemsHost): WorldSystemsB
     },
   });
 
-  multiplayerSync.setup();
-
+  // multiplayerSync.setup()은 WorldScene.create()에서 모든 시스템·컨트롤러 생성 완료 후 호출
   return {
     coreGemSystem,
     playerHealthSystem,
