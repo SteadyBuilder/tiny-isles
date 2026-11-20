@@ -44,11 +44,18 @@ function makeBuilding(
 const RICH_INVENTORY: Inventory = { wood: 999, stone: 999, gold: 999, meat: 99 };
 const EMPTY_INVENTORY: Inventory = { wood: 0, stone: 0, gold: 0, meat: 0 };
 
-test('job_hall, tool_shop, and mercenary_guild enforce maxPerTerritory = 1', () => {
-  const uniqueTypes: ConstructableType[] = ['job_hall', 'tool_shop', 'mercenary_guild'];
+test('all special buildings enforce maxPerTerritory = 1', () => {
+  const uniqueTypes: ConstructableType[] = [
+    'special_barracks',
+    'special_sanctuary',
+    'job_hall',
+    'tool_shop',
+    'mercenary_guild',
+  ];
   const territory0 = makeTerritory(0);
 
   for (const type of uniqueTypes) {
+    assert.equal(getBlueprint(type).category, 'special');
     assert.equal(getBlueprint(type).maxPerTerritory, 1);
 
     const beforeCheck = BuildingSystem.checkBuild(territory0, type, RICH_INVENTORY, []);
@@ -93,11 +100,17 @@ test('unique buildings can still be built in another territory and rebuilt after
   assert.equal(rebuildCheck.canBuild, true);
 });
 
-test('non-unique buildings remain unrestricted by per-territory unique cap', () => {
+test('basic resource buildings are in basic category and remain repeatable', () => {
   const territory0 = makeTerritory(0, 4);
-  const repeatableTypes: ConstructableType[] = ['arrow_tower', 'basic_house', 'lumber_camp'];
+  const basicResourceTypes: ConstructableType[] = [
+    'basic_house',
+    'lumber_camp',
+    'stone_works',
+    'special_goldmine',
+  ];
 
-  for (const type of repeatableTypes) {
+  for (const type of basicResourceTypes) {
+    assert.equal(getBlueprint(type).category, 'basic');
     const existing = [makeBuilding(0, type, { id: 'b1', slotIndex: 4 })];
     assert.equal(BuildingSystem.hasReachedTerritoryBuildingLimit(0, type, existing), false);
     const check = BuildingSystem.checkBuild(territory0, type, RICH_INVENTORY, existing);

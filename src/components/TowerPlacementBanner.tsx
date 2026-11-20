@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { getBlueprint } from '../game/constants';
 import { GameEvents } from '../game/events/gameEvents';
 import { ConstructableType } from '../types/game';
-import { PixelGameButton } from './ui/PixelGameButton';
+import { PixelSquareButton } from './ui/PixelSquareButton';
+import { BUILDING_SPRITE_MAP } from './village/VillageBlueprintCard';
 
 interface PlacementBannerState {
   active: boolean;
@@ -30,60 +31,61 @@ export const TowerPlacementBanner: React.FC = () => {
 
   const bp = getBlueprint(state.type);
   const canConfirm = Boolean(state.hasSelection && state.isValid);
+  const spriteSrc = BUILDING_SPRITE_MAP[bp.spriteKey] || '/assets/ui/Icons/Tool_Hammer.png';
 
-  const modeLabel =
-    bp.category === 'tower'
-      ? '외곽 배치'
-      : bp.category === 'wall'
-        ? '방어선 배치'
-        : '위치 지정 배치';
   const promptText =
     bp.category === 'tower'
-      ? '초록색 외곽 영역의 원하는 곳을 선택하세요 (성문 제외)'
+      ? '초록색 외곽을 탭하세요'
       : bp.category === 'wall'
-        ? '북·남·동·서 4방향 방어선 중 건설할 위치를 선택하세요'
-        : '초록색 영지 내부 영역의 원하는 위치를 선택하세요';
+        ? '방어선 위치를 탭하세요'
+        : '초록색 영역을 탭하세요';
 
   return (
     <div
       id="tower-placement-banner"
-      className="fixed bottom-32 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92vw] max-w-md ts-wood-bar-tight text-[#fef5df]"
+      className="fixed bottom-32 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 w-[90vw] max-w-sm ts-wood-bar-tight text-[#fef5df]"
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-[#fde68a] pixel-btn-shadow">
-            <img src="/assets/ui/Icons/Tool_Hammer.png" alt="" className="w-4 h-4 pixel-art shrink-0" />
-            <span className="truncate">{bp.name} {modeLabel}</span>
-          </div>
-          <p
-            className={`text-[11px] font-bold mt-0.5 truncate pixel-btn-shadow ${
-              !state.hasSelection
-                ? 'text-[#f3e4c7]'
+        <div className="flex items-center gap-2 min-w-0">
+          <img src={spriteSrc} alt={bp.name} className="w-7 h-7 object-contain pixel-art shrink-0" />
+          <div className="min-w-0">
+            <div className="text-xs sm:text-sm font-black text-[#fde68a] pixel-btn-shadow truncate">
+              {bp.name}
+            </div>
+            <p
+              className={`text-[11px] font-bold truncate pixel-btn-shadow ${
+                !state.hasSelection
+                  ? 'text-[#f3e4c7]'
+                  : state.isValid
+                    ? 'text-[#86efac]'
+                    : 'text-[#fca5a5]'
+              }`}
+            >
+              {!state.hasSelection
+                ? promptText
                 : state.isValid
-                  ? 'text-[#86efac]'
-                  : 'text-[#fca5a5]'
-            }`}
-          >
-            {!state.hasSelection
-              ? promptText
-              : state.isValid
-                ? '배치 가능! 건설 확정 또는 해당 지점을 다시 탭하세요.'
-                : state.reason || '배치할 수 없는 위치입니다.'}
-          </p>
+                  ? '배치 가능 · 다시 탭하여 확정'
+                  : state.reason || '배치 불가'}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <PixelGameButton
+          <PixelSquareButton
             id="confirm-tower-placement-btn"
-            label="건설"
+            iconSrc="/assets/ui/Icons/Tool_Hammer.png"
+            alt="건설 확정"
+            title="건설 확정"
             variant="blue"
             size="sm"
             disabled={!canConfirm}
             onClick={() => GameEvents.emit('confirm-tower-placement')}
           />
-          <PixelGameButton
+          <PixelSquareButton
             id="cancel-tower-placement-btn"
-            label="취소"
+            label="✕"
+            alt="배치 취소"
+            title="배치 취소"
             variant="red"
             size="sm"
             onClick={() => GameEvents.emit('cancel-tower-placement')}
