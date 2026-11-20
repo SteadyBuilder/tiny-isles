@@ -369,7 +369,14 @@ export class PlayerProgressionSystem {
   }
 
   public selectClass(targetClassId: PlayerClassId): boolean {
-    if (targetClassId === this.classId) return false;
+    if (targetClassId === 'pawn' || targetClassId === this.classId) return false;
+    if (this.classId !== 'pawn') {
+      GameEvents.emit(
+        'game-alert',
+        '⚠️ 이미 전직을 완료하여 다른 클래스로 중복 전직할 수 없습니다.'
+      );
+      return false;
+    }
     const def = PLAYER_CLASS_DEFINITIONS[targetClassId];
     if (!def) return false;
 

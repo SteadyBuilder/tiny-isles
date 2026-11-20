@@ -27,6 +27,7 @@ import { checkToolShopProximity } from '../../utils/toolShopUtils';
 import {
   canPlayHitAnimation,
   computeOneShotAnimTimeScale,
+  computePlayerSpriteMetrics,
   isOneShotPlayerAction,
   resolvePostOneShotAction,
 } from '../../utils/playerAnimationUtils';
@@ -242,14 +243,23 @@ export class PlayerMovementController {
     this.playAnimation(this.currentAction);
   }
 
+  private syncPlayerVisualAndBody(): void {
+    if (!this.playerSprite) return;
+    const frameW = this.playerSprite.frame?.width || this.playerSprite.width || 192;
+    const frameH = this.playerSprite.frame?.height || this.playerSprite.height || 192;
+    const metrics = computePlayerSpriteMetrics(frameW, frameH);
+    this.playerSprite.setDisplaySize(metrics.displayWidth, metrics.displayHeight);
+    const body = this.playerSprite.body as Phaser.Physics.Arcade.Body | undefined;
+    if (body) {
+      body.setSize(metrics.bodyWidth, metrics.bodyHeight, false);
+      body.setOffset(metrics.offsetX, metrics.offsetY);
+    }
+  }
+
   public setPlayerClassVisual(classId: PlayerClassId): void {
     this.currentClassId = classId;
     if (!this.playerSprite) return;
-    if (classId === 'lancer') {
-      this.playerSprite.setDisplaySize(172, 172);
-    } else {
-      this.playerSprite.setDisplaySize(128, 128);
-    }
+    this.syncPlayerVisualAndBody();
     ensureClassSpritesLoaded(
       this.ctx.scene,
       this.getEffectiveCostumeColor(),
@@ -329,6 +339,7 @@ export class PlayerMovementController {
       const timeScale = computeOneShotAnimTimeScale(naturalDurationMs, targetDurationMs);
       this.playerSprite.anims.timeScale = timeScale;
       this.playerSprite.play(targetKey, false);
+      this.syncPlayerVisualAndBody();
 
       const expectedDurationMs =
         naturalDurationMs > 0 ? Math.ceil(naturalDurationMs / timeScale) : targetDurationMs ?? 300;
@@ -344,6 +355,7 @@ export class PlayerMovementController {
 
     this.playerSprite.anims.timeScale = 1;
     this.playerSprite.play(targetKey, true);
+    this.syncPlayerVisualAndBody();
 
     if (isOneShot) {
       const fallbackMs = targetDurationMs && targetDurationMs > 0 ? targetDurationMs : 240;
@@ -403,10 +415,8 @@ export class PlayerMovementController {
       startY,
       `${this.getEffectiveCostumeColor()}PawnIdle`
     );
-    this.playerSprite.setDisplaySize(128, 128);
     this.playerSprite.setCollideWorldBounds(true);
-    this.playerSprite.setSize(36, 24);
-    this.playerSprite.setOffset(78, 96);
+    this.syncPlayerVisualAndBody();
     this.playerSprite.setFlipX(this.currentDirection === 'left');
 
     scene.physics.add.collider(this.playerSprite, this.ctx.getBuildingColliders());

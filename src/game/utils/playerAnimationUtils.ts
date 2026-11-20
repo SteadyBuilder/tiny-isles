@@ -55,3 +55,51 @@ export function resolvePostOneShotAction(isFainted: boolean, isMoving: boolean):
   if (isFainted) return 'stun';
   return isMoving ? 'run' : 'idle';
 }
+
+export interface PlayerSpriteMetrics {
+  displayWidth: number;
+  displayHeight: number;
+  bodyWidth: number;
+  bodyHeight: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+const STANDARD_FRAME_THRESHOLD_PX = 256;
+const STANDARD_DISPLAY_SIZE_PX = 128;
+const LANCER_DISPLAY_SIZE_PX = 164;
+const PLAYER_WORLD_BODY_WIDTH_PX = 24;
+const PLAYER_WORLD_BODY_HEIGHT_PX = 16;
+const PLAYER_FOOT_ANCHOR_Y_RATIO = 108 / 192; // 0.5625 (192px 프레임 기준 발 중앙 y=108)
+
+/**
+ * 현재 바인딩된 스프라이트 프레임 크기(192x192 또는 창병 320x320)를 기준으로
+ * 일관된 화면 표시 크기와 성벽 문(88px) 통과가 원활한 24x16 월드 물리 콜라이더를 계산합니다.
+ */
+export function computePlayerSpriteMetrics(
+  frameWidth: number,
+  frameHeight: number
+): PlayerSpriteMetrics {
+  const safeW = Number.isFinite(frameWidth) && frameWidth > 0 ? frameWidth : 192;
+  const safeH = Number.isFinite(frameHeight) && frameHeight > 0 ? frameHeight : 192;
+  const isLargeSheet = Math.max(safeW, safeH) >= STANDARD_FRAME_THRESHOLD_PX;
+  const targetDisplaySize = isLargeSheet ? LANCER_DISPLAY_SIZE_PX : STANDARD_DISPLAY_SIZE_PX;
+
+  const scaleX = targetDisplaySize / safeW;
+  const scaleY = targetDisplaySize / safeH;
+
+  const bodyWidth = PLAYER_WORLD_BODY_WIDTH_PX / scaleX;
+  const bodyHeight = PLAYER_WORLD_BODY_HEIGHT_PX / scaleY;
+  const offsetX = safeW / 2 - bodyWidth / 2;
+  const offsetY = safeH * PLAYER_FOOT_ANCHOR_Y_RATIO - bodyHeight / 2;
+
+  return {
+    displayWidth: targetDisplaySize,
+    displayHeight: targetDisplaySize,
+    bodyWidth,
+    bodyHeight,
+    offsetX,
+    offsetY,
+  };
+}
+

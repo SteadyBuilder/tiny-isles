@@ -69,28 +69,31 @@ export const JobAdvancementModal: React.FC<JobAdvancementModalProps> = ({
           </span>
         </div>
         <p className="text-[11px] font-bold text-[#6e4625]">
-          사냥으로 <strong>Lv.{LEVEL_PROGRESSION_CONFIG.firstJobAdvancementLevel}</strong> 이상 달성 후 중앙 마을에 <strong>왕국 전직소</strong>를 건설하고 건물 앞으로 이동하면 4대 전투 클래스로 전직할 수 있습니다.
+          사냥으로 <strong>Lv.{LEVEL_PROGRESSION_CONFIG.firstJobAdvancementLevel}</strong> 이상 달성 후 중앙 마을에 <strong>왕국 전직소</strong>를 건설하고 건물 앞으로 이동하면 4대 전투 클래스 중 1개로 전직할 수 있습니다. (1회 전직 후 변경 불가)
         </p>
       </div>
 
       {/* 4 Classes Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-0.5">
         {ADVANCEMENT_CLASS_LIST.map((cls) => {
+          const hasAdvanced = progression.classId !== 'pawn';
           const isCurrent = progression.classId === cls.id;
           const levelMet = progression.level >= cls.requiredLevel;
-          const canAdvance = !isCurrent && levelMet && canUseHall;
+          const canAdvance = !hasAdvanced && !isCurrent && levelMet && canUseHall;
 
           const buttonLabel = isCurrent
             ? '전직 완료됨'
-            : !hasJobHallBuilt
-              ? '전직소 건설 필요'
-              : !isNearJobHall
-                ? '전직소 이동 필요'
-                : !levelMet
-                  ? `Lv.${cls.requiredLevel} 필요`
-                  : progression.classId === 'pawn' && progression.jobPoints > 0
-                    ? '전직하기 (무료 · 1pt)'
-                    : `전직하기 (${cls.costGold}🪙)`;
+            : hasAdvanced
+              ? '이미 전직 완료'
+              : !hasJobHallBuilt
+                ? '전직소 건설 필요'
+                : !isNearJobHall
+                  ? '전직소 이동 필요'
+                  : !levelMet
+                    ? `Lv.${cls.requiredLevel} 필요`
+                    : progression.jobPoints > 0
+                      ? '전직하기 (무료 · 1pt)'
+                      : `전직하기 (${cls.costGold}🪙)`;
 
           return (
             <div
