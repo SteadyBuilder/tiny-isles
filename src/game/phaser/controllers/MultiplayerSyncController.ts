@@ -493,6 +493,15 @@ export class MultiplayerSyncController {
       return;
     }
 
+    const hasUrgentStateChange =
+      !prev ||
+      prev.action !== state.action ||
+      prev.hp !== hp ||
+      prev.maxHp !== maxHp ||
+      prev.isFainted !== isFainted ||
+      prev.name !== name ||
+      prev.color !== color;
+
     this.lastBroadcastTime = time;
     this.lastHeartbeatTime = time;
     this.lastSentState = {
@@ -520,7 +529,12 @@ export class MultiplayerSyncController {
       isFainted,
       lastUpdated: Date.now(),
     };
-    this.router.emit('player_move', 'player_move', payload);
+
+    if (hasUrgentStateChange) {
+      this.router.emit('player_move', 'player_move', payload);
+    } else {
+      this.router.emitBatched('player_move', 'player_move', payload, payload, 'player_move');
+    }
   }
 
   public broadcastPlayerSkillCast(payload: RemotePlayerSkillCastPayload): void {

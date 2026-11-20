@@ -56,9 +56,9 @@ export function useRoomLobbyState(
   const lobbyTransportRef = useRef<CloudflareRoomTransport | null>(null);
   const lobbyUnsubsRef = useRef<Array<() => void>>([]);
 
-  // 로비 또는 대기실에 있을 때 Cloudflare LobbyDirectoryDO 실시간 방 목록 구독
+  // 로비 화면에서만 Cloudflare LobbyDirectoryDO 실시간 방 목록 구독 (대기실 진입 시 소켓 정리)
   useEffect(() => {
-    if (sessionStatus !== 'lobby' && sessionStatus !== 'waiting') return;
+    if (sessionStatus !== 'lobby') return;
     return roomDirectoryClient.subscribeListings((rooms) => {
       setPublicRooms(rooms);
     });

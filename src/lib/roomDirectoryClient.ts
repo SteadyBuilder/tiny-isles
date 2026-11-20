@@ -18,6 +18,7 @@ class RoomDirectoryClient {
   private currentRooms: PublicRoomListing[] = [];
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private restFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   public subscribeListings(listener: RoomDirectoryListener): () => void {
     this.listeners.add(listener);
@@ -46,8 +47,14 @@ class RoomDirectoryClient {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
-    void this.fetchInitialRest();
     this.openSocket();
+  }
+
+  private clearRestFallbackTimer(): void {
+    if (this.restFallbackTimer) {
+      clearTimeout(this.restFallbackTimer);
+      this.restFallbackTimer = null;
+    }
   }
 
   private async fetchInitialRest(): Promise<void> {
@@ -69,8 +76,18 @@ class RoomDirectoryClient {
       const ws = new WebSocket(buildDirectoryWsUrl());
       this.ws = ws;
 
+      // WebSocket이 2.5초 내로 열리지 못한 환경(프록시/방화벽 등)에서만 REST 폴백 1회 수행
+      this.clearRestFallbackTimer();
+      this.restFallbackTimer = setTimeout(() => {
+        this.restFallbackTimer = null;
+        if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {
+          void this.fetchInitialRest();
+        }
+      }, RECONNECT_DELAY_MS);
+
       ws.onopen = () => {
         if (this.ws !== ws) return;
+        this.clearRestFallbackTimer();
         if (this.pingTimer) clearInterval(this.pingTimer);
         this.pingTimer = setInterval(() => {
           if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -98,6 +115,7 @@ class RoomDirectoryClient {
       ws.onclose = () => {
         if (this.ws !== ws) return;
         this.ws = null;
+        this.clearRestFallbackTimer();
         if (this.pingTimer) {
           clearInterval(this.pingTimer);
           this.pingTimer = null;
@@ -114,7 +132,7 @@ class RoomDirectoryClient {
         // onclose에서 재연결
       };
     } catch {
-      // 무시
+      void this.fetchInitialRest();
     }
   }
 
@@ -126,6 +144,7 @@ class RoomDirectoryClient {
   }
 
   private teardown(): void {
+    this.clearRestFallbackTimer();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

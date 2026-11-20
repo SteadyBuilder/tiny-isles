@@ -86,13 +86,13 @@ export const HOST_SYNC_CONFIG = {
  */
 export const PLAYER_SYNC_CONFIG = {
   /** 상태 변경 시 최소 위치 브로드캐스트 간격 (ms) */
-  moveBroadcastIntervalMs: 65,
+  moveBroadcastIntervalMs: 85,
   /** 3~4인 협동 시 채널 여유 확보를 위한 위치 브로드캐스트 간격 (ms) */
   coopMoveBroadcastIntervalMs: 100,
   /** 고빈도 전투/피격 이벤트 배치 묶음 전송 주기 (ms) */
   eventBatchFlushMs: 80,
   /** 정지/동일 상태 유지 시 keep-alive 하트비트 전송 주기 (ms) */
-  idleHeartbeatMs: 1500,
+  idleHeartbeatMs: 5000,
 } as const;
 
 /**
