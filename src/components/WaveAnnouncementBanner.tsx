@@ -142,27 +142,51 @@ export const WaveAnnouncementBanner: React.FC = () => {
     <div
       id="wave-announcement-banner"
       aria-live="polite"
-      className="fixed inset-0 z-40 pointer-events-none flex items-center justify-center px-4"
+      className="fixed inset-x-0 top-14 sm:top-16 z-40 pointer-events-none flex justify-center px-3"
     >
       <div
         key={banner.key}
-        className={`relative w-full max-w-lg rounded-2xl border backdrop-blur-md px-4 py-3 sm:px-5 sm:py-3.5 flex items-center gap-3.5 sm:gap-4 ${
-          theme.containerClass
-        } ${banner.isLeaving ? 'animate-wave-banner-out' : 'animate-wave-banner-in'}`}
+        className={`relative w-full max-w-md ts-wood-bar-tight pt-3.5 pb-2 px-3 sm:px-4 flex items-center gap-3 text-[#fef5df] ${
+          banner.isLeaving ? 'animate-wave-banner-out' : 'animate-wave-banner-in'
+        }`}
+        style={
+          banner.isLeaving
+            ? { animationDuration: `${theme.fadeOutMs}ms` }
+            : undefined
+        }
       >
-        {/* 상단 하이라이트 라인 */}
-        <div
-          className={`pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent ${theme.accentLineClass} to-transparent`}
-        />
+        {/* 상단 Tiny Swords 리본 배지 스프라이트 */}
+        <div className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 flex items-center justify-center">
+          <div className="relative inline-flex items-center justify-center gap-1.5 px-6 py-1 min-w-[175px] sm:min-w-[205px]">
+            <img
+              src={theme.ribbonPath}
+              alt=""
+              className="absolute inset-0 w-full h-full object-fill pixel-art drop-shadow-[0_3px_5px_rgba(0,0,0,0.7)]"
+            />
+            <img
+              src={theme.iconPath}
+              alt=""
+              className="relative z-10 w-3.5 h-3.5 pixel-art shrink-0"
+            />
+            <span className="relative z-10 text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-[#fef5df] pixel-btn-shadow whitespace-nowrap">
+              {theme.badgeLabel} · W{banner.waveNumber}
+            </span>
+          </div>
+        </div>
 
-        {/* 좌측: 기존 픽셀 아트 몬스터/보스 스프라이트 애니메이션 */}
+        {/* 좌측: 우드 슬롯 + 픽셀 아트 몬스터/보스 스프라이트 애니메이션 */}
         <div
-          className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl bg-black/35 border border-white/15 overflow-hidden flex items-center justify-center"
+          className="relative w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-lg wood-hud-slot overflow-hidden flex items-center justify-center"
           style={{
-            boxShadow: `0 0 18px ${auraColor}`,
+            boxShadow: `inset 0 1.5px 3px rgba(0, 0, 0, 0.75), 0 0 12px ${auraColor}`,
           }}
         >
-          <div className="w-full h-full overflow-hidden relative">
+          <div
+            className="w-full h-full overflow-hidden relative"
+            style={{
+              transform: `scale(${banner.sprite.scale ?? 1.5})`,
+            }}
+          >
             <img
               src={banner.sprite.path}
               alt=""
@@ -171,43 +195,34 @@ export const WaveAnnouncementBanner: React.FC = () => {
                 width: `${banner.sprite.frames * 100}%`,
                 animation: `spriteStripRun ${banner.sprite.durationMs}ms steps(${banner.sprite.frames}) infinite`,
                 filter: banner.tintColorCss
-                  ? `drop-shadow(0 0 6px ${banner.tintColorCss})`
+                  ? `drop-shadow(0 0 5px ${banner.tintColorCss})`
                   : undefined,
               }}
             />
           </div>
         </div>
 
-        {/* 우측: 배지 + 타이틀 + 서브타이틀 */}
-        <div className="min-w-0 flex-1 flex flex-col gap-1">
+        {/* 우측: 타이틀 + 서브타이틀 + 보조 태그 */}
+        <div className="min-w-0 flex-1 flex flex-col gap-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span
-              className={`px-2 py-0.5 rounded-md border text-[10px] sm:text-[11px] font-black tracking-wider uppercase ${theme.badgeClass}`}
+            <h2
+              className={`text-sm sm:text-base font-black tracking-tight truncate pixel-btn-shadow ${theme.titleClass}`}
             >
-              {theme.badgeLabel}
-            </span>
-            <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-white/85 text-[10px] font-bold tabular-nums">
-              WAVE {banner.waveNumber}
-            </span>
+              {banner.title}
+            </h2>
             {banner.scalingLabel && (
-              <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/25 border border-indigo-300/35 text-indigo-100 text-[10px] font-bold">
+              <span className="px-1.5 py-0.5 rounded bg-[#24160e]/85 border border-[#85532a] text-[#fde68a] text-[10px] font-bold shrink-0">
                 {banner.scalingLabel}
               </span>
             )}
             {banner.isEarlySummon && (
-              <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/25 border border-emerald-300/40 text-emerald-200 text-[10px] font-bold">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-400/50 text-emerald-200 text-[10px] font-bold shrink-0">
                 조기소환 +35%
               </span>
             )}
           </div>
 
-          <h2
-            className={`text-base sm:text-xl font-black tracking-tight truncate drop-shadow ${theme.titleClass}`}
-          >
-            {banner.title}
-          </h2>
-
-          <p className="text-xs sm:text-sm text-slate-200/90 font-medium leading-snug line-clamp-2">
+          <p className="text-[11px] sm:text-xs text-[#f3e4c7] font-semibold leading-snug line-clamp-1 pixel-btn-shadow">
             {banner.subtitle}
           </p>
         </div>

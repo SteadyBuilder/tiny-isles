@@ -418,7 +418,7 @@ html, body {
 @keyframes waveBannerIn {
   0% {
     opacity: 0;
-    transform: translateY(10px) scale(0.94);
+    transform: translateY(-10px) scale(0.95);
   }
   100% {
     opacity: 1;
@@ -433,15 +433,15 @@ html, body {
   }
   100% {
     opacity: 0;
-    transform: translateY(-8px) scale(0.97);
+    transform: translateY(-10px) scale(0.96);
   }
 }
 
 .animate-wave-banner-in {
-  animation: waveBannerIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: waveBannerIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-wave-banner-out {
-  animation: waveBannerOut 0.42s ease-in forwards;
+  animation: waveBannerOut 0.26s ease-in forwards;
 }
 
