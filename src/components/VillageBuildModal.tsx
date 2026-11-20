@@ -313,7 +313,7 @@ export const VillageBuildModal: React.FC<VillageBuildModalProps> = ({
 
       {/* Blueprints Grid */}
       <div className="ts-paper-sheet p-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[42vh] sm:max-h-[46vh] overflow-y-auto overscroll-contain touch-pan-y pr-1 wood-modal-scroll">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {blueprints.map((bp, index) => {
             const isTower = bp.category === 'tower' && Boolean(onSelectTowerPlacement);
             const hasSlot = existingCount < maxSlots;

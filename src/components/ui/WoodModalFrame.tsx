@@ -44,7 +44,7 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
       onWheel={(e) => e.stopPropagation()}
     >
       <div
-        className={`relative w-full ${maxWidthClass} ${frameClass} max-h-[88vh] flex flex-col pt-3`}
+        className={`relative w-full ${maxWidthClass} ${frameClass} max-h-[88vh] supports-[height:100dvh]:max-h-[88dvh] flex flex-col pt-3`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Overlapping Tiny Swords Ribbon Title */}
@@ -83,7 +83,7 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
         )}
 
         {/* Scrollable Content Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 space-y-3 wood-modal-scroll">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pr-1 pb-1 space-y-3 wood-modal-scroll">
           {children}
         </div>
       </div>
