@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { User } from '@supabase/supabase-js';
-import { mapSupabaseUser } from '../auth/authUserMapper';
+import { mapSupabaseUser, parseOAuthCallbackError } from '../auth/authUserMapper';
 
 test('mapSupabaseUser extracts providers from identities', () => {
   const user = {
@@ -45,4 +45,16 @@ test('mapSupabaseUser falls back to app_metadata.providers when identities is ab
 
 test('mapSupabaseUser returns null for null user', () => {
   assert.equal(mapSupabaseUser(null), null);
+});
+
+test('parseOAuthCallbackError extracts and translates Supabase hash/query OAuth errors', () => {
+  assert.equal(parseOAuthCallbackError('', ''), null);
+  const exchangeErr = parseOAuthCallbackError(
+    '',
+    '#error=server_error&error_description=Unable+to+exchange+external+code'
+  );
+  assert.ok(exchangeErr && exchangeErr.includes('Client ID/Secret'));
+
+  const deniedErr = parseOAuthCallbackError('?error=access_denied', '');
+  assert.ok(deniedErr && deniedErr.includes('테스트 사용자'));
 });

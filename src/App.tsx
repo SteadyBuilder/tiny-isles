@@ -174,6 +174,12 @@ export function App() {
     }
   }, [sessionStatus, showInventoryModal, setShowInventoryModal]);
 
+  useEffect(() => {
+    if (accountSync.errorMessage && (sessionStatus === 'lobby' || sessionStatus === 'waiting')) {
+      setShowAccountModal(true);
+    }
+  }, [accountSync.errorMessage, sessionStatus]);
+
   if (sessionStatus === 'lobby' || sessionStatus === 'waiting') {
     return (
       <>

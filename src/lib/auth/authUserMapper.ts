@@ -75,3 +75,35 @@ export function mapSupabaseUser(user: User | null): AuthUserSummary | null {
     identities,
   };
 }
+
+/**
+ * OAuth 로그인/연동 리다이렉트 복귀 URL의 query(?error=...) 또는 hash(#error=...)에서
+ * 에러 메시지를 추출하고 사용자 친화적인 한국어 안내로 변환합니다.
+ */
+export function parseOAuthCallbackError(search: string, hash: string): string | null {
+  const searchParams = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+
+  const errorCode = searchParams.get('error') || hashParams.get('error');
+  const errorDesc =
+    searchParams.get('error_description') || hashParams.get('error_description') || '';
+
+  if (!errorCode && !errorDesc) return null;
+
+  const combined = `${errorCode ?? ''} ${errorDesc}`.toLowerCase();
+  if (combined.includes('unable to exchange external code')) {
+    return '소셜 인증 코드 교환에 실패했습니다. Supabase의 Client ID/Secret 오타나 공백, 또는 Redirect URI 설정을 확인해 주세요.';
+  }
+  if (combined.includes('access_denied')) {
+    return '소셜 로그인이 취소되었거나 접근이 거부되었습니다. (Google 앱이 테스트 상태라면 테스트 사용자에 이메일이 등록되어 있어야 합니다.)';
+  }
+  if (combined.includes('redirect_uri_mismatch')) {
+    return 'Redirect URI가 일치하지 않습니다. Google/Kakao 콘솔에 https://glupmjigierisxtzjfgn.supabase.co/auth/v1/callback 이 정확히 등록되어 있는지 확인해 주세요.';
+  }
+  if (combined.includes('provider is not enabled')) {
+    return 'Supabase 대시보드에서 해당 소셜 로그인 제공자가 활성화되지 않았습니다.';
+  }
+
+  return `소셜 로그인에 실패했습니다: ${errorDesc || errorCode}`;
+}
+

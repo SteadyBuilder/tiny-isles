@@ -10,6 +10,7 @@ import {
   writeSyncStorage,
 } from '../lib/accountSyncCoordinator';
 import { authService } from '../lib/auth/SupabaseAuthService';
+import { parseOAuthCallbackError } from '../lib/auth/authUserMapper';
 import { cloudSaveRepository } from '../lib/repositories/SupabaseCloudSaveRepository';
 import { SavedProfile } from '../lib/storage';
 import {
@@ -156,13 +157,23 @@ export function useAccountSync({
 
   useEffect(() => {
     let active = true;
+
+    if (typeof window !== 'undefined') {
+      const callbackError = parseOAuthCallbackError(window.location.search, window.location.hash);
+      if (callbackError) {
+        setErrorMessage(callbackError);
+        setSyncStatus('error');
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+
     const handleUser = (nextUser: AuthUserSummary | null) => {
       if (!active) return;
       setUser(nextUser);
       if (!nextUser) {
         reconciledUserIdRef.current = null;
         setConflict(null);
-        setSyncStatus('idle');
+        setSyncStatus((prev) => (prev === 'error' ? prev : 'idle'));
         return;
       }
       if (reconciledUserIdRef.current !== nextUser.userId) {
@@ -174,7 +185,7 @@ export function useAccountSync({
       .getCurrentUser()
       .then(handleUser)
       .catch(() => {
-        if (active) setSyncStatus('idle');
+        if (active) setSyncStatus((prev) => (prev === 'error' ? prev : 'idle'));
       });
 
     const unsubscribe = authService.onAuthStateChange(handleUser);
