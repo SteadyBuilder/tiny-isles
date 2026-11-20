@@ -1,13 +1,7 @@
-import type { User } from '@supabase/supabase-js';
-import { AuthUserSummary, LinkedIdentityInfo, SocialAuthProvider } from '../../types/auth';
+import { AuthUserSummary, SocialAuthProvider } from '../../types/auth';
 import { AuthActionResult, IAuthService } from '../contracts/IAuthService';
 import { supabase } from '../supabase';
-
-const SUPPORTED_PROVIDERS: ReadonlySet<string> = new Set<SocialAuthProvider>(['google', 'kakao']);
-
-function isSupportedProvider(value: string | undefined): value is SocialAuthProvider {
-  return typeof value === 'string' && SUPPORTED_PROVIDERS.has(value);
-}
+import { mapSupabaseUser } from './authUserMapper';
 
 function getDefaultRedirectUrl(): string {
   if (typeof window === 'undefined') return '';
@@ -29,64 +23,16 @@ function formatAuthError(rawMessage: string | undefined): string {
   return rawMessage;
 }
 
-function mapSupabaseUser(user: User | null): AuthUserSummary | null {
-  if (!user) return null;
-
-  const rawIdentities = Array.isArray(user.identities) ? user.identities : [];
-  const identities: LinkedIdentityInfo[] = [];
-
-  for (const identity of rawIdentities) {
-    if (!isSupportedProvider(identity.provider)) continue;
-    const data = (identity.identity_data ?? {}) as Record<string, unknown>;
-    identities.push({
-      provider: identity.provider,
-      identityId: identity.identity_id ?? identity.id,
-      email: typeof data.email === 'string' ? data.email : undefined,
-      displayName:
-        typeof data.full_name === 'string'
-          ? data.full_name
-          : typeof data.name === 'string'
-            ? data.name
-            : typeof data.preferred_username === 'string'
-              ? data.preferred_username
-              : undefined,
-      linkedAt: identity.created_at,
-    });
-  }
-
-  const providers = Array.from(new Set(identities.map((item) => item.provider)));
-  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
-  const displayName =
-    typeof metadata.full_name === 'string'
-      ? metadata.full_name
-      : typeof metadata.name === 'string'
-        ? metadata.name
-        : typeof metadata.preferred_username === 'string'
-          ? metadata.preferred_username
-          : identities[0]?.displayName;
-  const avatarUrl =
-    typeof metadata.avatar_url === 'string'
-      ? metadata.avatar_url
-      : typeof metadata.picture === 'string'
-        ? metadata.picture
-        : undefined;
-
-  return {
-    userId: user.id,
-    email: user.email ?? identities[0]?.email,
-    displayName,
-    avatarUrl,
-    providers,
-    identities,
-  };
-}
-
 /**
  * Supabase Auth 기반 Google / Kakao 소셜 로그인 및 다중 계정 연동 구현체
  */
 export class SupabaseAuthService implements IAuthService {
   public async getCurrentUser(): Promise<AuthUserSummary | null> {
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.user) {
+        return mapSupabaseUser(sessionData.session.user);
+      }
       const { data, error } = await supabase.auth.getUser();
       if (error) return null;
       return mapSupabaseUser(data.user);

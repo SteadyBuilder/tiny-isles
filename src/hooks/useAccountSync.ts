@@ -223,8 +223,14 @@ export function useAccountSync({
     };
   }, [conflict, guestPlayerId, meta, profile, user]);
 
+  const isAccountLinked = user !== null;
+
   const connectProvider = useCallback(
     async (provider: SocialAuthProvider) => {
+      if (user?.providers.includes(provider)) {
+        setStatusMessage('이미 연동되어 있는 소셜 계정입니다.');
+        return;
+      }
       setErrorMessage(null);
       setStatusMessage(null);
       setSyncStatus('loading');
@@ -333,6 +339,7 @@ export function useAccountSync({
 
   return {
     user,
+    isAccountLinked,
     syncStatus,
     lastSyncedAt,
     errorMessage,

@@ -144,14 +144,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         </div>
       </div>
 
-      {/* Bottom-Left: Guardian Profile Wood Plate (Click to open Account Link Modal) */}
+      {/* Bottom-Left: Guardian Profile Wood Plate (Click to open Account Management / Link Modal) */}
       <button
         type="button"
         onClick={() => {
           sound.playClick();
           onOpenAccountModal();
         }}
-        title="계정 연동 및 클라우드 저장 관리"
+        title={authUser ? '연동된 계정 정보 및 클라우드 동기화 관리' : '구글/카카오톡 계정 연동하기'}
         className="fixed bottom-3 left-3 sm:bottom-5 sm:left-5 z-20 flex items-center gap-1.5 sm:gap-2 ts-wood-bar pr-2.5 pl-1.5 sm:pr-3.5 sm:pl-2 py-0.5 sm:py-1 max-w-[calc(100vw-10.25rem)] sm:max-w-none text-left transition hover:brightness-110 active:scale-[0.98] cursor-pointer"
       >
         <img
@@ -171,11 +171,18 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             <span className="opacity-70">·</span>
             <span>클리어 {meta.totalClears}회</span>
             <span className="opacity-70">·</span>
-            <span className={authUser ? 'text-[#86efac]' : 'text-[#fde68a]'}>
-              {authUser && authUser.providers.length > 0
-                ? `${authUser.providers.map((p) => AUTH_PROVIDER_MAP[p].shortLabel).join('+')} 연동`
-                : '계정 연동 ↗'}
-            </span>
+            {authUser ? (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-[#14532d]/85 border border-[#4ade80]/70 text-[#bbf7d0] text-[9px] sm:text-[10px] font-black">
+                ✓{' '}
+                {authUser.providers.length > 0
+                  ? `${authUser.providers.map((p) => AUTH_PROVIDER_MAP[p].shortLabel).join('+')} 연동됨`
+                  : '계정 연동됨'}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-[#78350f]/85 border border-[#fbbf24]/70 text-[#fde68a] text-[9px] sm:text-[10px] font-black">
+                미연동 · 연동하기 ↗
+              </span>
+            )}
           </div>
         </div>
       </button>

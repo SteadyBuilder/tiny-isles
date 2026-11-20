@@ -170,18 +170,31 @@ export const HudSettingsModal: React.FC<HudSettingsModalProps> = ({
                     : 'bg-[#fef3c7] text-[#92400e] border-[#d97706]'
                 }`}
               >
-                {authUser && authUser.providers.length > 0
-                  ? authUser.providers.map((p) => AUTH_PROVIDER_MAP[p].shortLabel).join(' · ')
-                  : '게스트 모드'}
+                {authUser
+                  ? `✓ ${
+                      authUser.providers.length > 0
+                        ? authUser.providers.map((p) => AUTH_PROVIDER_MAP[p].shortLabel).join(' · ')
+                        : '소셜'
+                    } 연동 완료`
+                  : '미연동 (게스트)'}
               </span>
             </div>
-            <p className="text-[10px] font-bold text-[#6e4625]">
-              {authUser
-                ? '구글/카카오 계정으로 진행 데이터가 자동 백업됩니다.'
-                : '구글 또는 카카오톡을 연동해 기존 진행 정보를 안전하게 이어가세요.'}
-            </p>
+            {authUser ? (
+              <div className="rounded-lg bg-[#ecfdf5] border border-[#86efac] px-2 py-1.5 space-y-0.5">
+                <p className="text-[11px] font-black text-[#166534] truncate">
+                  {authUser.email || authUser.displayName || '소셜 계정 연결됨'}
+                </p>
+                <p className="text-[10px] font-bold text-[#15803d]">
+                  이미 계정이 연동되어 진행 데이터가 클라우드에 자동 저장됩니다.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[10px] font-bold text-[#6e4625]">
+                구글 또는 카카오톡을 연동해 기존 진행 정보를 안전하게 이어가세요.
+              </p>
+            )}
             <PixelGameButton
-              label={authUser ? '연동 계정 & 동기화 관리' : '구글 / 카카오톡 계정 연동하기'}
+              label={authUser ? '내 연동 계정 관리 (동기화 · 로그아웃)' : '구글 / 카카오톡 계정 연동하기'}
               variant="blue"
               size="sm"
               fullWidth

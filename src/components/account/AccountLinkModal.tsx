@@ -136,26 +136,42 @@ export const AccountLinkModal: React.FC<AccountLinkModalProps> = ({
         </div>
       )}
 
-      {/* Provider Connect / Link Buttons */}
+      {/* Provider Connect / Link Status */}
       <div className="ts-paper-sheet p-2.5 space-y-2">
         <div className="text-xs font-black text-[#3a200f]">
-          {user ? '소셜 계정 연동 관리' : '기존 정보를 이어갈 계정 선택'}
+          {user ? '연동된 소셜 계정' : '기존 정보를 이어갈 계정 선택'}
         </div>
 
         <div className="flex flex-col gap-2">
           {AUTH_PROVIDERS.map((provider) => {
             const isLinked = user?.providers.includes(provider.id) ?? false;
-            const buttonLabel = isLinked
-              ? `${provider.shortLabel} 계정 연동 완료`
-              : user
-                ? `${provider.shortLabel} 계정 추가 연동`
-                : provider.label;
+
+            if (isLinked) {
+              const identity = user?.identities.find((id) => id.provider === provider.id);
+              return (
+                <div
+                  key={provider.id}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border-2 border-[#16a34a] bg-[#ecfdf5] text-[#166534] text-xs font-black"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <ProviderBrandIcon provider={provider.id} className="w-4 h-4" />
+                    <span className="truncate">
+                      {provider.shortLabel} 연동 완료
+                      {identity?.email ? ` (${identity.email})` : ''}
+                    </span>
+                  </span>
+                  <span className="text-[10px] font-black shrink-0 px-1.5 py-0.5 rounded bg-[#dcfce7] border border-[#86efac]">
+                    ✓ 연동됨
+                  </span>
+                </div>
+              );
+            }
 
             return (
               <button
                 key={provider.id}
                 type="button"
-                disabled={isBusy || isLinked}
+                disabled={isBusy}
                 onClick={() => {
                   sound.playClick();
                   onConnectProvider(provider.id);
@@ -164,10 +180,10 @@ export const AccountLinkModal: React.FC<AccountLinkModalProps> = ({
               >
                 <span className="flex items-center gap-2">
                   <ProviderBrandIcon provider={provider.id} className="w-4 h-4" />
-                  <span>{buttonLabel}</span>
+                  <span>{user ? `${provider.shortLabel} 계정 추가 연동 (선택)` : provider.label}</span>
                 </span>
                 <span className="text-[10px] font-extrabold opacity-80">
-                  {isLinked ? '✓ 연결됨' : isBusy ? '처리 중...' : '연동 →'}
+                  {isBusy ? '처리 중...' : '연동 →'}
                 </span>
               </button>
             );
