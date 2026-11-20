@@ -3,6 +3,18 @@ import { LobbyDirectoryDO } from './LobbyDirectoryDO';
 
 export { GameRoomDO, LobbyDirectoryDO };
 
+function isOriginAllowed(origin: string, allowed: string[]): boolean {
+  if (allowed.length === 0 || allowed.includes('*')) return true;
+  for (const pattern of allowed) {
+    if (pattern === origin) return true;
+    if (pattern.includes('*')) {
+      const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+      if (new RegExp(`^${escaped}$`).test(origin)) return true;
+    }
+  }
+  return false;
+}
+
 function buildCorsHeaders(request: Request, env: WorkerEnv): Headers {
   const origin = request.headers.get('Origin') || '*';
   const allowed = (env.ALLOWED_ORIGINS || '')
@@ -10,15 +22,13 @@ function buildCorsHeaders(request: Request, env: WorkerEnv): Headers {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const allowOrigin =
-    allowed.length === 0 || allowed.includes('*') || allowed.includes(origin)
-      ? origin
-      : allowed[0];
+  const allowOrigin = isOriginAllowed(origin, allowed) ? origin : allowed[0];
 
   const headers = new Headers();
   headers.set('Access-Control-Allow-Origin', allowOrigin);
   headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  headers.set('Vary', 'Origin');
   return headers;
 }
 
