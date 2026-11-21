@@ -8,12 +8,13 @@ import {
   pickInferiorSalvageIds,
   rankBagItemsWithComparison,
 } from '../game/utils/equipmentScoreUtils';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 import { EquipmentSlot, PlayerProgressionState } from '../types/game';
-import { BagItemCard } from './inventory/BagItemCard';
+import { BagGridSlot } from './inventory/BagGridSlot';
 import { EquipmentSlotCard } from './inventory/EquipmentSlotCard';
+import { ItemComparisonPanel } from './inventory/ItemComparisonPanel';
 import { PixelGameButton } from './ui/PixelGameButton';
 import { WoodModalFrame } from './ui/WoodModalFrame';
-import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 interface InventoryModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
   progression,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   const rankedItems = useMemo(
     () =>
@@ -93,6 +95,11 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       ? rankedItems
       : rankedItems.filter((entry) => entry.item.slot === categoryFilter);
 
+  const selectedEntry =
+    filteredItems.find((entry) => entry.item.instanceId === selectedItemId) ??
+    filteredItems[0] ??
+    null;
+
   const inferiorGoldPreview = progression.bagItems
     .filter((it) => inferiorIds.includes(it.instanceId))
     .reduce((acc, it) => acc + it.salvageGold, 0);
@@ -107,7 +114,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       title="개인 장비 & 전리품 가방"
       ribbonVariant="blue"
       frameVariant="wood"
-      maxWidthClass="max-w-2xl"
+      maxWidthClass="max-w-3xl"
       onClose={onClose}
       headerRight={
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#29150b]/85 border border-[#b89568] text-xs font-black text-[#fde68a]">
@@ -233,11 +240,9 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
 
       {/* Equipped 3 Slots */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-black text-[#fef3c7] drop-shadow">
-            장착 중인 장비 (슬롯 클릭 시 해당 부위만 필터링)
-          </span>
-        </div>
+        <span className="text-xs font-black text-[#fef3c7] drop-shadow block">
+          장착 중인 장비 (슬롯 클릭 시 해당 부위만 필터링)
+        </span>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {slots.map((slot) => (
             <EquipmentSlotCard
@@ -254,7 +259,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       </div>
 
       {/* Category Filter Tabs & Batch Actions */}
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1">
             {CATEGORY_TABS.map((tab) => {
@@ -285,7 +290,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
             <PixelGameButton
               label={
                 recommendedIds.length > 0
-                  ? `✨ 추천 일괄장착 (${recommendedIds.length})`
+                  ? `✨ 일괄 장착 (${recommendedIds.length})`
                   : '✨ 최적 장착중'
               }
               variant="blue"
@@ -302,31 +307,42 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                   ? 'bg-[#fef3c7] border-[#b45309] text-[#92400e] hover:brightness-105 active:scale-95'
                   : 'bg-[#29150b]/40 border-[#5c422a] text-[#a8a29e] cursor-not-allowed'
               }`}
-              title="추천 장비보다 효율이 낮은 일반~전설 장비를 한 번에 분해합니다 (세트 아이템 보호)"
+              title="하위 일반~전설 장비를 한 번에 분해합니다 (세트 아이템 보호)"
             >
-              🔨 하위 일괄분해 ({inferiorIds.length} · +{inferiorGoldPreview}🪙)
+              🔨 하위 분해 ({inferiorIds.length} · +{inferiorGoldPreview}🪙)
             </button>
           </div>
         </div>
 
-        {/* Bag Items List */}
-        <div className="ts-paper-sheet p-2 max-h-72 overflow-y-auto space-y-1.5">
-          {filteredItems.length === 0 ? (
-            <div className="py-6 text-center text-xs font-bold text-[#6e4625]">
-              {progression.bagItems.length === 0
-                ? '가방이 비어 있습니다. 정예·보스 사냥 또는 몬스터 부락 본진을 파괴해 장비를 획득하세요!'
-                : '선택한 카테고리에 해당하는 장비가 가방에 없습니다.'}
-            </div>
-          ) : (
-            filteredItems.map((entry) => (
-              <BagItemCard
-                key={entry.item.instanceId}
-                entry={entry}
-                equipped={progression.equipped}
-                playerClassId={progression.classId}
-              />
-            ))
-          )}
+        {/* Diablo-style Split: Bag Icon Grid + Selected Item Comparison Panel */}
+        <div className="grid grid-cols-1 md:grid-cols-[1.05fr_1fr] gap-2.5 items-stretch">
+          <div className="ts-paper-sheet p-2 max-h-72 overflow-y-auto">
+            {filteredItems.length === 0 ? (
+              <div className="py-10 text-center text-xs font-bold text-[#6e4625]">
+                {progression.bagItems.length === 0
+                  ? '가방이 비어 있습니다. 정예·보스 사냥 또는 몬스터 부락 본진을 파괴해 장비를 획득하세요!'
+                  : '선택한 카테고리에 해당하는 장비가 가방에 없습니다.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5">
+                {filteredItems.map((entry) => (
+                  <BagGridSlot
+                    key={entry.item.instanceId}
+                    entry={entry}
+                    isSelected={selectedEntry?.item.instanceId === entry.item.instanceId}
+                    playerClassId={progression.classId}
+                    onSelect={setSelectedItemId}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <ItemComparisonPanel
+            selectedEntry={selectedEntry}
+            equipped={progression.equipped}
+            playerClassId={progression.classId}
+          />
         </div>
       </div>
     </WoodModalFrame>

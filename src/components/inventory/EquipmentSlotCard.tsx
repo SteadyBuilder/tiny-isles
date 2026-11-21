@@ -60,8 +60,11 @@ export const EquipmentSlotCard: React.FC<EquipmentSlotCardProps> = ({
       <div className="flex items-center justify-between gap-1">
         <span className="text-[10px] font-black text-[#5c422a]">{meta.label}</span>
         {hasUpgradeAvailable && (
-          <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-black animate-pulse">
-            ▲ 교체 추천
+          <span
+            className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] font-black inline-flex items-center justify-center shadow-sm"
+            aria-label="상위 장비 보유"
+          >
+            ▲
           </span>
         )}
       </div>

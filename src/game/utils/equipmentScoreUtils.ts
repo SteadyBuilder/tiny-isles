@@ -200,6 +200,44 @@ export function formatEquipmentStatsTags(stats: Partial<EquipmentStats>): string
   return tags;
 }
 
+export type StatCompareDirection = 'up' | 'down' | 'same';
+
+export interface StatComparisonRow {
+  key: keyof EquipmentStats;
+  label: string;
+  suffix: string;
+  candidateValue: number;
+  equippedValue: number;
+  direction: StatCompareDirection;
+}
+
+/**
+ * 선택 아이템과 현재 착용 장비의 스탯을 비교하여 화살표 방향(up/down/same)을 계산
+ */
+export function buildStatComparisonRows(
+  candidate: EquipmentItem,
+  equipped: EquipmentItem | null
+): StatComparisonRow[] {
+  const rows: StatComparisonRow[] = [];
+  for (const m of STAT_META) {
+    const candidateValue = candidate[m.key] ?? 0;
+    const equippedValue = equipped?.[m.key] ?? 0;
+    if (candidateValue === 0 && equippedValue === 0) continue;
+    let direction: StatCompareDirection = 'same';
+    if (candidateValue > equippedValue) direction = 'up';
+    else if (candidateValue < equippedValue) direction = 'down';
+    rows.push({
+      key: m.key,
+      label: m.label,
+      suffix: m.suffix,
+      candidateValue,
+      equippedValue,
+      direction,
+    });
+  }
+  return rows;
+}
+
 export interface BagItemWithComparison {
   item: EquipmentItem;
   comparison: ItemComparisonResult;
