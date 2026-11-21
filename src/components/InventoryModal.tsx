@@ -238,18 +238,17 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
         </div>
       </div>
 
-      {/* Equipped 3 Slots */}
-      <div className="space-y-1.5">
-        <span className="text-xs font-black text-[#fef3c7] drop-shadow block">
-          장착 중인 장비 (슬롯 클릭 시 해당 부위만 필터링)
+      {/* Equipped 3 Slots (Compact 3-column row at a glance) */}
+      <div className="space-y-1">
+        <span className="text-[11px] font-black text-[#fef3c7] drop-shadow block">
+          장착 장비 (클릭 시 해당 부위 필터)
         </span>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1.5">
           {slots.map((slot) => (
             <EquipmentSlotCard
               key={slot}
               slot={slot}
               equippedItem={progression.equipped[slot]}
-              allEquipped={progression.equipped}
               isFilterSelected={categoryFilter === slot}
               hasUpgradeAvailable={upgradeBySlot[slot]}
               onSelectSlotFilter={handleToggleSlotFilter}
