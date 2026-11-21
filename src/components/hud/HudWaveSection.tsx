@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { WaveState } from '../../types/game';
+import { CenterVillageHp, WaveState } from '../../types/game';
 import { HUD_STATUS_ICONS } from '../../data/hudIcons';
 import { PixelThreatGauge } from '../ui/PixelThreatGauge';
+import { WaveCenterStatusBanner } from './WaveCenterStatusBanner';
 
 export interface HudWaveSectionProps {
   waveState?: WaveState;
+  centerVillageHp?: CenterVillageHp;
   onlineCount?: number;
   alertMessage?: string | null;
   onTriggerRegularWave?: () => void;
@@ -17,6 +19,7 @@ export interface HudWaveSectionProps {
 
 export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
   waveState,
+  centerVillageHp,
   onlineCount = 1,
   alertMessage,
   onTriggerRegularWave,
@@ -233,33 +236,12 @@ export const HudWaveSection: React.FC<HudWaveSectionProps> = ({
         </div>
       )}
 
-      {/* Active Boss HP Bar Banner (보스 출현 시에만 상단 중앙 표시) */}
-      {waveState?.activeBoss && (
-        <div
-          id="active-boss-banner"
-          className="self-center w-full max-w-md bg-red-950/90 border-2 border-red-500 rounded-2xl px-3.5 py-1.5 shadow-2xl pointer-events-auto animate-fadeIn"
-        >
-          <div className="flex items-center justify-between text-xs font-black text-red-200 mb-1 tabular-nums">
-            <span className="flex items-center gap-1.5">
-              <img src={HUD_STATUS_ICONS.boss} alt="" className="w-4 h-4 pixel-art shrink-0" />
-              <span>{waveState.activeBoss.targetTerritoryName}</span>
-            </span>
-            <span>
-              {waveState.activeBoss.hp} / {waveState.activeBoss.maxHp}
-            </span>
-          </div>
-          <div className="w-full h-2.5 bg-black/70 rounded-full overflow-hidden border border-red-400/40">
-            <div
-              className="h-full bg-gradient-to-r from-red-600 to-amber-500 transition-all duration-200"
-              style={{
-                width: `${Math.round(
-                  (waveState.activeBoss.hp / Math.max(1, waveState.activeBoss.maxHp)) * 100
-                )}%`,
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {/* 웨이브 중 마을(본진) 체력 & 보스 체력 분리 배너 */}
+      <WaveCenterStatusBanner
+        waveState={waveState}
+        centerVillageHp={centerVillageHp}
+        variant="desktop"
+      />
 
       {/* Alert Toast Banner */}
       {alertMessage && (

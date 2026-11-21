@@ -265,6 +265,12 @@ export interface WaveState {
   activeGarrisonCount?: number;
 }
 
+export interface CenterVillageHp {
+  name: string;
+  hp: number;
+  maxHp: number;
+}
+
 export interface ThreatOrbFxPayload {
   startX: number;
   startY: number;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Inventory, PlayerColor, PlayerHpState, WaveState } from '../types/game';
+import { CenterVillageHp, Inventory, PlayerColor, PlayerHpState, WaveState } from '../types/game';
 import { MissionProgressState, RoomMode } from '../types/room';
 import { sound, SoundSettings } from '../lib/sound';
 import { SoundModal } from './SoundModal';
@@ -21,6 +21,7 @@ interface HUDProps {
   unlockedCount?: number;
   totalIslands?: number;
   waveState?: WaveState;
+  centerVillageHp?: CenterVillageHp;
   alertMessage?: string | null;
   missionProgress?: MissionProgressState | null;
   roomMode?: RoomMode;
@@ -44,6 +45,7 @@ export const HUD: React.FC<HUDProps> = ({
   unlockedCount = 1,
   totalIslands = 21,
   waveState,
+  centerVillageHp,
   alertMessage,
   missionProgress,
   roomMode,
@@ -108,6 +110,7 @@ export const HUD: React.FC<HUDProps> = ({
 
         <HudWaveSection
           waveState={waveState}
+          centerVillageHp={centerVillageHp}
           onlineCount={onlineCount}
           alertMessage={alertMessage}
           onTriggerRegularWave={onTriggerRegularWave}
@@ -126,6 +129,7 @@ export const HUD: React.FC<HUDProps> = ({
         unlockedCount={unlockedCount}
         totalIslands={totalIslands}
         waveState={waveState}
+        centerVillageHp={centerVillageHp}
         alertMessage={alertMessage}
         missionProgress={missionProgress}
         roomMode={roomMode}

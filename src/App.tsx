@@ -282,6 +282,15 @@ export function App() {
     );
   }
 
+  const centerTerritory = territories.find((t) => t.id === 0) ?? territories[0];
+  const centerVillageHp = centerTerritory
+    ? {
+        name: centerTerritory.name,
+        hp: centerTerritory.coreHp,
+        maxHp: centerTerritory.coreMaxHp,
+      }
+    : undefined;
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#1a331a]">
       <HUD
@@ -295,6 +304,7 @@ export function App() {
         unlockedCount={islandStats.unlocked}
         totalIslands={islandStats.total}
         waveState={waveState}
+        centerVillageHp={centerVillageHp}
         alertMessage={alertMessage}
         missionProgress={missionProgress}
         roomMode={roomConfig.mode}

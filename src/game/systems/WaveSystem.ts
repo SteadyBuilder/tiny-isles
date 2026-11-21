@@ -376,13 +376,17 @@ export class WaveSystem {
   }
 
   public applyRemoteMonstersDeltaSync(payload: MonstersDeltaSyncPayload): void {
+    const prevBossHp = this.waveState.activeBoss?.hp ?? null;
     const { killedCount, spawnedCount } = this.syncBridge.applyRemoteDeltaSync(this.ctx.scene, this.monsters, payload, {
       onExplosion: (x, y) => this.ctx.playExplosionAt(x, y),
       onShake: (target) => this.ctx.shakeObject(target),
       onRemoteKill: (kill) => this.ctx.onRemoteMonsterKilledReward?.(kill),
     });
+    const bossHpChanged =
+      this.waveState.activeBoss !== null &&
+      (this.monsters.get(this.waveState.activeBoss.id)?.monster.hp ?? null) !== prevBossHp;
     if (spawnedCount > 0) this.ctx.onMonstersChanged?.();
-    if (killedCount > 0 || spawnedCount > 0) {
+    if (killedCount > 0 || spawnedCount > 0 || bossHpChanged) {
       this.combatAI.pruneStaleMonsterState(new Set(this.monsters.keys()));
       this.emitWaveState();
     }
@@ -418,16 +422,17 @@ export class WaveSystem {
     attackerId?: string,
     hitMeta?: { isSkill?: boolean; isCrit?: boolean }
   ): void {
+    const isBossTarget = Boolean(this.monsters.get(monsterId)?.monster.isBoss);
     const killed = this.combatAI.damageMonster({
       monsterId, damage, sourceName, attackerId, fromRemote, isHost: this.isHost,
       bonusMultiplier: this.threatTracker.getActiveBonusMultiplier(), hitMeta,
     });
-    if (killed) {
+    if (killed || isBossTarget) {
       this.emitWaveState();
-      if (this.isHost) {
-        this.syncBridge.scheduleDeltaSyncFlush(() => this.monsters);
-        this.ctx.onMonstersChanged?.();
-      }
+    }
+    if (killed && this.isHost) {
+      this.syncBridge.scheduleDeltaSyncFlush(() => this.monsters);
+      this.ctx.onMonstersChanged?.();
     }
   }
 

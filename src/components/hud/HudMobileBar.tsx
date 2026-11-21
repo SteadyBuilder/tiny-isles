@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Inventory, PlayerHpState, WaveState } from '../../types/game';
+import { CenterVillageHp, Inventory, PlayerHpState, WaveState } from '../../types/game';
 import { MissionProgressState, RoomMode } from '../../types/room';
 import { HUD_STATUS_ICONS } from '../../data/hudIcons';
 import { HUD_RESOURCE_SLOTS } from './hudUtils';
 import { PixelRoundButton } from '../ui/PixelRoundButton';
 import { PixelThreatGauge } from '../ui/PixelThreatGauge';
 import { MissionHudBanner } from '../MissionHudBanner';
+import { WaveCenterStatusBanner } from './WaveCenterStatusBanner';
 
 export interface HudMobileBarProps {
   inventory: Inventory;
@@ -13,6 +14,7 @@ export interface HudMobileBarProps {
   unlockedCount: number;
   totalIslands: number;
   waveState?: WaveState;
+  centerVillageHp?: CenterVillageHp;
   alertMessage?: string | null;
   missionProgress?: MissionProgressState | null;
   roomMode?: RoomMode;
@@ -30,6 +32,7 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
   unlockedCount,
   totalIslands,
   waveState,
+  centerVillageHp,
   alertMessage,
   missionProgress = null,
   roomMode = 'solo',
@@ -204,7 +207,14 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
         variant="mobile-inline"
       />
 
-      {/* Row 4: Mobile Alert Toast Banner */}
+      {/* Row 4: Mobile Village Core HP & Boss HP Center Banner */}
+      <WaveCenterStatusBanner
+        waveState={waveState}
+        centerVillageHp={centerVillageHp}
+        variant="mobile"
+      />
+
+      {/* Row 5: Mobile Alert Toast Banner */}
       {alertMessage && (
         <div
           id="game-alert-banner-mobile"
