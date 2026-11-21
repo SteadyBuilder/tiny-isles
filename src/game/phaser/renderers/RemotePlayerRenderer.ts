@@ -1,8 +1,14 @@
 import Phaser from 'phaser';
 import { PLAYER_COMBAT_CONFIG } from '../../../data/worldRules';
-import { Player } from '../../../types/game';
+import { Player, PlayerClassId, PlayerColor } from '../../../types/game';
 import { serverSync } from '../../../lib/serverSync';
 import { setDepthIfChanged, ySortDepth } from '../../depthLayers';
+import {
+  computePlayerSpriteMetrics,
+  normalizePlayerClassId,
+  resolveRemotePlayerAnimKey,
+} from '../../utils/playerAnimationUtils';
+import { ensureClassSpritesLoaded } from '../utils/classAssetLoader';
 
 const HP_BAR_WIDTH = 48;
 const HP_BAR_HEIGHT = 5;
@@ -18,6 +24,8 @@ interface RemotePlayerVisual {
   lastTargetY: number;
   lastName: string;
   lastDirection: 'left' | 'right';
+  lastClassId: PlayerClassId;
+  lastColor: PlayerColor;
   lastAnimKey: string;
   lastHp: number;
   lastMaxHp: number;
@@ -65,11 +73,44 @@ export class RemotePlayerRenderer {
     }
   }
 
+  private syncSpriteDisplaySize(sprite: Phaser.GameObjects.Sprite): void {
+    const frameW = sprite.frame?.realWidth || sprite.width || 192;
+    const frameH = sprite.frame?.realHeight || sprite.height || 192;
+    const metrics = computePlayerSpriteMetrics(frameW, frameH);
+    sprite.setDisplaySize(metrics.displayWidth, metrics.displayHeight);
+  }
+
+  private applyRemoteAnimation(visual: RemotePlayerVisual, forcePlay = false): void {
+    const animKey = resolveRemotePlayerAnimKey(
+      visual.lastColor,
+      visual.lastClassId,
+      visual.data.action,
+      (key) => this.scene.anims.exists(key)
+    );
+    if (!forcePlay && visual.lastAnimKey === animKey) return;
+    visual.lastAnimKey = animKey;
+    if (this.scene.anims.exists(animKey)) {
+      visual.sprite.play(animKey, true);
+      this.syncSpriteDisplaySize(visual.sprite);
+    }
+  }
+
+  private loadRemoteClassVisual(playerId: string, color: PlayerColor, classId: PlayerClassId): void {
+    ensureClassSpritesLoaded(this.scene, color, classId, () => {
+      if (!this.scene.sys || !this.scene.scene?.isActive()) return;
+      const latest = this.remotePlayers.get(playerId);
+      if (!latest || !latest.sprite?.active) return;
+      if (latest.lastColor !== color || latest.lastClassId !== classId) return;
+      this.applyRemoteAnimation(latest, true);
+    });
+  }
+
   public updatePlayer(data: Player, localPlayerId: string): void {
     if (data.id === localPlayerId) return;
     if (!serverSync.isLatestMove(data.id, data.lastUpdated || Date.now())) return;
 
     const scene = this.scene;
+    const classId = normalizePlayerClassId(data.classId);
     const { hp, maxHp, isFainted } = this.resolveHpValues(data);
     let visual = this.remotePlayers.get(data.id);
     if (!visual) {
@@ -97,11 +138,7 @@ export class RemotePlayerRenderer {
         .setOrigin(0.5);
       container.add(nameTag);
 
-      const initialAnimKey = `${data.color}_${data.action}`;
       sprite.setFlipX(data.direction === 'left');
-      if (scene.anims.exists(initialAnimKey)) {
-        sprite.play(initialAnimKey);
-      }
 
       visual = {
         container,
@@ -113,13 +150,20 @@ export class RemotePlayerRenderer {
         lastTargetY: data.y,
         lastName: data.name,
         lastDirection: data.direction,
-        lastAnimKey: initialAnimKey,
+        lastClassId: classId,
+        lastColor: data.color,
+        lastAnimKey: '',
         lastHp: hp,
         lastMaxHp: maxHp,
         lastFainted: isFainted,
       };
       setDepthIfChanged(container, ySortDepth(data.y, 24));
       this.remotePlayers.set(data.id, visual);
+
+      this.applyRemoteAnimation(visual, true);
+      if (classId !== 'pawn') {
+        this.loadRemoteClassVisual(data.id, data.color, classId);
+      }
       return;
     }
 
@@ -158,13 +202,18 @@ export class RemotePlayerRenderer {
       this.applyFaintedVisual(visual.sprite, isFainted);
     }
 
-    const animKey = `${data.color}_${data.action}`;
-    if (visual.lastAnimKey !== animKey) {
-      visual.lastAnimKey = animKey;
-      if (scene.anims.exists(animKey)) {
-        visual.sprite.play(animKey, true);
+    const classOrColorChanged = visual.lastClassId !== classId || visual.lastColor !== data.color;
+    if (classOrColorChanged) {
+      visual.lastClassId = classId;
+      visual.lastColor = data.color;
+      this.applyRemoteAnimation(visual, true);
+      if (classId !== 'pawn') {
+        this.loadRemoteClassVisual(data.id, data.color, classId);
       }
+      return;
     }
+
+    this.applyRemoteAnimation(visual);
   }
 
   /**

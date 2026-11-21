@@ -1,6 +1,51 @@
-import { PlayerAction } from '../../types/game';
+import { PlayerAction, PlayerClassId } from '../../types/game';
+import { CostumeColorKey } from '../../types/metaProgression';
 
 const ONE_SHOT_ACTIONS = new Set<PlayerAction>(['axe', 'pickaxe', 'cast', 'hit']);
+const VALID_PLAYER_CLASS_IDS = new Set<PlayerClassId>([
+  'pawn',
+  'guardian',
+  'lancer',
+  'ranger',
+  'archmage',
+]);
+
+/**
+ * 네트워크 페이로드 등의 classId를 안전한 PlayerClassId로 정규화합니다.
+ */
+export function normalizePlayerClassId(classId?: string): PlayerClassId {
+  if (classId && VALID_PLAYER_CLASS_IDS.has(classId as PlayerClassId)) {
+    return classId as PlayerClassId;
+  }
+  return 'pawn';
+}
+
+/**
+ * 원격 플레이어의 색상·전직 클래스·액션에 맞는 애니메이션 키를 우선순위 폴백으로 해석합니다.
+ */
+export function resolveRemotePlayerAnimKey(
+  color: CostumeColorKey,
+  classId: PlayerClassId,
+  action: PlayerAction,
+  hasAnim: (animKey: string) => boolean
+): string {
+  const candidates =
+    classId !== 'pawn'
+      ? [
+          `${color}_${classId}_${action}`,
+          `${color}_${action}`,
+          `${color}_${classId}_idle`,
+          `${color}_idle`,
+        ]
+      : [`${color}_${action}`, `${color}_idle`];
+
+  for (const key of candidates) {
+    if (hasAnim(key)) {
+      return key;
+    }
+  }
+  return candidates[0];
+}
 
 /**
  * 단발성(1회 재생 후 idle/run으로 복귀해야 하는) 플레이어 액션인지 판별합니다.

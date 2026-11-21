@@ -69,6 +69,7 @@ export interface IWorldSystemsHost {
     y: number;
     direction: 'left' | 'right';
     action: PlayerAction;
+    classId?: PlayerClassId;
   };
   getCurrentTerritoryId: () => number;
   getIslands: () => Island[];

@@ -14,6 +14,7 @@ import {
   Entity,
   Player,
   PlayerAction,
+  PlayerClassId,
   PlayerColor,
   VillageTier,
 } from '../../../types/game';
@@ -55,6 +56,7 @@ export interface IMultiplayerSyncContext {
     y: number;
     direction: 'left' | 'right';
     action: PlayerAction;
+    classId?: PlayerClassId;
   };
   onOnlineCountChanged: (count: number, hasNewPeer?: boolean) => void;
   onHostStatusChanged?: (isHost: boolean, hostEpoch?: number) => void;
@@ -111,6 +113,7 @@ interface LastSentMoveSnapshot {
   y: number;
   direction: 'left' | 'right';
   action: PlayerAction;
+  classId: PlayerClassId;
   hp: number;
   maxHp: number;
   isFainted: boolean;
@@ -475,6 +478,7 @@ export class MultiplayerSyncController {
     const hp = Math.max(0, Math.min(maxHp, Math.round(hpState?.hp ?? (isFainted ? 0 : maxHp))));
     const name = this.ctx.getPlayerName();
     const color = this.ctx.getPlayerColor();
+    const classId: PlayerClassId = state.classId ?? 'pawn';
 
     const prev = this.lastSentState;
     const changed =
@@ -483,6 +487,7 @@ export class MultiplayerSyncController {
       prev.y !== ry ||
       prev.direction !== state.direction ||
       prev.action !== state.action ||
+      prev.classId !== classId ||
       prev.hp !== hp ||
       prev.maxHp !== maxHp ||
       prev.isFainted !== isFainted ||
@@ -496,6 +501,7 @@ export class MultiplayerSyncController {
     const hasUrgentStateChange =
       !prev ||
       prev.action !== state.action ||
+      prev.classId !== classId ||
       prev.hp !== hp ||
       prev.maxHp !== maxHp ||
       prev.isFainted !== isFainted ||
@@ -509,6 +515,7 @@ export class MultiplayerSyncController {
       y: ry,
       direction: state.direction,
       action: state.action,
+      classId,
       hp,
       maxHp,
       isFainted,
@@ -524,6 +531,7 @@ export class MultiplayerSyncController {
       direction: state.direction,
       action: state.action,
       color,
+      classId,
       hp,
       maxHp,
       isFainted,

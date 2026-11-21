@@ -195,12 +195,14 @@ export class PlayerMovementController {
     y: number;
     direction: 'left' | 'right';
     action: PlayerAction;
+    classId: PlayerClassId;
   } {
     return {
       x: this.playerSprite.x,
       y: this.playerSprite.y,
       direction: this.currentDirection,
       action: this.currentAction,
+      classId: this.currentClassId,
     };
   }
 

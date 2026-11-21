@@ -250,7 +250,13 @@ export class WorldScene extends Phaser.Scene {
           return this.controllers.playerMovement.getState();
         }
         const core = getTerritoryCorePos(0, 0);
-        return { x: core.x, y: core.y, direction: 'right', action: 'idle' };
+        return {
+          x: core.x,
+          y: core.y,
+          direction: 'right',
+          action: 'idle',
+          classId: this.systems?.playerProgressionSystem?.getClassId() ?? 'pawn',
+        };
       },
       getCurrentTerritoryId: () => this.controllers?.playerMovement.getCurrentTerritory().id ?? 0,
       getIslands: () => this.islands,

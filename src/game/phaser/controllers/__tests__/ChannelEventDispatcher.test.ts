@@ -71,6 +71,7 @@ test('dispatchSharedChannelEvent preserves hp and maxHp fields on player_move', 
     direction: 'right',
     action: 'run',
     color: 'red',
+    classId: 'lancer',
     hp: 64,
     maxHp: 140,
     isFainted: false,
@@ -82,6 +83,7 @@ test('dispatchSharedChannelEvent preserves hp and maxHp fields on player_move', 
   assert.equal(received.length, 1);
   assert.equal(received[0].hp, 64);
   assert.equal(received[0].maxHp, 140);
+  assert.equal(received[0].classId, 'lancer');
 });
 
 test('SHARED_CHANNEL_EVENTS includes host_heartbeat, host_handover, and world_state_sync', () => {

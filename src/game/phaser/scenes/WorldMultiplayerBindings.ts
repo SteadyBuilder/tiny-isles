@@ -44,6 +44,7 @@ export interface IWorldMultiplayerHost {
     y: number;
     direction: 'left' | 'right';
     action: PlayerAction;
+    classId?: import('../../../types/game').PlayerClassId;
   };
   unlockIslandLocally: (islandId: number, unlockedBy: string, isLocalTrigger: boolean, ownerId?: string) => void;
   upgradeVillageRemotely: (territoryId: number, targetTier?: import('../../../types/game').VillageTier) => void;
