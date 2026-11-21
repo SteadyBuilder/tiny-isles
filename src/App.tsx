@@ -301,6 +301,11 @@ export function App() {
         playerColor={profile.color}
         setPlayerColor={handleUpdateColor}
         playerHp={playerHp}
+        progression={playerProgression}
+        hasJobHallBuilt={constructedBuildings.some((b) => b.type === 'job_hall' && b.hp > 0)}
+        isNearJobHall={isNearJobHall}
+        hasToolShopBuilt={constructedBuildings.some((b) => b.type === 'tool_shop' && b.hp > 0)}
+        isNearToolShop={isNearToolShop}
         unlockedCount={islandStats.unlocked}
         totalIslands={islandStats.total}
         waveState={waveState}
@@ -310,6 +315,9 @@ export function App() {
         roomMode={roomConfig.mode}
         onTogglePause={toggleSoloPause}
         onOpenMinimap={() => setShowMinimapModal(true)}
+        onOpenInventory={() => setShowInventoryModal(true)}
+        onOpenToolShop={() => setShowToolShopModal(true)}
+        onOpenJobHall={() => setShowJobHallModal(true)}
         onTriggerRegularWave={() => GameEvents.emit('trigger-regular-wave')}
         onTriggerBossWave={() => GameEvents.emit('trigger-boss-wave')}
         onSummonEarlyWave={() => GameEvents.emit('summon-early-wave', { isBossWave: false })}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useViewportLayout } from '../../hooks/useViewportLayout';
 import { PixelRoundButton } from './PixelRoundButton';
 
 export interface WoodModalFrameProps {
@@ -28,6 +29,7 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
   children,
   zIndexClass = 'z-50',
 }) => {
+  const { isLandscapeMobile } = useViewportLayout();
   const ribbonSrc =
     ribbonVariant === 'red'
       ? '/assets/ui/ribbon_red_256.png'
@@ -39,28 +41,46 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
   return (
     <div
       id={id}
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/65 backdrop-blur-[2px] p-3 sm:p-5 animate-fadeIn`}
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/65 backdrop-blur-[2px] animate-fadeIn ${
+        isLandscapeMobile ? 'p-1.5 pt-4' : 'p-3 sm:p-5'
+      }`}
       onClick={closeOnBackdrop ? onClose : undefined}
       onWheel={(e) => e.stopPropagation()}
     >
       <div
-        className={`relative w-full ${maxWidthClass} ${frameClass} max-h-[88vh] supports-[height:100dvh]:max-h-[88dvh] flex flex-col pt-3`}
+        className={`relative w-full ${maxWidthClass} ${frameClass} flex flex-col ${
+          isLandscapeMobile
+            ? 'max-h-[92vh] supports-[height:100dvh]:max-h-[92dvh] pt-1.5'
+            : 'max-h-[88vh] supports-[height:100dvh]:max-h-[88dvh] pt-3'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Overlapping Tiny Swords Ribbon Title */}
         <div
-          className={`relative -mt-10 mb-2 flex items-center justify-center shrink-0 ${
+          className={`relative flex items-center justify-center shrink-0 ${
+            isLandscapeMobile ? '-mt-6 mb-1' : '-mt-10 mb-2'
+          } ${
             onTitleClick ? 'pointer-events-auto cursor-default select-none' : 'pointer-events-none'
           }`}
           onClick={onTitleClick}
         >
-          <div className="relative inline-flex items-center justify-center px-10 py-2 min-w-[230px] sm:min-w-[290px] max-w-[90%]">
+          <div
+            className={`relative inline-flex items-center justify-center max-w-[90%] ${
+              isLandscapeMobile
+                ? 'px-7 py-1 min-w-[180px]'
+                : 'px-10 py-2 min-w-[230px] sm:min-w-[290px]'
+            }`}
+          >
             <img
               src={ribbonSrc}
               alt=""
               className="absolute inset-0 w-full h-full object-fill pixel-art drop-shadow-[0_5px_8px_rgba(0,0,0,0.7)]"
             />
-            <h2 className="relative z-10 text-sm sm:text-base font-black text-[#fef5df] pixel-btn-shadow tracking-wide text-center px-3">
+            <h2
+              className={`relative z-10 font-black text-[#fef5df] pixel-btn-shadow tracking-wide text-center px-3 ${
+                isLandscapeMobile ? 'text-xs' : 'text-sm sm:text-base'
+              }`}
+            >
               {title}
             </h2>
           </div>
@@ -68,7 +88,11 @@ export const WoodModalFrame: React.FC<WoodModalFrameProps> = ({
 
         {/* Optional Secondary Header Bar (Points / Close Button) */}
         {(headerRight || onClose) && (
-          <div className="flex items-center justify-between gap-2 mb-2 px-1 shrink-0">
+          <div
+            className={`flex items-center justify-between gap-2 px-1 shrink-0 ${
+              isLandscapeMobile ? 'mb-1' : 'mb-2'
+            }`}
+          >
             <div className="flex items-center gap-2 min-w-0">{headerRight}</div>
             {onClose && (
               <PixelRoundButton

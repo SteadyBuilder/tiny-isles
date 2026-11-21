@@ -2,6 +2,7 @@ import React from 'react';
 import { PLAYER_CLASS_DEFINITIONS } from '../data/classes';
 import { HUD_ACTION_SPRITES } from '../data/hudIcons';
 import { GameEvents } from '../game/events/gameEvents';
+import { useViewportLayout } from '../hooks/useViewportLayout';
 import { DashCooldownState, PlayerProgressionState } from '../types/game';
 import { DesktopActionDock } from './hud/DesktopActionDock';
 import { PotionQuickSlot } from './hud/PotionQuickSlot';
@@ -29,6 +30,7 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   onOpenJobHall,
   onOpenToolShop,
 }) => {
+  const { isDesktop, isLandscapeMobile } = useViewportLayout();
   const classDef = PLAYER_CLASS_DEFINITIONS[progression.classId];
   const expRatio = Math.min(
     100,
@@ -38,6 +40,9 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   const equippedCount = Object.values(progression.equipped).filter(Boolean).length;
   const canEnterJobHall = hasJobHallBuilt && isNearJobHall;
   const canEnterToolShop = hasToolShopBuilt && isNearToolShop;
+
+  // 모바일 가로모드에서는 레벨/EXP(좌상단), 가방/상점/전직(우상단), 물약(우하단)으로 분산 배치되어 조이스틱과 겹치지 않음
+  if (isLandscapeMobile) return null;
 
   const handleJobHallClick = () => {
     if (!hasJobHallBuilt) {
@@ -78,7 +83,7 @@ export const PlayerProgressionHud: React.FC<PlayerProgressionHudProps> = ({
   return (
     <>
       {/* PC Bottom-Center Combat Dock (Potions [1][2][3], Skill [Q], Dash [Shift]) */}
-      <DesktopActionDock progression={progression} dashState={dashState} />
+      {isDesktop && <DesktopActionDock progression={progression} dashState={dashState} />}
 
       {/* Bottom-Left Status & Menu Panel */}
       <div className="fixed bottom-[6.5rem] left-2 md:bottom-3 md:left-3 z-30 flex flex-col gap-1 pointer-events-auto max-w-[184px] sm:max-w-[260px] md:max-w-[290px]">

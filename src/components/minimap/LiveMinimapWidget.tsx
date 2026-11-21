@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Maximize2, Minimize2, Radar, Globe, Users } from 'lucide-react';
 import { HUD_STATUS_ICONS } from '../../data/hudIcons';
 import { useMinimapState } from '../../hooks/useMinimapState';
+import { useViewportLayout } from '../../hooks/useViewportLayout';
 import { sound } from '../../lib/sound';
 import { GESTURE_BLOCK_PROPS } from '../../lib/touchGestureGuard';
 import { Island } from '../../types/game';
@@ -15,14 +16,16 @@ export interface LiveMinimapWidgetProps {
 
 /**
  * 플레이 화면 우측 상단 상시 노출형 실시간 미니맵 위젯.
- * - PC(md: 이상): 168×168px, 전체/레이더 전환 + 실시간 미니맵 크게 확대 + 접기 + 팀원 수 배지
- * - 모바일(< md): 96×96px, HudMobileBar 하단 배치, 핀치 줌 차단(클릭 이벤트 유지), 저높이 가로모드 자동 접힘
+ * - PC: 168×168px, 전체/레이더 전환 + 실시간 미니맵 크게 확대 + 접기 + 팀원 수 배지
+ * - 모바일 가로: 84×84px, 우상단 코너 밀착(M Classic 스타일) + 스프라이트 메뉴 행 우측 배치
+ * - 모바일 세로: 96×96px, HudMobileBar 하단 배치
  */
 export const LiveMinimapWidget: React.FC<LiveMinimapWidgetProps> = ({
   territories,
   unlockedIslandIds,
   onOpenFullMap,
 }) => {
+  const { isLandscapeMobile, isPortraitMobile } = useViewportLayout();
   const {
     canvasRef,
     expandedCanvasRef,
@@ -38,17 +41,6 @@ export const LiveMinimapWidget: React.FC<LiveMinimapWidgetProps> = ({
     closeExpanded,
     toggleViewMode,
   } = useMinimapState({ territories, unlockedIslandIds });
-
-  const [isBelowSm, setIsBelowSm] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 640 : false
-  );
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onResize = () => setIsBelowSm(window.innerWidth < 640);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   const handleOpenExpanded = () => {
     sound.playClick();
@@ -67,13 +59,22 @@ export const LiveMinimapWidget: React.FC<LiveMinimapWidgetProps> = ({
     toggleViewMode();
   };
 
-  // <640px(모바일)은 HudMobileBar 3줄 아래, >=640px(태블릿/PC)은 HudDesktopBar 바로 아래 우측 배치
-  const positionClass = 'fixed right-1.5 sm:right-3 sm:top-[3.75rem] z-40';
-  const mobileTopStyle = isBelowSm
-    ? { top: 'max(6.25rem, calc(env(safe-area-inset-top, 0px) + 5.9rem))' }
-    : undefined;
+  const positionClass = isLandscapeMobile
+    ? 'fixed z-40'
+    : isPortraitMobile
+      ? 'fixed right-1.5 z-40'
+      : 'fixed right-3 top-[3.75rem] z-40';
 
-  const btnSizeClass = isMobile ? 'w-6 h-6' : 'w-5 h-5';
+  const positionStyle = isLandscapeMobile
+    ? {
+        top: 'max(0.3rem, env(safe-area-inset-top, 0.3rem))',
+        right: 'max(0.35rem, env(safe-area-inset-right, 0.35rem))',
+      }
+    : isPortraitMobile
+      ? { top: 'max(6.25rem, calc(env(safe-area-inset-top, 0px) + 5.9rem))' }
+      : undefined;
+
+  const btnSizeClass = isLandscapeMobile ? 'w-5 h-5' : isMobile ? 'w-6 h-6' : 'w-5 h-5';
 
   return (
     <>
@@ -81,7 +82,7 @@ export const LiveMinimapWidget: React.FC<LiveMinimapWidgetProps> = ({
         <div
           {...GESTURE_BLOCK_PROPS}
           className={`${positionClass} pointer-events-auto select-none touch-manipulation`}
-          style={mobileTopStyle}
+          style={positionStyle}
         >
           <button
             id="live-minimap-expand-btn"
@@ -106,7 +107,7 @@ export const LiveMinimapWidget: React.FC<LiveMinimapWidgetProps> = ({
           {...GESTURE_BLOCK_PROPS}
           id="live-minimap-widget"
           className={`${positionClass} pointer-events-auto select-none touch-manipulation`}
-          style={mobileTopStyle}
+          style={positionStyle}
         >
           <div className="wood-hud-panel p-1.5 rounded-xl shadow-2xl flex flex-col gap-1">
             {/* 상단 컨트롤 헤더 */}

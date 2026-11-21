@@ -7,11 +7,15 @@ import {
 
 export interface PixelVirtualJoystickProps {
   joystickRef?: React.MutableRefObject<{ x: number; y: number }>;
+  compact?: boolean;
 }
 
 const JOYSTICK_RADIUS = 36;
 
-export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joystickRef }) => {
+export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({
+  joystickRef,
+  compact = false,
+}) => {
   const [isDragging, setIsDragging] = useState(false);
   const joystickTouchIdRef = useRef<number | null>(null);
   const joystickCenterRef = useRef({ x: 0, y: 0 });
@@ -99,15 +103,23 @@ export const PixelVirtualJoystick: React.FC<PixelVirtualJoystickProps> = ({ joys
       {...GESTURE_BLOCK_PROPS}
       className="absolute pointer-events-auto touch-none"
       style={{
-        bottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))',
-        left: 'max(0.75rem, env(safe-area-inset-left, 0.75rem))',
+        bottom: compact
+          ? 'max(0.55rem, env(safe-area-inset-bottom, 0.55rem))'
+          : 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))',
+        left: compact
+          ? 'max(0.55rem, env(safe-area-inset-left, 0.55rem))'
+          : 'max(0.75rem, env(safe-area-inset-left, 0.75rem))',
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={resetJoystick}
       onTouchCancel={resetJoystick}
     >
-      <div className="relative w-[88px] h-[88px] flex items-center justify-center">
+      <div
+        className={`relative flex items-center justify-center ${
+          compact ? 'w-[78px] h-[78px]' : 'w-[88px] h-[88px]'
+        }`}
+      >
         <img
           src="/assets/ui/joystick_compass_base.png"
           alt="이동 조이스틱"

@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { CenterVillageHp, Inventory, PlayerColor, PlayerHpState, WaveState } from '../types/game';
+import {
+  CenterVillageHp,
+  Inventory,
+  PlayerColor,
+  PlayerHpState,
+  PlayerProgressionState,
+  WaveState,
+} from '../types/game';
 import { MissionProgressState, RoomMode } from '../types/room';
+import { useViewportLayout } from '../hooks/useViewportLayout';
 import { sound, SoundSettings } from '../lib/sound';
 import { SoundModal } from './SoundModal';
 import { HudSettingsModal } from './HudSettingsModal';
@@ -8,6 +16,7 @@ import { HudHelpModal } from './HudHelpModal';
 import { HudDesktopBar } from './hud/HudDesktopBar';
 import { HudWaveSection } from './hud/HudWaveSection';
 import { HudMobileBar } from './hud/HudMobileBar';
+import { HudLandscapeBar } from './hud/HudLandscapeBar';
 import { ThreatOrbOverlay } from './hud/ThreatOrbOverlay';
 
 interface HUDProps {
@@ -18,6 +27,11 @@ interface HUDProps {
   playerColor: PlayerColor;
   setPlayerColor: (color: PlayerColor) => void;
   playerHp?: PlayerHpState;
+  progression?: PlayerProgressionState;
+  hasJobHallBuilt?: boolean;
+  isNearJobHall?: boolean;
+  hasToolShopBuilt?: boolean;
+  isNearToolShop?: boolean;
   unlockedCount?: number;
   totalIslands?: number;
   waveState?: WaveState;
@@ -27,6 +41,9 @@ interface HUDProps {
   roomMode?: RoomMode;
   onTogglePause?: () => void;
   onOpenMinimap?: () => void;
+  onOpenInventory?: () => void;
+  onOpenToolShop?: () => void;
+  onOpenJobHall?: () => void;
   onTriggerRegularWave?: () => void;
   onTriggerBossWave?: () => void;
   onSummonEarlyWave?: () => void;
@@ -42,6 +59,11 @@ export const HUD: React.FC<HUDProps> = ({
   playerColor,
   setPlayerColor,
   playerHp,
+  progression,
+  hasJobHallBuilt = false,
+  isNearJobHall = false,
+  hasToolShopBuilt = false,
+  isNearToolShop = false,
   unlockedCount = 1,
   totalIslands = 21,
   waveState,
@@ -51,12 +73,16 @@ export const HUD: React.FC<HUDProps> = ({
   roomMode,
   onTogglePause,
   onOpenMinimap,
+  onOpenInventory,
+  onOpenToolShop,
+  onOpenJobHall,
   onTriggerRegularWave,
   onTriggerBossWave,
   onSummonEarlyWave,
   onAddTestThreat,
   onAddTestResources,
 }) => {
+  const { isDesktop, isLandscapeMobile, isPortraitMobile } = useViewportLayout();
   const [soundSettings, setSoundSettings] = useState<SoundSettings>(() => sound.getSettings());
   const [isMuted, setIsMuted] = useState(sound.isMuted());
   const [showSoundModal, setShowSoundModal] = useState(false);
@@ -92,54 +118,93 @@ export const HUD: React.FC<HUDProps> = ({
   return (
     <>
       <ThreatOrbOverlay />
-      {/* 1. DESKTOP HUD (sm: and above) */}
-      <div className="hidden sm:flex absolute top-2.5 left-3 right-3 z-30 flex-col gap-1.5 pointer-events-none">
-        <HudDesktopBar
+      {/* 1. DESKTOP HUD */}
+      {isDesktop && (
+        <div className="flex absolute top-2.5 left-3 right-3 z-30 flex-col gap-1.5 pointer-events-none">
+          <HudDesktopBar
+            inventory={inventory}
+            onlineCount={onlineCount}
+            playerHp={playerHp}
+            unlockedCount={unlockedCount}
+            totalIslands={totalIslands}
+            isMuted={isMuted}
+            copied={copied}
+            onCopyLink={handleCopyLink}
+            onToggleSound={toggleSound}
+            onOpenMinimap={onOpenMinimap}
+            onOpenSettings={openSettings}
+          />
+
+          <HudWaveSection
+            waveState={waveState}
+            centerVillageHp={centerVillageHp}
+            onlineCount={onlineCount}
+            alertMessage={alertMessage}
+            onTriggerRegularWave={onTriggerRegularWave}
+            onTriggerBossWave={onTriggerBossWave}
+            onSummonEarlyWave={onSummonEarlyWave}
+            onAddTestThreat={onAddTestThreat}
+            onAddTestResources={onAddTestResources}
+            showTestMenu={showTestMenu}
+          />
+        </div>
+      )}
+
+      {/* 2. MOBILE LANDSCAPE HUD (M Classic-inspired corner sprite HUD) */}
+      {isLandscapeMobile && (
+        <HudLandscapeBar
           inventory={inventory}
           onlineCount={onlineCount}
           playerHp={playerHp}
+          progression={progression}
+          hasJobHallBuilt={hasJobHallBuilt}
+          isNearJobHall={isNearJobHall}
+          hasToolShopBuilt={hasToolShopBuilt}
+          isNearToolShop={isNearToolShop}
           unlockedCount={unlockedCount}
           totalIslands={totalIslands}
-          isMuted={isMuted}
-          copied={copied}
-          onCopyLink={handleCopyLink}
-          onToggleSound={toggleSound}
-          onOpenMinimap={onOpenMinimap}
-          onOpenSettings={openSettings}
-        />
-
-        <HudWaveSection
           waveState={waveState}
           centerVillageHp={centerVillageHp}
-          onlineCount={onlineCount}
           alertMessage={alertMessage}
+          missionProgress={missionProgress}
+          roomMode={roomMode}
+          isMuted={isMuted}
+          copied={copied}
+          showTestMenu={showTestMenu}
+          onToggleSound={toggleSound}
+          onCopyLink={handleCopyLink}
+          onOpenMinimap={onOpenMinimap}
+          onOpenSettings={openSettings}
+          onOpenHelp={() => setShowHelp(true)}
+          onTogglePause={onTogglePause}
+          onOpenInventory={onOpenInventory}
+          onOpenToolShop={onOpenToolShop}
+          onOpenJobHall={onOpenJobHall}
           onTriggerRegularWave={onTriggerRegularWave}
           onTriggerBossWave={onTriggerBossWave}
-          onSummonEarlyWave={onSummonEarlyWave}
-          onAddTestThreat={onAddTestThreat}
-          onAddTestResources={onAddTestResources}
+        />
+      )}
+
+      {/* 3. MOBILE PORTRAIT HUD */}
+      {isPortraitMobile && (
+        <HudMobileBar
+          inventory={inventory}
+          playerHp={playerHp}
+          unlockedCount={unlockedCount}
+          totalIslands={totalIslands}
+          waveState={waveState}
+          centerVillageHp={centerVillageHp}
+          alertMessage={alertMessage}
+          missionProgress={missionProgress}
+          roomMode={roomMode}
+          onTogglePause={onTogglePause}
+          onOpenMinimap={onOpenMinimap}
+          onOpenSettings={openSettings}
+          onTriggerRegularWave={onTriggerRegularWave}
+          onTriggerBossWave={onTriggerBossWave}
           showTestMenu={showTestMenu}
         />
-      </div>
-
-      {/* 2. MOBILE HUD (sm:hidden) */}
-      <HudMobileBar
-        inventory={inventory}
-        playerHp={playerHp}
-        unlockedCount={unlockedCount}
-        totalIslands={totalIslands}
-        waveState={waveState}
-        centerVillageHp={centerVillageHp}
-        alertMessage={alertMessage}
-        missionProgress={missionProgress}
-        roomMode={roomMode}
-        onTogglePause={onTogglePause}
-        onOpenMinimap={onOpenMinimap}
-        onOpenSettings={openSettings}
-        onTriggerRegularWave={onTriggerRegularWave}
-        onTriggerBossWave={onTriggerBossWave}
-        showTestMenu={showTestMenu}
-      />
+      )}
 
       <HudSettingsModal
         isOpen={showSettingsModal}

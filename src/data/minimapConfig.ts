@@ -7,8 +7,10 @@ import { PlayerColor } from '../types/game';
 export const MINIMAP_CONFIG = {
   /** PC 캔버스 논리 크기 (px) */
   desktopCanvasSize: 168,
-  /** 모바일 캔버스 논리 크기 (px) */
+  /** 모바일 세로 캔버스 논리 크기 (px) */
   mobileCanvasSize: 96,
+  /** 모바일 가로 우상단 코너 캔버스 논리 크기 (px) */
+  landscapeMobileCanvasSize: 84,
   /** 확장 미니맵 최대 캔버스 크기 (px) */
   expandedMaxCanvasSizeDesktop: 460,
   expandedMaxCanvasSizeMobile: 320,

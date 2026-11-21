@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { DashCooldownState, Island, PlayerProgressionState } from '../types/game';
 import { GameEvents } from '../game/events/gameEvents';
+import { useViewportLayout } from '../hooks/useViewportLayout';
 import { getPinchEligibleTouches, getTouchDistance } from '../lib/touchGestureGuard';
 import { PixelVirtualJoystick } from './mobile/PixelVirtualJoystick';
 import { PixelActionButtons } from './mobile/PixelActionButtons';
@@ -28,6 +29,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   progression,
   dashState,
 }) => {
+  const { showTouchControls, isLandscapeMobile } = useViewportLayout();
   const zoomRef = useRef(currentZoom);
   zoomRef.current = currentZoom;
   const pinchDistRef = useRef<number | null>(null);
@@ -72,13 +74,19 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     };
   }, [onZoomChange]);
 
+  if (!showTouchControls) return null;
+
   return (
-    <div className="md:hidden pointer-events-none select-none fixed inset-0 z-40">
+    <div className="pointer-events-none select-none fixed inset-0 z-40">
       {/* Contextual Island Unlock Prompt Banner (Tiny Swords 9-Slice Pixel Button) */}
       {nearIsland && (
         <div
           className="absolute left-1/2 -translate-x-1/2 pointer-events-auto animate-bounce"
-          style={{ bottom: 'max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.75rem))' }}
+          style={{
+            bottom: isLandscapeMobile
+              ? 'max(0.65rem, env(safe-area-inset-bottom, 0.65rem))'
+              : 'max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.75rem))',
+          }}
         >
           <button
             type="button"
@@ -107,7 +115,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       )}
 
-      <PixelVirtualJoystick joystickRef={joystickRef} />
+      <PixelVirtualJoystick joystickRef={joystickRef} compact={isLandscapeMobile} />
 
       <PixelActionButtons
         onAction={onAction}
@@ -115,6 +123,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         canBuild={canBuild}
         progression={progression}
         dashState={dashState}
+        isLandscapeMobile={isLandscapeMobile}
       />
     </div>
   );

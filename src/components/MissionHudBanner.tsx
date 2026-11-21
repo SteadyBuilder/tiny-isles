@@ -1,4 +1,5 @@
 import React from 'react';
+import { useViewportLayout } from '../hooks/useViewportLayout';
 import { MissionProgressState, RoomMode } from '../types/room';
 import { PixelRoundButton } from './ui/PixelRoundButton';
 import { formatHudSeconds } from './hud/hudUtils';
@@ -31,6 +32,8 @@ export const MissionHudBanner: React.FC<MissionHudBannerProps> = ({
   onTogglePause,
   variant = 'desktop-floating',
 }) => {
+  const { isDesktop } = useViewportLayout();
+
   if (!progress) return null;
 
   const { remainingSec, pct } = getMissionMetrics(progress);
@@ -69,8 +72,10 @@ export const MissionHudBanner: React.FC<MissionHudBannerProps> = ({
     );
   }
 
+  if (!isDesktop) return null;
+
   return (
-    <div className="hidden sm:block fixed top-[6.25rem] left-3 z-30 pointer-events-auto">
+    <div className="fixed top-[6.25rem] left-3 z-30 pointer-events-auto">
       <div className="ts-wood-bar-tight flex items-center gap-2.5 text-[#fef5df]">
         <img src="/assets/ui/Icons/Icon_05.png" alt="" className="w-5 h-5 pixel-art shrink-0" />
         <div className="text-xs font-bold leading-tight">

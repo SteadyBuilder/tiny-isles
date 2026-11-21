@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MINIMAP_CONFIG } from '../data/minimapConfig';
 import { GameEvents } from '../game/events/gameEvents';
 import { hasBlockingModifier, isEditableDomTarget } from '../game/utils/keyboardInputUtils';
-import { shouldAutoCollapseMinimap } from '../game/utils/minimapProjectionUtils';
+import { useViewportLayout } from './useViewportLayout';
 import { Island } from '../types/game';
 import {
   MinimapDynamicSnapshot,
@@ -21,13 +21,13 @@ interface UseMinimapStateParams {
 }
 
 function computeExpandedCanvasSize(viewportW: number, viewportH: number): number {
-  const isMobile = viewportW < MINIMAP_CONFIG.mobileBreakpointPx;
-  const maxCap = isMobile
+  const isCompact = viewportW < MINIMAP_CONFIG.mobileBreakpointPx || viewportH <= 540;
+  const maxCap = isCompact
     ? MINIMAP_CONFIG.expandedMaxCanvasSizeMobile
     : MINIMAP_CONFIG.expandedMaxCanvasSizeDesktop;
-  const maxByWidth = Math.floor(viewportW - (isMobile ? 56 : 96));
-  const maxByHeight = Math.floor(viewportH - (isMobile ? 210 : 220));
-  return Math.max(200, Math.min(maxCap, maxByWidth, maxByHeight));
+  const maxByWidth = Math.floor(viewportW - (isCompact ? 56 : 96));
+  const maxByHeight = Math.floor(viewportH - (viewportH <= 540 ? 128 : isCompact ? 210 : 220));
+  return Math.max(180, Math.min(maxCap, maxByWidth, maxByHeight));
 }
 
 /**
@@ -35,18 +35,9 @@ function computeExpandedCanvasSize(viewportW: number, viewportH: number): number
  * 스냅샷은 useRef로 관리해 10Hz 갱신 시 React 리렌더링 오버헤드를 발생시키지 않는다.
  */
 export function useMinimapState({ territories, unlockedIslandIds }: UseMinimapStateParams) {
-  const [isMobile, setIsMobile] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth < MINIMAP_CONFIG.mobileBreakpointPx : false
-  );
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return shouldAutoCollapseMinimap(
-      window.innerWidth,
-      window.innerHeight,
-      MINIMAP_CONFIG.mobileBreakpointPx,
-      MINIMAP_CONFIG.compactLandscapeMaxHeightPx
-    );
-  });
+  const { isLandscapeMobile, isPortraitMobile } = useViewportLayout();
+  const isMobile = isLandscapeMobile || isPortraitMobile;
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [expandedCanvasSize, setExpandedCanvasSize] = useState<number>(() =>
     typeof window !== 'undefined'
@@ -66,7 +57,11 @@ export function useMinimapState({ territories, unlockedIslandIds }: UseMinimapSt
   const viewModeRef = useRef<MinimapViewMode>(viewMode);
   const isCollapsedRef = useRef<boolean>(isCollapsed);
   const isExpandedRef = useRef<boolean>(isExpanded);
-  const canvasSize = isMobile ? MINIMAP_CONFIG.mobileCanvasSize : MINIMAP_CONFIG.desktopCanvasSize;
+  const canvasSize = isLandscapeMobile
+    ? MINIMAP_CONFIG.landscapeMobileCanvasSize
+    : isPortraitMobile
+      ? MINIMAP_CONFIG.mobileCanvasSize
+      : MINIMAP_CONFIG.desktopCanvasSize;
   const canvasSizeRef = useRef<number>(canvasSize);
   const expandedSizeRef = useRef<number>(expandedCanvasSize);
 
@@ -114,27 +109,18 @@ export function useMinimapState({ territories, unlockedIslandIds }: UseMinimapSt
     }
   }, [paintToCanvas]);
 
-  // 반응형 리사이즈 및 모바일 저높이 가로모드 자동 접힘 감지
+  // 반응형 리사이즈 시 확장 미니맵 크기 갱신
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      setIsMobile(w < MINIMAP_CONFIG.mobileBreakpointPx);
-      setExpandedCanvasSize(computeExpandedCanvasSize(w, h));
-      if (!userToggledCollapseRef.current) {
-        setIsCollapsed(
-          shouldAutoCollapseMinimap(
-            w,
-            h,
-            MINIMAP_CONFIG.mobileBreakpointPx,
-            MINIMAP_CONFIG.compactLandscapeMaxHeightPx
-          )
-        );
-      }
+      setExpandedCanvasSize(computeExpandedCanvasSize(window.innerWidth, window.innerHeight));
     };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   }, []);
 
   // 키보드 M 단축키로 확장 실시간 미니맵 토글

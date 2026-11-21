@@ -68,7 +68,7 @@ export const HudMobileBar: React.FC<HudMobileBarProps> = ({
 
   return (
     <div
-      className="sm:hidden absolute left-1.5 right-1.5 z-30 flex flex-col gap-1 pointer-events-none"
+      className="absolute left-1.5 right-1.5 z-30 flex flex-col gap-1 pointer-events-none"
       style={{ top: 'max(0.35rem, env(safe-area-inset-top, 0.35rem))' }}
     >
       {/* Row 1: Resource Plaque + Territory Compass + Settings */}

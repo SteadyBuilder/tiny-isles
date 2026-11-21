@@ -6,6 +6,7 @@ import { sound } from '../../lib/sound';
 import { GESTURE_BLOCK_PROPS, attachGestureBlock } from '../../lib/touchGestureGuard';
 import { DashCooldownState, PlayerProgressionState } from '../../types/game';
 import { CooldownActionButton } from '../hud/CooldownActionButton';
+import { PotionQuickSlot } from '../hud/PotionQuickSlot';
 
 export interface PixelActionButtonsProps {
   onAction: () => void;
@@ -13,6 +14,7 @@ export interface PixelActionButtonsProps {
   canBuild?: boolean;
   progression?: PlayerProgressionState;
   dashState?: DashCooldownState;
+  isLandscapeMobile?: boolean;
 }
 
 export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
@@ -21,6 +23,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
   canBuild = false,
   progression,
   dashState,
+  isLandscapeMobile = false,
 }) => {
   const [isActionActive, setIsActionActive] = useState(false);
   const [isBuildPressed, setIsBuildPressed] = useState(false);
@@ -151,14 +154,30 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
     <div
       ref={actionZoneRef}
       {...GESTURE_BLOCK_PROPS}
-      className="absolute pointer-events-auto touch-none flex flex-col items-end gap-1.5"
+      className="absolute pointer-events-auto touch-none flex items-end gap-2"
       style={{
-        bottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))',
-        right: 'max(0.75rem, env(safe-area-inset-right, 0.75rem))',
+        bottom: isLandscapeMobile
+          ? 'max(0.55rem, env(safe-area-inset-bottom, 0.55rem))'
+          : 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))',
+        right: isLandscapeMobile
+          ? 'max(0.55rem, env(safe-area-inset-right, 0.55rem))'
+          : 'max(0.75rem, env(safe-area-inset-right, 0.75rem))',
       }}
     >
-      <div className="flex flex-col items-center gap-1.5 mr-3">
-        {onOpenVillageModal && (
+      {/* Landscape Bottom-Right Potion Quick-Slots (M Classic style right-thumb zone) */}
+      {isLandscapeMobile && progression && (
+        <div className="mb-1.5 px-1.5 py-1 rounded-xl bg-[#18110c]/75 border border-[#85532a]/70 backdrop-blur-[2px] shadow-lg">
+          <PotionQuickSlot
+            potions={progression.potions}
+            cooldownRemainingMs={progression.potionCooldownRemainingMs ?? 0}
+            compact
+          />
+        </div>
+      )}
+
+      <div className="flex flex-col items-end gap-1.5">
+        <div className={`flex flex-col items-center gap-1.5 ${isLandscapeMobile ? 'mr-2' : 'mr-3'}`}>
+          {onOpenVillageModal && (
           <button
             id="mobile-build-btn"
             type="button"
@@ -314,6 +333,7 @@ export const PixelActionButtons: React.FC<PixelActionButtonsProps> = ({
             </span>
           </span>
         </button>
+      </div>
       </div>
     </div>
   );
